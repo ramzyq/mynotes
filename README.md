@@ -1,5 +1,5 @@
 #mynotes
-I'm learning mobile app development in flutter abd this is the project i will be building during that period.
+I'm learning mobile app development in flutter and this is the project i will be building during that period.
 Backend is Firebase.
 
 
