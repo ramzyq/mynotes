@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "377642972947",
+    "project_id": "ramzynotess",
+    "storage_bucket": "ramzynotess.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:377642972947:android:e30d6201f11bb13d934ce6",
+        "android_client_info": {
+          "package_name": "com.flutter.mynotes"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAeblruYS5ifxYy_hCXwY2cAa4MyU3sjck"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
