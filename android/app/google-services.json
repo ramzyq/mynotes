@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "377642972947",
-    "project_id": "ramzynotess",
-    "storage_bucket": "ramzynotess.firebasestorage.app"
+    "project_number": "86066851116",
+    "project_id": "ramzyqnotes",
+    "storage_bucket": "ramzyqnotes.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:377642972947:android:e30d6201f11bb13d934ce6",
+        "mobilesdk_app_id": "1:86066851116:android:a029424e16c3e7cd3d1089",
         "android_client_info": {
           "package_name": "com.flutter.mynotes"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAeblruYS5ifxYy_hCXwY2cAa4MyU3sjck"
+          "current_key": "AIzaSyBeT10pRodtio8yhocqJuAlEKB7pLlQ6iQ"
         }
       ],
       "services": {

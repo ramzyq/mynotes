@@ -50,19 +50,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAeblruYS5ifxYy_hCXwY2cAa4MyU3sjck',
-    appId: '1:377642972947:android:e30d6201f11bb13d934ce6',
-    messagingSenderId: '377642972947',
-    projectId: 'ramzynotess',
-    storageBucket: 'ramzynotess.firebasestorage.app',
+    apiKey: 'AIzaSyBeT10pRodtio8yhocqJuAlEKB7pLlQ6iQ',
+    appId: '1:86066851116:android:a029424e16c3e7cd3d1089',
+    messagingSenderId: '86066851116',
+    projectId: 'ramzyqnotes',
+    storageBucket: 'ramzyqnotes.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAEmhLK3VXNrcnqGYXw5WoVdKoaeZT6GhA',
-    appId: '1:377642972947:ios:f0c5d21432f0aaf8934ce6',
-    messagingSenderId: '377642972947',
-    projectId: 'ramzynotess',
-    storageBucket: 'ramzynotess.firebasestorage.app',
+    apiKey: 'AIzaSyCmGOKIPfqVia1BWXsg-nbQguPoGFJ2Cao',
+    appId: '1:86066851116:ios:085d0213272776163d1089',
+    messagingSenderId: '86066851116',
+    projectId: 'ramzyqnotes',
+    storageBucket: 'ramzyqnotes.firebasestorage.app',
     iosBundleId: 'com.flutter.mynotes',
   );
 }
