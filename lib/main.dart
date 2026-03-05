@@ -2,7 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mynotes/views/login_view.dart';
-import 'Firebase_options.dart';
+import 'package:mynotes/firebase_options.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -74,17 +74,33 @@ class _RegisterViewState extends State<RegisterView> {
               ),
             ),
             TextButton(
-              onPressed: () async{
-                final email = _email.text;
-                final password = _password.text;
-                final userCredential =
-                 await FirebaseAuth.instance.createUserWithEmailAndPassword(
+              onPressed: () async {
+              final email = _email.text.trim();
+              final password = _password.text.trim();
+
+              if (email.isEmpty || password.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Email and password cannot be empty')),
+                );
+                return;
+              }
+
+              try {
+                    await FirebaseAuth.instance.setLanguageCode('en');
+                    await FirebaseAuth.instance.createUserWithEmailAndPassword(
                   email: email,
-                  password: password
-                  );
-              },
-              child: const Text("Register"),
-              ),
+                    password: password,
+                    );
+                     } on FirebaseAuthException catch (e) {
+                       print(e.code);
+                       ScaffoldMessenger.of(context).showSnackBar(
+                         SnackBar(content: Text('Registration failed: ${e.message}')),
+                       );
+                   }
+          },
+            child: const Text("Register"),
+)       
+              
           ],
         ); 
         default: 

@@ -62,23 +62,33 @@ class _LoginViewState extends State<LoginView> {
               ),
             ),
             TextButton(
-              onPressed: () async{
-                final email = _email.text;
-                final password = _password.text;
-                try{
-                    final userCredential =
-                 await FirebaseAuth.instance.signInWithEmailAndPassword(
+              onPressed: () async {
+              final email = _email.text.trim();
+              final password = _password.text.trim();
+
+              if (email.isEmpty || password.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Email and password cannot be empty')),
+                );
+                return;
+              }
+
+              try {
+                  await FirebaseAuth.instance.setLanguageCode('en');
+                  await FirebaseAuth.instance.signInWithEmailAndPassword(
                   email: email,
-                  password: password
+                  password: password,
                   );
-                }
-                on FirebaseAuthException catch (e){
-                  print(e.code);
-                }
-                
-              },
-              child: const Text("Login"),
-              ),
+                      } on FirebaseAuthException catch (e) {
+                        print(e.code);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Login failed: ${e.message}')),
+                        );
+                            }
+                      },
+                      child: const Text("Login"),
+                  )
+              
           ],
         ); 
         default: 
