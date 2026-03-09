@@ -2,7 +2,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:mynotes/views/login_signin.dart';
+import 'package:mynotes/views/login_view.dart';
+import 'package:mynotes/views/verify_email_view.dart';
 import 'package:mynotes/firebase_options.dart';
 
 void main() async {
@@ -47,8 +48,12 @@ class AuthenticationWrapper extends StatelessWidget {
         }
 
         if (snapshot.hasData && snapshot.data != null) {
-          // User is logged in
-          return const HomeView();
+          // User is logged in – check if email is verified
+          if (snapshot.data!.emailVerified) {
+            return const HomeView();
+          } else {
+            return const VerifyEmailView();
+          }
         } else {
           // User is not logged in
           return const LoginView();
@@ -65,7 +70,7 @@ class HomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Notes'),
+        title: const Text('My Notely Notes'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -81,7 +86,7 @@ class HomeView extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Welcome, ${FirebaseAuth.instance.currentUser?.email ?? 'User'}',
+              'Welcome, ${FirebaseAuth.instance.currentUser?.displayName?.split(' ').first ?? 'User'}',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 20),
@@ -104,8 +109,14 @@ class HomeView extends StatelessWidget {
           // Handle bottom navigation bar item press
         },
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        label: const Text('Create Note'),
+        onPressed: () {
+          // Handle add note action
+        },
+        icon: const Icon(Icons.add),
+      ),
     );
   }
 }
 
-   
