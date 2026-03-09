@@ -4,112 +4,88 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mynotes/views/login_view.dart';
 import 'package:mynotes/firebase_options.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp( MaterialApp(
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
       title: 'Aktif - the student partner',
       theme: ThemeData(
-        
-        colorScheme: .fromSeed(seedColor: const Color.fromARGB(255, 8, 172, 93)),
+        colorScheme:
+            ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 8, 172, 93)),
+        useMaterial3: true,
       ),
-      home: const LoginView(),
-    ),);
-}
-class RegisterView extends StatefulWidget {
-  const RegisterView({super.key});
-
-  @override
-  State<RegisterView> createState() => _RegisterViewState();
-}
-
-class _RegisterViewState extends State<RegisterView> {
-  late final TextEditingController _email;
-  late final TextEditingController _password;
-
-  @override
-  void initState() {
-    _email = TextEditingController();
-    _password = TextEditingController();// TO: implement initState
-    super.initState();
+      home: const AuthenticationWrapper(),
+    );
   }
+}
+
+class AuthenticationWrapper extends StatelessWidget {
+  const AuthenticationWrapper({super.key});
 
   @override
-  void dispose() {
-    _email.dispose();
-    _password.dispose();
-    super.dispose();
-  } 
-   @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (snapshot.hasData && snapshot.data != null) {
+          // User is logged in
+          return const HomeView();
+        } else {
+          // User is not logged in
+          return const LoginView();
+        }
+      },
+    );
+  }
+}
+
+class HomeView extends StatelessWidget {
+  const HomeView({super.key});
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Register"),),
-      body: FutureBuilder(
-        future: Firebase.initializeApp(
-                  options: DefaultFirebaseOptions.currentPlatform
-                ),
-        builder: (context, snapshot) {
-          switch (snapshot.connectionState){
-            
-            
-            case ConnectionState.done:
-              return Column(
+        title: const Text('My Notes'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+            },
+          ),
+        ],
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextField(
-              controller: _email,
-              enableSuggestions: false,
-              autocorrect: false,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                hintText: "Enter your email" ,
-              ), 
+            Text(
+              'Welcome, ${FirebaseAuth.instance.currentUser?.email ?? 'User'}',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            TextField(
-              controller: _password,
-              obscureText: true,
-              enableSuggestions: false,
-              autocorrect: false, 
-              decoration: const InputDecoration(
-                hintText: "Enter your password" ,
-              ),
-            ),
-            TextButton(
-              onPressed: () async {
-              final email = _email.text.trim();
-              final password = _password.text.trim();
-
-              if (email.isEmpty || password.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Email and password cannot be empty')),
-                );
-                return;
-              }
-
-              try {
-                    await FirebaseAuth.instance.setLanguageCode('en');
-                    await FirebaseAuth.instance.createUserWithEmailAndPassword(
-                  email: email,
-                    password: password,
-                    );
-                     } on FirebaseAuthException catch (e) {
-                       print(e.code);
-                       ScaffoldMessenger.of(context).showSnackBar(
-                         SnackBar(content: Text('Registration failed: ${e.message}')),
-                       );
-                   }
-          },
-            child: const Text("Register"),
-)       
-              
+            const SizedBox(height: 20),
+            const Text('Your notes will appear here'),
           ],
-        ); 
-        default: 
-        return const Text("Loading...");
-            
-          }
-          
-        },
-        
+        ),
       ),
     );
   }
