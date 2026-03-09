@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mynotes/views/login_signin.dart';
 import 'package:mynotes/firebase_options.dart';
 
@@ -69,6 +70,7 @@ class HomeView extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
+              await GoogleSignIn().signOut();
               await FirebaseAuth.instance.signOut();
             },
           ),
