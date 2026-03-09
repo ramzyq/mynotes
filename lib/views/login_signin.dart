@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_button/sign_in_button.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -223,33 +224,36 @@ class _LoginViewState extends State<LoginView> {
                       )
                     : const Text('Login'),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               Row(
                 children: [
-                  const Expanded(child: Divider()),
+                  Expanded(
+                    child: Divider(color: Colors.white, thickness: 1),
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      'OR',
-                      style: TextStyle(color: Colors.grey[600]),
+                      'or continue with',
+                      style: TextStyle(
+                        color: Colors.grey[500],
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
-                  const Expanded(child: Divider()),
+                  Expanded(
+                    child: Divider(color: Colors.grey[300], thickness: 1),
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: _isLoading ? null : _handleGoogleSignIn,
-                icon: Image.network(
-                  'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                  height: 24,
-                  width: 24,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.g_mobiledata, size: 24),
-                ),
-                label: const Text('Continue with Google'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: SignInButton(
+                  Buttons.google,
+                  text: 'Continue with Google',
+                  onPressed: _isLoading ? () {} : _handleGoogleSignIn,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -511,3 +515,5 @@ class _RegisterViewState extends State<RegisterView> {
     );
   }
 }
+
+
