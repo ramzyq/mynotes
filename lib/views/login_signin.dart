@@ -110,7 +110,7 @@ class _LoginViewState extends State<LoginView> {
               const SizedBox(height: 40),
               Center(
                 child: Text(
-                  'Aktif',
+                  'Notely',
                   style: Theme.of(context).textTheme.displaySmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -119,7 +119,7 @@ class _LoginViewState extends State<LoginView> {
               const SizedBox(height: 10),
               const Center(
                 child: Text(
-                  'The student partner',
+                  'Your passionate notetaker',
                   style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
               ),

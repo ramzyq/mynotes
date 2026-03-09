@@ -1,7 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:mynotes/views/login_view.dart';
+import 'package:mynotes/views/login_signin.dart';
 import 'package:mynotes/firebase_options.dart';
 
 void main() async {
@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Aktif - the student partner',
+      title: 'Notely - Your Passionate Notetaker',
       theme: ThemeData(
         colorScheme:
             ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 8, 172, 93)),
@@ -87,6 +87,23 @@ class HomeView extends StatelessWidget {
           ],
         ),
       ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.note),
+            label: 'Notes',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+        onTap: (index) {
+          // Handle bottom navigation bar item press
+        },
+      ),
     );
   }
 }
+
+   
