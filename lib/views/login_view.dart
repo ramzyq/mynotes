@@ -1,12 +1,17 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mynotes/views/register_view.dart';
 import 'package:mynotes/views/verify_email_view.dart';
+import 'package:mynotes/services/auth/auth_services.dart';
+import 'package:mynotes/services/auth/auth_exceptions.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 
 class LoginView extends StatefulWidget {
-  const LoginView({super.key});
+  final AuthService authService;
+
+  const LoginView({
+    super.key,
+    required this.authService,
+  });
 
   @override
   State<LoginView> createState() => _LoginViewState();
@@ -32,23 +37,6 @@ class _LoginViewState extends State<LoginView> {
     super.dispose();
   }
 
-  String _messageForAuthCode(String code) {
-    switch (code) {
-      case 'invalid-email':
-        return 'Enter a valid email address.';
-      case 'invalid-credential':
-      case 'wrong-password':
-      case 'user-not-found':
-        return 'Invalid email or password.';
-      case 'too-many-requests':
-        return 'Too many attempts. Try again later.';
-      case 'operation-not-allowed':
-        return 'Email/password sign-in is disabled.';
-      default:
-        return 'Login failed. Please try again.';
-    }
-  }
-
   bool _isValidEmail(String email) {
     return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
   }
@@ -58,29 +46,17 @@ class _LoginViewState extends State<LoginView> {
     setState(() => _isLoading = true);
 
     try {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
-        // User cancelled the sign-in
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
-
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      await FirebaseAuth.instance.signInWithCredential(credential);
-    } on FirebaseAuthException catch (e) {
+      await widget.authService.signInWithGoogle();
+      // Success - AuthenticationWrapper will handle navigation
+    } on GenericAuthException {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(_messageForAuthCode(e.code))),
+        const SnackBar(content: Text('Google sign-in failed. Please try again.')),
       );
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
-        const SnackBar(content: Text('Google sign-in failed. Please try again.')),
+        const SnackBar(content: Text('An error occurred. Please try again.')),
       );
     } finally {
       if (mounted) {
@@ -118,23 +94,38 @@ class _LoginViewState extends State<LoginView> {
     setState(() => _isLoading = true);
 
     try {
-      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final user = await widget.authService.logIn(
         email: email,
         password: password,
       );
       if (!mounted) return;
       // If email is not verified, navigate to verification screen
-      if (credential.user != null && !credential.user!.emailVerified) {
+      if (!user.isEmailVerified) {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => const VerifyEmailView(),
+            builder: (context) => VerifyEmailView(authService: widget.authService),
           ),
         );
       }
-    } on FirebaseAuthException catch (e) {
+    } on UserNotFoundAuthException {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(_messageForAuthCode(e.code))),
+        const SnackBar(content: Text('User not found. Please sign up.')),
+      );
+    } on WrongPasswordAuthException {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Invalid email or password.')),
+      );
+    } on TooManyRequestsAuthException {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Too many attempts. Try again later.')),
+      );
+    } on GenericAuthException {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Login failed. Please try again.')),
       );
     } finally {
       if (mounted) {
@@ -281,7 +272,8 @@ class _LoginViewState extends State<LoginView> {
                         : () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (context) => const RegisterView(),
+                                builder: (context) =>
+                                    RegisterView(authService: widget.authService),
                               ),
                             );
                           },

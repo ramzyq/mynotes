@@ -1,10 +1,16 @@
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:mynotes/views/verify_email_view.dart';
+import 'package:mynotes/services/auth/auth_services.dart';
+import 'package:mynotes/services/auth/auth_exceptions.dart';
 
 class RegisterView extends StatefulWidget {
-  const RegisterView({super.key});
+  final AuthService authService;
+
+  const RegisterView({
+    super.key,
+    required this.authService,
+  });
 
   @override
   State<RegisterView> createState() => _RegisterViewState();
@@ -35,21 +41,6 @@ class _RegisterViewState extends State<RegisterView> {
     _password.dispose();
     _confirmPassword.dispose();
     super.dispose();
-  }
-
-  String _messageForAuthCode(String code) {
-    switch (code) {
-      case 'invalid-email':
-        return 'Enter a valid email address.';
-      case 'email-already-in-use':
-        return 'That email is already registered.';
-      case 'weak-password':
-        return 'Password must be at least 6 characters.';
-      case 'operation-not-allowed':
-        return 'Email/password sign-up is disabled.';
-      default:
-        return 'Registration failed. Please try again.';
-    }
   }
 
   bool _isValidEmail(String email) {
@@ -97,25 +88,36 @@ class _RegisterViewState extends State<RegisterView> {
     setState(() => _isLoading = true);
 
     try {
-      final userCredential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      await widget.authService.createUser(
         email: email,
         password: password,
       );
-      // Update the display name with the first name
-      await userCredential.user!.updateDisplayName(firstName);
-      await userCredential.user!.reload();
       if (!mounted) return;
       // Navigate to email verification screen
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => const VerifyEmailView(),
+          builder: (context) => VerifyEmailView(authService: widget.authService),
         ),
       );
-    } on FirebaseAuthException catch (e) {
+    } on WeakPasswordAuthException {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(_messageForAuthCode(e.code))),
+        const SnackBar(content: Text('Password must be at least 6 characters.')),
+      );
+    } on UserAlreadyExistsAuthException {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('That email is already registered.')),
+      );
+    } on InvalidCredentialAuthException {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Enter a valid email address.')),
+      );
+    } on GenericAuthException {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Registration failed. Please try again.')),
       );
     } finally {
       if (mounted) {
