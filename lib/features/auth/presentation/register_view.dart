@@ -1,6 +1,6 @@
 
 import 'package:flutter/material.dart';
-import 'package:mynotes/views/verify_email_view.dart';
+import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/widgets/theme_toggle_button.dart';

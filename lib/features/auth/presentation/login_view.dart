@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:mynotes/views/register_view.dart';
-import 'package:mynotes/views/verify_email_view.dart';
+import 'package:mynotes/features/auth/presentation/register_view.dart';
+import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
 import 'package:mynotes/widgets/theme_toggle_button.dart';
