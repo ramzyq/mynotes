@@ -1,10 +1,12 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mynotes/views/login_view.dart';
 import 'package:mynotes/views/verify_email_view.dart';
 import 'package:mynotes/firebase_options.dart';
-import 'package:mynotes/services/auth/auth_services.dart';
+import 'package:mynotes/core/auth/services/auth_service.dart';
+import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/views/notes_home_view.dart';
+import 'package:mynotes/widgets/theme_toggle_button.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,32 +16,105 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  final AuthService? authService;
+
+  const MyApp({super.key, this.authService});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _isDarkMode = true;
+
+  void _toggleTheme() {
+    setState(() => _isDarkMode = !_isDarkMode);
+  }
+
+  ThemeData _buildTheme(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final background = isDark ? const Color(0xFF0B0F1A) : const Color(0xFFF5F7FB);
+    final surface = isDark ? const Color(0xFF121826) : const Color(0xFFFFFFFF);
+    final card = isDark ? const Color(0xFF141B2D) : const Color(0xFFF0F3FA);
+    final onSurface = isDark ? const Color(0xFFF4F7FB) : const Color(0xFF121826);
+    final outline = isDark ? const Color(0xFF27314A) : const Color(0xFFD5DCEB);
+    final accent = isDark ? const Color(0xFF86E7C8) : const Color(0xFF0C8B6A);
+
+    return ThemeData(
+      brightness: brightness,
+      useMaterial3: true,
+      scaffoldBackgroundColor: background,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: accent,
+        brightness: brightness,
+        surface: surface,
+      ).copyWith(
+        primary: accent,
+        secondary: isDark ? const Color(0xFF8AA7FF) : const Color(0xFF4D6BFF),
+        surface: surface,
+        onSurface: onSurface,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        foregroundColor: onSurface,
+        elevation: 0,
+        centerTitle: false,
+      ),
+      cardTheme: CardThemeData(
+        color: card,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: card,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: outline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: accent, width: 1.4),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Notely - Your Passionate Notetaker',
-      theme: ThemeData(
-        colorScheme:
-            ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 8, 172, 93)),
-        useMaterial3: true,
+    final effectiveAuthService = widget.authService ?? AuthService.firebase();
+
+    return AppThemeScope(
+      isDarkMode: _isDarkMode,
+      toggleTheme: _toggleTheme,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'Note Log',
+        theme: _buildTheme(Brightness.light),
+        darkTheme: _buildTheme(Brightness.dark),
+        themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+        home: AuthenticationWrapper(authService: effectiveAuthService),
       ),
-      home: const AuthenticationWrapper(),
     );
   }
 }
 
 class AuthenticationWrapper extends StatelessWidget {
-  const AuthenticationWrapper({super.key});
+  final AuthService authService;
+
+  const AuthenticationWrapper({super.key, required this.authService});
 
   @override
   Widget build(BuildContext context) {
-    final authService = AuthService.firebase();
-    
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return StreamBuilder<AuthUser?>(
+      stream: authService.authStateChanges,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -49,81 +124,17 @@ class AuthenticationWrapper extends StatelessWidget {
           );
         }
 
-        if (snapshot.hasData && snapshot.data != null) {
-          // User is logged in – check if email is verified
-          final authUser = authService.currentUser;
-          if (authUser != null && authUser.isEmailVerified) {
-            return HomeView(authService: authService);
+        final authUser = snapshot.data;
+        if (authUser != null) {
+          if (authUser.isEmailVerified) {
+            return NotesHomeView(authService: authService, authUser: authUser);
           } else {
             return VerifyEmailView(authService: authService);
           }
         } else {
-          // User is not logged in
           return LoginView(authService: authService);
         }
       },
     );
   }
 }
-
-class HomeView extends StatelessWidget {
-  final AuthService authService;
-
-  const HomeView({
-    super.key,
-    required this.authService,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Notely Notes'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await authService.logOut();
-            },
-          ),
-        ],
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Welcome, ${authService.currentUser?.displayName?.split(' ').first ?? 'User'}',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 20),
-            const Text('Your notes will appear here'),
-          ],
-        ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.note),
-            label: 'Notes',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-        onTap: (index) {
-          // Handle bottom navigation bar item press
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        label: const Text('Create Note'),
-        onPressed: () {
-          // Handle add note action
-        },
-        icon: const Icon(Icons.add),
-      ),
-    );
-  }
-}
-

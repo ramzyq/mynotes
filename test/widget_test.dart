@@ -1,30 +1,55 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mynotes/main.dart';
+import 'package:mynotes/core/auth/services/auth_provider.dart';
+import 'package:mynotes/core/auth/services/auth_service.dart';
+import 'package:mynotes/core/auth/models/auth_user.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('shows the login screen in the dark theme', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      MyApp(
+        authService: AuthService(_FakeAuthProvider()),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Note Log'), findsOneWidget);
+    expect(find.text('Dark notes workspace for ideas and drafts'), findsOneWidget);
+    expect(find.byType(Scaffold), findsWidgets);
   });
+}
+
+class _FakeAuthProvider implements AuthProvider {
+  @override
+  Stream<AuthUser?> get authStateChanges => Stream<AuthUser?>.value(null);
+
+  @override
+  AuthUser? get currentUser => null;
+
+  @override
+  Future<AuthUser> createUser({required String email, required String password}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> logOut() async {}
+
+  @override
+  Future<AuthUser> logIn({required String email, required String password}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> reloadCurrentUser() async {}
+
+  @override
+  Future<void> sendEmailVerification() async {}
+
+  @override
+  Future<AuthUser> signInWithGoogle() {
+    throw UnimplementedError();
+  }
 }

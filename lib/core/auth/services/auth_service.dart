@@ -1,6 +1,6 @@
-import 'package:mynotes/services/auth/auth_user.dart';
-import 'package:mynotes/services/auth/auth_provider.dart';
-import 'package:mynotes/services/auth/firebase_auth_provider.dart';
+import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/auth/services/auth_provider.dart';
+import 'package:mynotes/core/auth/services/firebase_auth_provider.dart';
 
 class AuthService implements AuthProvider {
   final AuthProvider provider;
@@ -8,6 +8,9 @@ class AuthService implements AuthProvider {
   const AuthService(this.provider);
 
   factory AuthService.firebase() => AuthService(FirebaseAuthProvider());
+
+  @override
+  Stream<AuthUser?> get authStateChanges => provider.authStateChanges;
 
   @override
   Future<AuthUser> createUser({required String email, required String password}) {
@@ -35,5 +38,10 @@ class AuthService implements AuthProvider {
   @override
   Future<void> sendEmailVerification() {
     return provider.sendEmailVerification();
+  }
+
+  @override
+  Future<void> reloadCurrentUser() {
+    return provider.reloadCurrentUser();
   }
 }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mynotes/views/register_view.dart';
 import 'package:mynotes/views/verify_email_view.dart';
-import 'package:mynotes/services/auth/auth_services.dart';
-import 'package:mynotes/services/auth/auth_exceptions.dart';
+import 'package:mynotes/core/auth/services/auth_service.dart';
+import 'package:mynotes/core/auth/services/auth_exceptions.dart' show GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
+import 'package:mynotes/widgets/theme_toggle_button.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 
 class LoginView extends StatefulWidget {
@@ -48,6 +49,8 @@ class _LoginViewState extends State<LoginView> {
     try {
       await widget.authService.signInWithGoogle();
       // Success - AuthenticationWrapper will handle navigation
+    } on GoogleSignInCancelledException {
+      // User cancelled the sign-in flow, nothing to show
     } on GenericAuthException {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -140,6 +143,7 @@ class _LoginViewState extends State<LoginView> {
       appBar: AppBar(
         title: const Text('Login'),
         elevation: 0,
+        actions: const [ThemeToggleButton()],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -150,7 +154,7 @@ class _LoginViewState extends State<LoginView> {
               const SizedBox(height: 40),
               Center(
                 child: Text(
-                  'Notely',
+                  'Note Log',
                   style: Theme.of(context).textTheme.displaySmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -159,7 +163,7 @@ class _LoginViewState extends State<LoginView> {
               const SizedBox(height: 10),
               const Center(
                 child: Text(
-                  'Your passionate notetaker',
+                  'Dark notes workspace for ideas and drafts',
                   style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
               ),
@@ -288,7 +292,3 @@ class _LoginViewState extends State<LoginView> {
     );
   }
 }
-
-
-
-

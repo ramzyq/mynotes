@@ -1,6 +1,8 @@
-import 'package:mynotes/services/auth/auth_user.dart';
+import 'package:mynotes/core/auth/models/auth_user.dart';
 
 abstract class AuthProvider {
+  Stream<AuthUser?> get authStateChanges;
+
   AuthUser? get currentUser;
 
   Future<AuthUser> logIn({
@@ -18,4 +20,6 @@ abstract class AuthProvider {
   Future<void> logOut();
 
   Future<void> sendEmailVerification();
+
+  Future<void> reloadCurrentUser();
 }

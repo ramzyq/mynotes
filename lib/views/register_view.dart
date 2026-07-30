@@ -1,8 +1,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:mynotes/views/verify_email_view.dart';
-import 'package:mynotes/services/auth/auth_services.dart';
-import 'package:mynotes/services/auth/auth_exceptions.dart';
+import 'package:mynotes/core/auth/services/auth_service.dart';
+import 'package:mynotes/core/auth/services/auth_exceptions.dart';
+import 'package:mynotes/widgets/theme_toggle_button.dart';
 
 class RegisterView extends StatefulWidget {
   final AuthService authService;
@@ -130,7 +131,8 @@ class _RegisterViewState extends State<RegisterView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sign Up'),
+        title: const Text('Create account'),
+        actions: const [ThemeToggleButton()],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -258,7 +260,7 @@ class _RegisterViewState extends State<RegisterView> {
                   TextButton(
                     onPressed:
                         _isLoading ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Login'),
+                    child: const Text('Log in'),
                   ),
                 ],
               ),

@@ -1,10 +1,21 @@
-import 'package:mynotes/services/auth/auth_user.dart';
-import 'package:mynotes/services/auth/auth_exceptions.dart';
-import 'package:mynotes/services/auth/auth_provider.dart';
+import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException;
+import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
 import 'package:google_sign_in/google_sign_in.dart';
 
 class FirebaseAuthProvider implements AuthProvider {
+  @override
+  Stream<AuthUser?> get authStateChanges {
+    return FirebaseAuth.instance.authStateChanges().map((user) {
+      if (user == null) {
+        return null;
+      }
+
+      return AuthUser.fromFirebase(user);
+    });
+  }
+
   @override
   Future<AuthUser> createUser({required String email, required String password})
   async {
@@ -99,11 +110,21 @@ class FirebaseAuthProvider implements AuthProvider {
   }
 
   @override
+  Future<void> reloadCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await user.reload();
+    } else {
+      throw UserNotLoggedInAuthException();
+    }
+  }
+
+  @override
   Future<AuthUser> signInWithGoogle() async {
     try {
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
-        throw GenericAuthException();
+        throw GoogleSignInCancelledException();
       }
 
       final googleAuth = await googleUser.authentication;
@@ -126,4 +147,3 @@ class FirebaseAuthProvider implements AuthProvider {
     }
   }
 }
- 

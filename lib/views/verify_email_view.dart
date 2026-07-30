@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mynotes/main.dart';
-import 'package:mynotes/services/auth/auth_services.dart';
-import 'package:mynotes/services/auth/auth_exceptions.dart';
+import 'package:mynotes/core/auth/services/auth_service.dart';
+import 'package:mynotes/core/auth/services/auth_exceptions.dart';
+import 'package:mynotes/widgets/theme_toggle_button.dart';
 
 class VerifyEmailView extends StatefulWidget {
   final AuthService authService;
@@ -72,8 +73,7 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
     if (!silent) setState(() => _isChecking = true);
 
     try {
-      // Since we can't reload directly, we'll check the stored user state
-      // In a real app with Provider, this would be more elegant
+      await widget.authService.reloadCurrentUser();
       final updatedUser = widget.authService.currentUser;
       if (updatedUser != null && updatedUser.isEmailVerified) {
         _autoCheckTimer?.cancel();
@@ -99,7 +99,7 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
         icon: const Icon(Icons.verified, color: Colors.green, size: 48),
         title: const Text('Email Verified!'),
         content: const Text(
-          'Your email has been successfully verified. Welcome to Notely!',
+          'Your email has been successfully verified. Welcome to Note Log!',
         ),
         actions: [
           TextButton(
@@ -111,7 +111,9 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
     );
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const _VerifiedRedirect()),
+      MaterialPageRoute(
+        builder: (_) => _VerifiedRedirect(authService: widget.authService),
+      ),
       (route) => false,
     );
   }
@@ -131,6 +133,7 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
       appBar: AppBar(
         title: const Text('Verify Email'),
         automaticallyImplyLeading: false,
+        actions: const [ThemeToggleButton()],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -210,10 +213,12 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
 /// A simple widget that rebuilds from the AuthenticationWrapper,
 /// ensuring the verified user lands on the HomeView.
 class _VerifiedRedirect extends StatelessWidget {
-  const _VerifiedRedirect();
+  final AuthService authService;
+
+  const _VerifiedRedirect({required this.authService});
 
   @override
   Widget build(BuildContext context) {
-    return const AuthenticationWrapper();
+    return AuthenticationWrapper(authService: authService);
   }
 }
