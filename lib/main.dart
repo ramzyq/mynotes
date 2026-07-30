@@ -1,10 +1,10 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/features/auth/presentation/login_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
+import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/firebase_options.dart';
-import 'package:mynotes/core/auth/services/auth_service.dart';
-import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/features/notes/presentation/notes_home_view.dart';
 import 'package:mynotes/widgets/theme_toggle_button.dart';
 
@@ -13,13 +13,11 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: MyApp()));
 }
 
 class MyApp extends StatefulWidget {
-  final AuthService? authService;
-
-  const MyApp({super.key, this.authService});
+  const MyApp({super.key});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -89,8 +87,6 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveAuthService = widget.authService ?? AuthService.firebase();
-
     return AppThemeScope(
       isDarkMode: _isDarkMode,
       toggleTheme: _toggleTheme,
@@ -100,41 +96,41 @@ class _MyAppState extends State<MyApp> {
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
-        home: AuthenticationWrapper(authService: effectiveAuthService),
+        home: const AuthenticationWrapper(),
       ),
     );
   }
 }
 
-class AuthenticationWrapper extends StatelessWidget {
-  final AuthService authService;
-
-  const AuthenticationWrapper({super.key, required this.authService});
+class AuthenticationWrapper extends ConsumerWidget {
+  const AuthenticationWrapper({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<AuthUser?>(
-      stream: authService.authStateChanges,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authStateProvider);
 
-        final authUser = snapshot.data;
+    return authState.when(
+      data: (authUser) {
         if (authUser != null) {
           if (authUser.isEmailVerified) {
-            return NotesHomeView(authService: authService, authUser: authUser);
+            return NotesHomeView(authUser: authUser);
           } else {
-            return VerifyEmailView(authService: authService);
+            return const VerifyEmailView();
           }
         } else {
-          return LoginView(authService: authService);
+          return const LoginView();
         }
       },
+      loading: () => const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      ),
+      error: (_, _) => const Scaffold(
+        body: Center(
+          child: Text('Authentication error'),
+        ),
+      ),
     );
   }
 }

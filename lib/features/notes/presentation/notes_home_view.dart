@@ -1,30 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:mynotes/core/auth/services/auth_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/features/notes/data/note.dart';
-import 'package:mynotes/features/notes/data/notes_service.dart';
 import 'package:mynotes/features/notes/presentation/note_editor_view.dart';
 import 'package:mynotes/features/notes/presentation/widgets/empty_notes_state.dart';
 import 'package:mynotes/features/notes/presentation/widgets/info_chip.dart';
 import 'package:mynotes/features/notes/presentation/widgets/tag_chip.dart';
+import 'package:mynotes/features/notes/providers/notes_providers.dart';
+import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/widgets/theme_toggle_button.dart';
 
-class NotesHomeView extends StatefulWidget {
-  final AuthService authService;
+class NotesHomeView extends ConsumerStatefulWidget {
   final AuthUser authUser;
 
   const NotesHomeView({
     super.key,
-    required this.authService,
     required this.authUser,
   });
 
   @override
-  State<NotesHomeView> createState() => _NotesHomeViewState();
+  ConsumerState<NotesHomeView> createState() => _NotesHomeViewState();
 }
 
-class _NotesHomeViewState extends State<NotesHomeView> {
-  final NotesService _notesService = NotesService.instance();
+class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
 
@@ -80,7 +78,6 @@ class _NotesHomeViewState extends State<NotesHomeView> {
       MaterialPageRoute(
         builder: (context) => NoteEditorView(
           authUser: widget.authUser,
-          notesService: _notesService,
           note: note,
         ),
       ),
@@ -88,7 +85,7 @@ class _NotesHomeViewState extends State<NotesHomeView> {
   }
 
   Future<void> _togglePin(Note note) async {
-    await _notesService.togglePin(uid: widget.authUser.uid, note: note);
+    await ref.read(notesServiceProvider).togglePin(uid: widget.authUser.uid, note: note);
   }
 
   Future<void> _deleteNote(Note note) async {
@@ -111,7 +108,7 @@ class _NotesHomeViewState extends State<NotesHomeView> {
     );
 
     if (confirmed == true) {
-      await _notesService.deleteNote(uid: widget.authUser.uid, noteId: note.id);
+      await ref.read(notesServiceProvider).deleteNote(uid: widget.authUser.uid, noteId: note.id);
     }
   }
 
@@ -135,10 +132,8 @@ class _NotesHomeViewState extends State<NotesHomeView> {
         ),
         child: SafeArea(
           bottom: false,
-          child: StreamBuilder<List<Note>>(
-            stream: _notesService.watchNotes(widget.authUser.uid),
-            builder: (context, snapshot) {
-              final notes = snapshot.data ?? const <Note>[];
+          child: ref.watch(notesProvider(widget.authUser.uid)).when(
+            data: (notes) {
               final filteredNotes = notes.where((note) {
                 if (_query.isEmpty) {
                   return true;
@@ -177,7 +172,7 @@ class _NotesHomeViewState extends State<NotesHomeView> {
                       const ThemeToggleButton(),
                       IconButton(
                         tooltip: 'Sign out',
-                        onPressed: () => widget.authService.logOut(),
+                        onPressed: () => ref.read(authServiceProvider).logOut(),
                         icon: const Icon(Icons.logout_rounded),
                       ),
                       const SizedBox(width: 8),
@@ -260,19 +255,7 @@ class _NotesHomeViewState extends State<NotesHomeView> {
                     ),
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  if (snapshot.hasError)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Text('Unable to load notes.'),
-                      ),
-                    )
-                  else if (snapshot.connectionState == ConnectionState.waiting && notes.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (filteredNotes.isEmpty)
+                  if (filteredNotes.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: EmptyNotesState(
@@ -397,6 +380,8 @@ class _NotesHomeViewState extends State<NotesHomeView> {
                 ],
               );
             },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => const Center(child: Text('Unable to load notes.')),
           ),
         ),
       ),

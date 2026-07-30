@@ -1,24 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/features/auth/presentation/register_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
-import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
+import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/widgets/theme_toggle_button.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 
-class LoginView extends StatefulWidget {
-  final AuthService authService;
-
+class LoginView extends ConsumerStatefulWidget {
   const LoginView({
     super.key,
-    required this.authService,
   });
 
   @override
-  State<LoginView> createState() => _LoginViewState();
+  ConsumerState<LoginView> createState() => _LoginViewState();
 }
 
-class _LoginViewState extends State<LoginView> {
+class _LoginViewState extends ConsumerState<LoginView> {
   late final TextEditingController _email;
   late final TextEditingController _password;
   bool _isLoading = false;
@@ -47,7 +45,7 @@ class _LoginViewState extends State<LoginView> {
     setState(() => _isLoading = true);
 
     try {
-      await widget.authService.signInWithGoogle();
+      await ref.read(authServiceProvider).signInWithGoogle();
       // Success - AuthenticationWrapper will handle navigation
     } on GoogleSignInCancelledException {
       // User cancelled the sign-in flow, nothing to show
@@ -97,7 +95,7 @@ class _LoginViewState extends State<LoginView> {
     setState(() => _isLoading = true);
 
     try {
-      final user = await widget.authService.logIn(
+      final user = await ref.read(authServiceProvider).logIn(
         email: email,
         password: password,
       );
@@ -106,7 +104,7 @@ class _LoginViewState extends State<LoginView> {
       if (!user.isEmailVerified) {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => VerifyEmailView(authService: widget.authService),
+            builder: (context) => const VerifyEmailView(),
           ),
         );
       }
@@ -277,7 +275,7 @@ class _LoginViewState extends State<LoginView> {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (context) =>
-                                    RegisterView(authService: widget.authService),
+                                    const RegisterView(),
                               ),
                             );
                           },

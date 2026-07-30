@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/features/notes/data/note.dart';
-import 'package:mynotes/features/notes/data/notes_service.dart';
+import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
-class NoteEditorView extends StatefulWidget {
+class NoteEditorView extends ConsumerStatefulWidget {
   final AuthUser authUser;
-  final NotesService notesService;
   final Note? note;
 
   const NoteEditorView({
     super.key,
     required this.authUser,
-    required this.notesService,
     this.note,
   });
 
   @override
-  State<NoteEditorView> createState() => _NoteEditorViewState();
+  ConsumerState<NoteEditorView> createState() => _NoteEditorViewState();
 }
 
-class _NoteEditorViewState extends State<NoteEditorView> {
+class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
   late int _selectedColorIndex;
@@ -59,7 +58,7 @@ class _NoteEditorViewState extends State<NoteEditorView> {
     setState(() => _isSaving = true);
     try {
       if (widget.note == null) {
-        final note = await widget.notesService.createNote(
+        final note = await ref.read(notesServiceProvider).createNote(
           uid: widget.authUser.uid,
           title: title.isEmpty && content.isEmpty ? 'Untitled note' : title,
           content: content,
@@ -71,7 +70,7 @@ class _NoteEditorViewState extends State<NoteEditorView> {
         }
         Navigator.of(context).pop(note);
       } else {
-        await widget.notesService.updateNote(
+        await ref.read(notesServiceProvider).updateNote(
           uid: widget.authUser.uid,
           note: widget.note!.copyWith(
             title: title.isEmpty && content.isEmpty ? 'Untitled note' : title,
@@ -122,7 +121,7 @@ class _NoteEditorViewState extends State<NoteEditorView> {
 
     setState(() => _isDeleting = true);
     try {
-      await widget.notesService.deleteNote(
+      await ref.read(notesServiceProvider).deleteNote(
         uid: widget.authUser.uid,
         noteId: note.id,
       );

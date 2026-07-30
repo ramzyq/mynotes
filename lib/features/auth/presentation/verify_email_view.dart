@@ -1,23 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/main.dart';
-import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
+import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/widgets/theme_toggle_button.dart';
 
-class VerifyEmailView extends StatefulWidget {
-  final AuthService authService;
-
+class VerifyEmailView extends ConsumerStatefulWidget {
   const VerifyEmailView({
     super.key,
-    required this.authService,
   });
 
   @override
-  State<VerifyEmailView> createState() => _VerifyEmailViewState();
+  ConsumerState<VerifyEmailView> createState() => _VerifyEmailViewState();
 }
 
-class _VerifyEmailViewState extends State<VerifyEmailView> {
+class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
   bool _isSending = false;
   bool _isChecking = false;
   Timer? _autoCheckTimer;
@@ -40,12 +38,13 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
   }
 
   Future<void> _sendVerificationEmail() async {
-    final user = widget.authService.currentUser;
+    final authService = ref.read(authServiceProvider);
+    final user = authService.currentUser;
     if (user == null || user.isEmailVerified) return;
 
     setState(() => _isSending = true);
     try {
-      await widget.authService.sendEmailVerification();
+      await authService.sendEmailVerification();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Verification email sent! Check your inbox.')),
@@ -67,14 +66,15 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
   }
 
   Future<void> _checkEmailVerified({bool silent = false}) async {
-    final user = widget.authService.currentUser;
+    final authService = ref.read(authServiceProvider);
+    final user = authService.currentUser;
     if (user == null) return;
 
     if (!silent) setState(() => _isChecking = true);
 
     try {
-      await widget.authService.reloadCurrentUser();
-      final updatedUser = widget.authService.currentUser;
+      await authService.reloadCurrentUser();
+      final updatedUser = authService.currentUser;
       if (updatedUser != null && updatedUser.isEmailVerified) {
         _autoCheckTimer?.cancel();
         if (!mounted) return;
@@ -112,7 +112,7 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => _VerifiedRedirect(authService: widget.authService),
+        builder: (_) => const _VerifiedRedirect(),
       ),
       (route) => false,
     );
@@ -120,14 +120,14 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
 
   Future<void> _signOut() async {
     _autoCheckTimer?.cancel();
-    await widget.authService.logOut();
+    await ref.read(authServiceProvider).logOut();
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
   Widget build(BuildContext context) {
-    final email = widget.authService.currentUser?.email ?? 'your email';
+    final email = ref.read(authServiceProvider).currentUser?.email ?? 'your email';
 
     return Scaffold(
       appBar: AppBar(
@@ -213,12 +213,10 @@ class _VerifyEmailViewState extends State<VerifyEmailView> {
 /// A simple widget that rebuilds from the AuthenticationWrapper,
 /// ensuring the verified user lands on the HomeView.
 class _VerifiedRedirect extends StatelessWidget {
-  final AuthService authService;
-
-  const _VerifiedRedirect({required this.authService});
+  const _VerifiedRedirect();
 
   @override
   Widget build(BuildContext context) {
-    return AuthenticationWrapper(authService: authService);
+    return const AuthenticationWrapper();
   }
 }

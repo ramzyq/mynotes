@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mynotes/main.dart';
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/features/auth/providers/auth_providers.dart';
 
 void main() {
   testWidgets('shows the login screen in the dark theme', (WidgetTester tester) async {
     await tester.pumpWidget(
-      MyApp(
-        authService: AuthService(_FakeAuthProvider()),
+      ProviderScope(
+        overrides: [
+          authServiceProvider.overrideWithValue(AuthService(_FakeAuthProvider())),
+        ],
+        child: const MyApp(),
       ),
     );
 

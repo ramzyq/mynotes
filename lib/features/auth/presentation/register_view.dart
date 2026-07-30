@@ -1,23 +1,21 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
-import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
+import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/widgets/theme_toggle_button.dart';
 
-class RegisterView extends StatefulWidget {
-  final AuthService authService;
-
+class RegisterView extends ConsumerStatefulWidget {
   const RegisterView({
     super.key,
-    required this.authService,
   });
 
   @override
-  State<RegisterView> createState() => _RegisterViewState();
+  ConsumerState<RegisterView> createState() => _RegisterViewState();
 }
 
-class _RegisterViewState extends State<RegisterView> {
+class _RegisterViewState extends ConsumerState<RegisterView> {
   late final TextEditingController _firstName;
   late final TextEditingController _email;
   late final TextEditingController _password;
@@ -89,7 +87,7 @@ class _RegisterViewState extends State<RegisterView> {
     setState(() => _isLoading = true);
 
     try {
-      await widget.authService.createUser(
+      await ref.read(authServiceProvider).createUser(
         email: email,
         password: password,
       );
@@ -97,7 +95,7 @@ class _RegisterViewState extends State<RegisterView> {
       // Navigate to email verification screen
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (context) => VerifyEmailView(authService: widget.authService),
+          builder: (context) => const VerifyEmailView(),
         ),
       );
     } on WeakPasswordAuthException {
