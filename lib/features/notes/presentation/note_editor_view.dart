@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
-import 'package:mynotes/services/notes/note.dart';
-import 'package:mynotes/services/notes/notes_service.dart';
+import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/notes/data/notes_service.dart';
 
 class NoteEditorView extends StatefulWidget {
   final AuthUser authUser;

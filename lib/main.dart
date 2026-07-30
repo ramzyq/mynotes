@@ -5,7 +5,7 @@ import 'package:mynotes/views/verify_email_view.dart';
 import 'package:mynotes/firebase_options.dart';
 import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
-import 'package:mynotes/views/notes_home_view.dart';
+import 'package:mynotes/features/notes/presentation/notes_home_view.dart';
 import 'package:mynotes/widgets/theme_toggle_button.dart';
 
 void main() async {

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
-import 'package:mynotes/services/notes/note.dart';
-import 'package:mynotes/services/notes/notes_service.dart';
-import 'package:mynotes/views/note_editor_view.dart';
+import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/notes/data/notes_service.dart';
+import 'package:mynotes/features/notes/presentation/note_editor_view.dart';
+import 'package:mynotes/features/notes/presentation/widgets/empty_notes_state.dart';
+import 'package:mynotes/features/notes/presentation/widgets/info_chip.dart';
+import 'package:mynotes/features/notes/presentation/widgets/tag_chip.dart';
 import 'package:mynotes/widgets/theme_toggle_button.dart';
 
 class NotesHomeView extends StatefulWidget {
@@ -213,15 +216,15 @@ class _NotesHomeViewState extends State<NotesHomeView> {
                               spacing: 10,
                               runSpacing: 10,
                               children: [
-                                _InfoChip(
+                                InfoChip(
                                   icon: Icons.sticky_note_2_outlined,
                                   label: '${notes.length} notes',
                                 ),
-                                _InfoChip(
+                                InfoChip(
                                   icon: Icons.push_pin_outlined,
                                   label: '${notes.where((note) => note.isPinned).length} pinned',
                                 ),
-                                _InfoChip(
+                                InfoChip(
                                   icon: Icons.palette_outlined,
                                   label: '${_palette.length} themes',
                                 ),
@@ -272,7 +275,7 @@ class _NotesHomeViewState extends State<NotesHomeView> {
                   else if (filteredNotes.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _EmptyNotesState(
+                      child: EmptyNotesState(
                         query: _query,
                         onCreate: () => _openEditor(),
                       ),
@@ -369,7 +372,7 @@ class _NotesHomeViewState extends State<NotesHomeView> {
                                     Row(
                                       children: [
                                         if (note.isPinned)
-                                          _TagChip(
+                                          TagChip(
                                             color: color,
                                             label: 'Pinned',
                                             icon: Icons.push_pin,
@@ -401,138 +404,6 @@ class _NotesHomeViewState extends State<NotesHomeView> {
         onPressed: () => _openEditor(),
         icon: const Icon(Icons.add_rounded),
         label: const Text('New note'),
-      ),
-    );
-  }
-}
-
-class _InfoChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _InfoChip({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF10182A),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF27314A)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: const Color(0xFF86E7C8)),
-          const SizedBox(width: 8),
-          Text(label),
-        ],
-      ),
-    );
-  }
-}
-
-class _TagChip extends StatelessWidget {
-  final Color color;
-  final String label;
-  final IconData icon;
-
-  const _TagChip({
-    required this.color,
-    required this.label,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(color: color, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyNotesState extends StatelessWidget {
-  final String query;
-  final VoidCallback onCreate;
-
-  const _EmptyNotesState({required this.query, required this.onCreate});
-
-  @override
-  Widget build(BuildContext context) {
-    final hasQuery = query.isNotEmpty;
-
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(maxWidth: 420),
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: const Color(0xFF141B2D),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: const Color(0xFF27314A)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 84,
-                height: 84,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10182A),
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_mosaic,
-                  size: 36,
-                  color: Color(0xFF86E7C8),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                hasQuery ? 'No matching notes' : 'Your notes live here',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                hasQuery
-                    ? 'Try a different keyword or clear the search to see everything again.'
-                    : 'Start a new note and keep track of ideas, project drafts, and quick thoughts.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white70,
-                      height: 1.5,
-                    ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: onCreate,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Create note'),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
