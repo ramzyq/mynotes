@@ -1,4 +1,6 @@
-// ignore: unused_import
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/db/app_database.dart';
 
-// Placeholder — will be populated as tasks progress
+final databaseProvider = Provider<AppDatabase>((ref) {
+  return AppDatabase();
+});
