@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mynotes/main.dart';
+import 'package:mynotes/app.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
-import 'package:mynotes/widgets/theme_toggle_button.dart';
+import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
 
 class VerifyEmailView extends ConsumerStatefulWidget {
   const VerifyEmailView({

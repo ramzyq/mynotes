@@ -8,7 +8,7 @@ import 'package:mynotes/features/notes/presentation/widgets/info_chip.dart';
 import 'package:mynotes/features/notes/presentation/widgets/tag_chip.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
-import 'package:mynotes/widgets/theme_toggle_button.dart';
+import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
 
 class NotesHomeView extends ConsumerStatefulWidget {
   final AuthUser authUser;

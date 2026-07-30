@@ -4,7 +4,7 @@ import 'package:mynotes/features/auth/presentation/register_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
-import 'package:mynotes/widgets/theme_toggle_button.dart';
+import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 
 class LoginView extends ConsumerStatefulWidget {
