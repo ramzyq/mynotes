@@ -5,6 +5,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
 
 class Note {
+  static const _ignore = Object();
+
   final String id;
   final String? title;
   final String? content;
@@ -17,6 +19,8 @@ class Note {
   final bool isLocked;
   final String? pinHash;
   final String? pinSalt;
+  final DateTime? selfDestructAt;
+  final bool selfDestructOnRead;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -33,6 +37,8 @@ class Note {
     this.isLocked = false,
     this.pinHash,
     this.pinSalt,
+    this.selfDestructAt,
+    this.selfDestructOnRead = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -51,6 +57,8 @@ class Note {
         isLocked: (data['isLocked'] as bool?) ?? false,
         pinHash: data['pinHash'] as String?,
         pinSalt: data['pinSalt'] as String?,
+        selfDestructAt: _timestampToDateTime(data['selfDestructAt']),
+        selfDestructOnRead: (data['selfDestructOnRead'] as bool?) ?? false,
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
       );
@@ -75,6 +83,8 @@ class Note {
       isLocked: (data['isLocked'] as bool?) ?? false,
       pinHash: data['pinHash'] as String?,
       pinSalt: data['pinSalt'] as String?,
+      selfDestructAt: _timestampToDateTime(data['selfDestructAt']),
+      selfDestructOnRead: (data['selfDestructOnRead'] as bool?) ?? false,
       createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
       updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
     );
@@ -104,6 +114,8 @@ class Note {
     bool? isLocked,
     String? pinHash,
     String? pinSalt,
+    Object? selfDestructAt = _ignore,
+    bool? selfDestructOnRead,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -120,6 +132,8 @@ class Note {
       isLocked: isLocked ?? this.isLocked,
       pinHash: pinHash ?? this.pinHash,
       pinSalt: pinSalt ?? this.pinSalt,
+      selfDestructAt: selfDestructAt == _ignore ? this.selfDestructAt : selfDestructAt as DateTime?,
+      selfDestructOnRead: selfDestructOnRead ?? this.selfDestructOnRead,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -138,6 +152,8 @@ class Note {
       'isLocked': isLocked,
       'pinHash': pinHash,
       'pinSalt': pinSalt,
+      'selfDestructAt': selfDestructAt != null ? Timestamp.fromDate(selfDestructAt as DateTime) : null,
+      'selfDestructOnRead': selfDestructOnRead,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

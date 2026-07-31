@@ -24,6 +24,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   late final TextEditingController _contentController;
   late int _selectedColorIndex;
   late bool _isPinned;
+  late bool _selfDestructOnRead;
+  DateTime? _selfDestructAt;
   bool _isSaving = false;
   bool _isDeleting = false;
 
@@ -39,10 +41,35 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.note?.title ?? '');
-    _contentController = TextEditingController(text: widget.note?.content ?? '');
-    _selectedColorIndex = widget.note?.colorIndex ?? 0;
-    _isPinned = widget.note?.isPinned ?? false;
+    final note = widget.note;
+    _titleController = TextEditingController(text: note?.title ?? '');
+    _contentController = TextEditingController(text: note?.content ?? '');
+    _selectedColorIndex = note?.colorIndex ?? 0;
+    _isPinned = note?.isPinned ?? false;
+    _selfDestructAt = note?.selfDestructAt;
+    _selfDestructOnRead = note?.selfDestructOnRead ?? false;
+
+    if (note?.selfDestructOnRead == true) {
+      _handleSelfDestructOnRead();
+    }
+  }
+
+  Future<void> _handleSelfDestructOnRead() async {
+    final note = widget.note;
+    if (note == null) return;
+
+    try {
+      await ref.read(notesServiceProvider).deleteNote(
+        uid: widget.authUser.uid,
+        noteId: note.id,
+      );
+    } catch (_) {}
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('This note has self-destructed')),
+    );
+    Navigator.of(context).pop(true);
   }
 
   @override
@@ -78,6 +105,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             content: content,
             colorIndex: _selectedColorIndex,
             isPinned: _isPinned,
+            selfDestructAt: _selfDestructAt,
+            selfDestructOnRead: _selfDestructOnRead,
           ),
         );
         if (!mounted) {
@@ -208,6 +237,30 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
   }
 
+  Future<void> _showSelfDestructSheet() async {
+    final note = widget.note;
+    if (note == null) return;
+
+    DateTime? pickedDate = _selfDestructAt;
+    bool onRead = _selfDestructOnRead;
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _SelfDestructSheet(
+        initialDate: pickedDate,
+        initialOnRead: onRead,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selfDestructAt = result['date'] as DateTime?;
+        _selfDestructOnRead = result['onRead'] as bool;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final note = widget.note;
@@ -221,6 +274,15 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             IconButton(
               icon: Icon(note.isLocked ? Icons.lock : Icons.lock_open),
               onPressed: _isSaving || _isDeleting ? null : _toggleLock,
+            ),
+          if (note != null)
+            IconButton(
+              icon: Icon(
+                _selfDestructAt != null || _selfDestructOnRead
+                    ? Icons.timer
+                    : Icons.timer_outlined,
+              ),
+              onPressed: _isSaving || _isDeleting ? null : _showSelfDestructSheet,
             ),
           if (note != null)
             IconButton(
@@ -380,6 +442,160 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SelfDestructSheet extends StatefulWidget {
+  final DateTime? initialDate;
+  final bool initialOnRead;
+
+  const _SelfDestructSheet({
+    required this.initialDate,
+    required this.initialOnRead,
+  });
+
+  @override
+  State<_SelfDestructSheet> createState() => _SelfDestructSheetState();
+}
+
+class _SelfDestructSheetState extends State<_SelfDestructSheet> {
+  late DateTime? _date;
+  late bool _onRead;
+  late bool _hasSettings;
+
+  @override
+  void initState() {
+    super.initState();
+    _date = widget.initialDate;
+    _onRead = widget.initialOnRead;
+    _hasSettings = widget.initialDate != null || widget.initialOnRead;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF141B2D), Color(0xFF0B0F1A)],
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.timer_outlined, color: Colors.white70),
+                const SizedBox(width: 12),
+                Text(
+                  'Self-destruct settings',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.schedule, color: Colors.white70),
+              title: const Text('Timed destruction'),
+              subtitle: Text(
+                _date != null
+                    ? '${_date!.month}/${_date!.day}/${_date!.year} ${_date!.hour.toString().padLeft(2, '0')}:${_date!.minute.toString().padLeft(2, '0')}'
+                    : 'Not set',
+              ),
+              trailing: FilledButton.tonal(
+                onPressed: () async {
+                  final scaffoldContext = context;
+                  final date = await showDatePicker(
+                    context: scaffoldContext,
+                    initialDate: _date ?? DateTime.now().add(const Duration(hours: 1)),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (date == null || !mounted) return;
+                  // ignore: use_build_context_synchronously
+                  final time = await showTimePicker(
+                    context: scaffoldContext,
+                    initialTime: TimeOfDay.fromDateTime(
+                      _date ?? DateTime.now().add(const Duration(hours: 1)),
+                    ),
+                  );
+                  if (time == null || !mounted) return;
+                  setState(() {
+                    _date = DateTime(
+                      date.year,
+                      date.month,
+                      date.day,
+                      time.hour,
+                      time.minute,
+                    );
+                  });
+                },
+                child: const Text('Pick'),
+              ),
+            ),
+            const Divider(height: 32),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.visibility_off_outlined, color: Colors.white70),
+              title: const Text('Delete after first read'),
+              subtitle: const Text('Note disappears once opened'),
+              value: _onRead,
+              onChanged: (value) {
+                setState(() => _onRead = value);
+              },
+            ),
+            if (_hasSettings) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop(<String, dynamic>{
+                      'date': null,
+                      'onRead': false,
+                    });
+                  },
+                  icon: const Icon(Icons.remove_circle_outline),
+                  label: const Text('Remove self-destruct'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: const BorderSide(color: Colors.redAccent),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pop(<String, dynamic>{
+                    'date': _date,
+                    'onRead': _onRead,
+                  });
+                },
+                child: const Text('Apply'),
+              ),
+            ),
+          ],
         ),
       ),
     );

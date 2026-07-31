@@ -383,6 +383,18 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                                             label: 'Locked',
                                             icon: Icons.lock,
                                           ),
+                                        if (note.selfDestructAt != null)
+                                          TagChip(
+                                            color: color,
+                                            label: 'Timer',
+                                            icon: Icons.timer_outlined,
+                                          ),
+                                        if (note.selfDestructOnRead)
+                                          TagChip(
+                                            color: color,
+                                            label: 'Read-once',
+                                            icon: Icons.visibility_off_outlined,
+                                          ),
                                         const Spacer(),
                                         Text(
                                           _timeLabel(note.updatedAt),

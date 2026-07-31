@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/features/auth/presentation/login_view.dart';
@@ -83,11 +84,48 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthenticationWrapper extends ConsumerWidget {
+class AuthenticationWrapper extends ConsumerStatefulWidget {
   const AuthenticationWrapper({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuthenticationWrapper> createState() => _AuthenticationWrapperState();
+}
+
+class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _deleteExpiredNotes();
+    }
+  }
+
+  Future<void> _deleteExpiredNotes() async {
+    final now = DateTime.now();
+    final snapshots = await FirebaseFirestore.instance
+        .collectionGroup('notes')
+        .where('selfDestructAt', isLessThanOrEqualTo: Timestamp.fromDate(now))
+        .get();
+
+    for (final doc in snapshots.docs) {
+      await doc.reference.delete();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     return authState.when(
       data: (user) {
