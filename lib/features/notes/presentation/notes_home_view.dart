@@ -410,7 +410,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                           onPressed: null,
                           icon: const Icon(Icons.school_rounded),
                         ),
-                        error: (_, __) => IconButton(
+                        error: (_, _) => IconButton(
                           tooltip: 'Study',
                           onPressed: null,
                           icon: const Icon(Icons.school_rounded),

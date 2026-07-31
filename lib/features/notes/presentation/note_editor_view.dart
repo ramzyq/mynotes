@@ -1503,17 +1503,15 @@ class _SelfDestructSheetState extends State<_SelfDestructSheet> {
               ),
               trailing: FilledButton.tonal(
                 onPressed: () async {
-                  final scaffoldContext = context;
                   final date = await showDatePicker(
-                    context: scaffoldContext,
+                    context: context,
                     initialDate: _date ?? DateTime.now().add(const Duration(hours: 1)),
                     firstDate: DateTime.now(),
                     lastDate: DateTime.now().add(const Duration(days: 365)),
                   );
-                  if (date == null || !mounted) return;
-                  // ignore: use_build_context_synchronously
+                  if (date == null || !context.mounted) return;
                   final time = await showTimePicker(
-                    context: scaffoldContext,
+                    context: context,
                     initialTime: TimeOfDay.fromDateTime(
                       _date ?? DateTime.now().add(const Duration(hours: 1)),
                     ),
