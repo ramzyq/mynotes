@@ -139,7 +139,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                   return true;
                 }
 
-                final haystack = '${note.title} ${note.content}'.toLowerCase();
+                final haystack = '${note.title ?? ''} ${note.content ?? ''}'.toLowerCase();
                 return haystack.contains(_query.toLowerCase());
               }).toList();
 
