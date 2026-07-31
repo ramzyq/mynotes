@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
+
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
@@ -29,6 +30,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   DateTime? _selfDestructAt;
   bool _isSaving = false;
   bool _isDeleting = false;
+  bool _isRecording = false;
+  List<String> _audioAttachments = [];
 
   static const List<Color> _palette = [
     Color(0xFF86E7C8),
@@ -49,6 +52,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _isPinned = note?.isPinned ?? false;
     _selfDestructAt = note?.selfDestructAt;
     _selfDestructOnRead = note?.selfDestructOnRead ?? false;
+    _audioAttachments = note?.audioAttachments ?? [];
 
     if (note?.selfDestructOnRead == true) {
       _handleSelfDestructOnRead();
@@ -153,6 +157,46 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
   }
 
+  Future<void> _startVoiceRecording() async {
+    final voiceService = ref.read(voiceServiceProvider);
+    final permitted = await voiceService.requestPermission();
+    if (!permitted || !mounted) return;
+
+    setState(() => _isRecording = true);
+    await voiceService.startRecording();
+  }
+
+  Future<void> _stopVoiceRecording() async {
+    final voiceService = ref.read(voiceServiceProvider);
+    final result = await voiceService.stopRecordingAndTranscribe();
+    if (!mounted) return;
+
+    setState(() => _isRecording = false);
+
+    if (result == null) return;
+
+    final transcription = result.transcription;
+    final filePath = result.filePath;
+
+    if (transcription.isNotEmpty) {
+      final controller = _contentController;
+      final cursorPos = controller.selection.baseOffset;
+      final currentText = controller.text;
+      final insertPos = cursorPos < 0 || cursorPos > currentText.length
+          ? currentText.length
+          : cursorPos;
+      final newText = currentText.substring(0, insertPos) +
+          transcription +
+          currentText.substring(insertPos);
+      controller.text = newText;
+      controller.selection = TextSelection.collapsed(
+        offset: insertPos + transcription.length,
+      );
+    }
+
+    _audioAttachments = [..._audioAttachments, filePath];
+  }
+
   Future<void> _handleSelfDestructOnRead() async {
     final note = widget.note;
     if (note == null) return;
@@ -191,6 +235,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           content: content,
           colorIndex: _selectedColorIndex,
           isPinned: _isPinned,
+          audioAttachments: _audioAttachments,
         );
         if (!mounted) {
           return;
@@ -206,6 +251,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             isPinned: _isPinned,
             selfDestructAt: _selfDestructAt,
             selfDestructOnRead: _selfDestructOnRead,
+            audioAttachments: _audioAttachments,
           ),
         );
         if (!mounted) {
@@ -373,6 +419,14 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             icon: const Icon(Icons.document_scanner),
             onPressed: _isSaving || _isDeleting ? null : _showOcrSheet,
           ),
+          IconButton(
+            icon: Icon(_isRecording ? Icons.mic : Icons.mic_none),
+            onPressed: _isSaving || _isDeleting
+                ? null
+                : _isRecording
+                    ? _stopVoiceRecording
+                    : _startVoiceRecording,
+          ),
           if (note != null)
             IconButton(
               icon: Icon(note.isLocked ? Icons.lock : Icons.lock_open),
@@ -473,6 +527,24 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                           filled: false,
                         ),
                       ),
+                      if (_isRecording)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.fiber_manual_record,
+                                  color: Colors.red, size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Recording...',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: Colors.redAccent),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -519,6 +591,44 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     );
                   }),
                 ),
+                if (_audioAttachments.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Audio attachments',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  ..._audioAttachments.map((path) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF141B2D),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                              color: accent.withValues(alpha: 0.25)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.audiotrack,
+                                color: Colors.white70, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                path.split('\\').last.split('/').last,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: Colors.white70),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                ],
                 const SizedBox(height: 28),
                 SizedBox(
                   width: double.infinity,

@@ -56,6 +56,7 @@ class NotesService {
     required String content,
     required int colorIndex,
     bool isPinned = false,
+    List<String> audioAttachments = const [],
   }) async {
     final now = DateTime.now();
     final document = _notesCollection(uid).doc();
@@ -70,6 +71,7 @@ class NotesService {
       content: content,
       colorIndex: colorIndex,
       isPinned: isPinned,
+      audioAttachments: audioAttachments,
       createdAt: now,
       updatedAt: now,
     );

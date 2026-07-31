@@ -23,6 +23,7 @@ class Note {
   final bool selfDestructOnRead;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<String> audioAttachments;
 
   const Note({
     required this.id,
@@ -41,6 +42,7 @@ class Note {
     this.selfDestructOnRead = false,
     required this.createdAt,
     required this.updatedAt,
+    this.audioAttachments = const [],
   });
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -59,6 +61,9 @@ class Note {
         pinSalt: data['pinSalt'] as String?,
         selfDestructAt: _timestampToDateTime(data['selfDestructAt']),
         selfDestructOnRead: (data['selfDestructOnRead'] as bool?) ?? false,
+        audioAttachments: (data['audioAttachments'] as List<dynamic>?)
+                ?.cast<String>() ??
+            const [],
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
       );
@@ -85,6 +90,9 @@ class Note {
       pinSalt: data['pinSalt'] as String?,
       selfDestructAt: _timestampToDateTime(data['selfDestructAt']),
       selfDestructOnRead: (data['selfDestructOnRead'] as bool?) ?? false,
+      audioAttachments: (data['audioAttachments'] as List<dynamic>?)
+              ?.cast<String>() ??
+          const [],
       createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
       updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
     );
@@ -118,6 +126,7 @@ class Note {
     bool? selfDestructOnRead,
     DateTime? createdAt,
     DateTime? updatedAt,
+    List<String>? audioAttachments,
   }) {
     return Note(
       id: id,
@@ -136,6 +145,7 @@ class Note {
       selfDestructOnRead: selfDestructOnRead ?? this.selfDestructOnRead,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      audioAttachments: audioAttachments ?? this.audioAttachments,
     );
   }
 
@@ -154,6 +164,7 @@ class Note {
       'pinSalt': pinSalt,
       'selfDestructAt': selfDestructAt != null ? Timestamp.fromDate(selfDestructAt as DateTime) : null,
       'selfDestructOnRead': selfDestructOnRead,
+      'audioAttachments': audioAttachments,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
