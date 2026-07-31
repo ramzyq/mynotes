@@ -50,6 +50,32 @@ class NotesService {
     });
   }
 
+  Stream<List<Note>> watchStudyCards(String uid) {
+    return _notesCollection(uid)
+        .where('isStudyMaterial', isEqualTo: true)
+        .where('studyDueAt', isLessThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
+        .orderBy('studyDueAt', descending: false)
+        .snapshots()
+        .asyncMap((snapshot) async {
+      final notes = snapshot.docs.map(Note.fromFirestore).toList();
+
+      final decrypted = <Note>[];
+      for (final note in notes) {
+        if (note.encryptionVersion >= 1 && note.wrappedKey != null) {
+          try {
+            final noteKey = await keyManager.unwrapNoteKey(note.wrappedKey!);
+            decrypted.add(await note.decryptNote(noteKey, crypto));
+          } catch (_) {
+            decrypted.add(note);
+          }
+        } else {
+          decrypted.add(note);
+        }
+      }
+      return decrypted;
+    });
+  }
+
   Future<List<String>> _resolveLinks(String uid, String content) async {
     final regex = RegExp(r'\[\[([^\]]+)\]\]');
     final matches = regex.allMatches(content);
@@ -75,6 +101,7 @@ class NotesService {
     required String content,
     required int colorIndex,
     bool isPinned = false,
+    bool isStudyMaterial = false,
     List<String> audioAttachments = const [],
     double? latitude,
     double? longitude,
@@ -94,6 +121,7 @@ class NotesService {
       content: content,
       colorIndex: colorIndex,
       isPinned: isPinned,
+      isStudyMaterial: isStudyMaterial,
       audioAttachments: audioAttachments,
       latitude: latitude,
       longitude: longitude,
@@ -131,6 +159,22 @@ class NotesService {
     required String noteId,
   }) async {
     await _notesCollection(uid).doc(noteId).delete();
+  }
+
+  Future<void> updateStudyProgress({
+    required String uid,
+    required String noteId,
+    required int studyInterval,
+    required double studyEaseFactor,
+    required int studyRepetitions,
+    required DateTime studyDueAt,
+  }) async {
+    await _notesCollection(uid).doc(noteId).update({
+      'studyInterval': studyInterval,
+      'studyEaseFactor': studyEaseFactor,
+      'studyRepetitions': studyRepetitions,
+      'studyDueAt': Timestamp.fromDate(studyDueAt),
+    });
   }
 
   Future<void> togglePin({

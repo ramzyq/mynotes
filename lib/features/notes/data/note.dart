@@ -27,6 +27,11 @@ class Note {
   final double? latitude;
   final double? longitude;
   final List<String>? links;
+  final bool isStudyMaterial;
+  final DateTime? studyDueAt;
+  final int? studyInterval;
+  final double? studyEaseFactor;
+  final int? studyRepetitions;
 
   const Note({
     required this.id,
@@ -49,6 +54,11 @@ class Note {
     this.latitude,
     this.longitude,
     this.links,
+    this.isStudyMaterial = false,
+    this.studyDueAt,
+    this.studyInterval,
+    this.studyEaseFactor,
+    this.studyRepetitions,
   });
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -75,6 +85,11 @@ class Note {
         links: (data['links'] as List<dynamic>?)?.cast<String>(),
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
+        isStudyMaterial: (data['isStudyMaterial'] as bool?) ?? false,
+        studyDueAt: _timestampToDateTime(data['studyDueAt']),
+        studyInterval: (data['studyInterval'] as int?),
+        studyEaseFactor: (data['studyEaseFactor'] as num?)?.toDouble(),
+        studyRepetitions: (data['studyRepetitions'] as int?),
       );
     }
 
@@ -107,6 +122,11 @@ class Note {
         links: (data['links'] as List<dynamic>?)?.cast<String>(),
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
+        isStudyMaterial: (data['isStudyMaterial'] as bool?) ?? false,
+        studyDueAt: _timestampToDateTime(data['studyDueAt']),
+        studyInterval: (data['studyInterval'] as int?),
+        studyEaseFactor: (data['studyEaseFactor'] as num?)?.toDouble(),
+        studyRepetitions: (data['studyRepetitions'] as int?),
       );
   }
 
@@ -142,6 +162,11 @@ class Note {
     Object? latitude = _ignore,
     Object? longitude = _ignore,
     Object? links = _ignore,
+    bool? isStudyMaterial,
+    Object? studyDueAt = _ignore,
+    Object? studyInterval = _ignore,
+    Object? studyEaseFactor = _ignore,
+    Object? studyRepetitions = _ignore,
   }) {
     return Note(
       id: id,
@@ -164,6 +189,11 @@ class Note {
       latitude: latitude == _ignore ? this.latitude : latitude as double?,
       longitude: longitude == _ignore ? this.longitude : longitude as double?,
       links: links == _ignore ? this.links : links as List<String>?,
+      isStudyMaterial: isStudyMaterial ?? this.isStudyMaterial,
+      studyDueAt: studyDueAt == _ignore ? this.studyDueAt : studyDueAt as DateTime?,
+      studyInterval: studyInterval == _ignore ? this.studyInterval : studyInterval as int?,
+      studyEaseFactor: studyEaseFactor == _ignore ? this.studyEaseFactor : studyEaseFactor as double?,
+      studyRepetitions: studyRepetitions == _ignore ? this.studyRepetitions : studyRepetitions as int?,
     );
   }
 
@@ -186,6 +216,11 @@ class Note {
       'latitude': latitude,
       'longitude': longitude,
       'links': links,
+      'isStudyMaterial': isStudyMaterial,
+      'studyDueAt': studyDueAt != null ? Timestamp.fromDate(studyDueAt as DateTime) : null,
+      'studyInterval': studyInterval,
+      'studyEaseFactor': studyEaseFactor,
+      'studyRepetitions': studyRepetitions,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

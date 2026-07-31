@@ -11,6 +11,8 @@ import 'package:mynotes/features/notes/presentation/widgets/tag_chip.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
+import 'package:mynotes/features/study/presentation/review_view.dart';
+import 'package:mynotes/features/study/providers/study_providers.dart';
 
 final _linkRegex = RegExp(r'\[\[([^\]]+)\]\]');
 
@@ -251,6 +253,33 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                     ),
                     actions: [
                       const ThemeToggleButton(),
+                      ref.watch(dueCountProvider(widget.authUser.uid)).when(
+                        data: (count) => Badge(
+                          isLabelVisible: count > 0,
+                          label: Text('$count'),
+                          child: IconButton(
+                            tooltip: 'Study',
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => ReviewView(
+                                  authUser: widget.authUser,
+                                ),
+                              ),
+                            ),
+                            icon: const Icon(Icons.school_rounded),
+                          ),
+                        ),
+                        loading: () => IconButton(
+                          tooltip: 'Study',
+                          onPressed: null,
+                          icon: const Icon(Icons.school_rounded),
+                        ),
+                        error: (_, __) => IconButton(
+                          tooltip: 'Study',
+                          onPressed: null,
+                          icon: const Icon(Icons.school_rounded),
+                        ),
+                      ),
                       IconButton(
                         tooltip: 'Sign out',
                         onPressed: () => ref.read(authServiceProvider).logOut(),

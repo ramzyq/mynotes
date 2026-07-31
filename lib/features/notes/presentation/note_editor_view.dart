@@ -28,6 +28,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   late final TextEditingController _contentController;
   late int _selectedColorIndex;
   late bool _isPinned;
+  late bool _isStudyMaterial;
   late bool _selfDestructOnRead;
   DateTime? _selfDestructAt;
   bool _isSaving = false;
@@ -62,6 +63,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _contentController = TextEditingController(text: note?.content ?? '');
     _selectedColorIndex = note?.colorIndex ?? 0;
     _isPinned = note?.isPinned ?? false;
+    _isStudyMaterial = note?.isStudyMaterial ?? false;
     _selfDestructAt = note?.selfDestructAt;
     _selfDestructOnRead = note?.selfDestructOnRead ?? false;
     _audioAttachments = note?.audioAttachments ?? [];
@@ -358,6 +360,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           content: content,
           colorIndex: _selectedColorIndex,
           isPinned: _isPinned,
+          isStudyMaterial: _isStudyMaterial,
           audioAttachments: _audioAttachments,
           latitude: _latitude,
           longitude: _longitude,
@@ -374,6 +377,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             content: content,
             colorIndex: _selectedColorIndex,
             isPinned: _isPinned,
+            isStudyMaterial: _isStudyMaterial,
             selfDestructAt: _selfDestructAt,
             selfDestructOnRead: _selfDestructOnRead,
             audioAttachments: _audioAttachments,
@@ -627,6 +631,14 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                             selected: _isPinned,
                             onSelected: (selected) {
                               setState(() => _isPinned = selected);
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Study'),
+                            selected: _isStudyMaterial,
+                            onSelected: (selected) {
+                              setState(() => _isStudyMaterial = selected);
                             },
                           ),
                           const Spacer(),
