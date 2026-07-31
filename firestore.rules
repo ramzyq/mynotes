@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Own data: full access
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == userId;
+    }
+
+    // Collaborator access to shared notes
+    match /users/{noteOwnerId}/notes/{noteId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == noteOwnerId
+            || resource.data.collaborators.hasAny([request.auth.uid]));
+      allow write: if request.auth != null
+        && request.auth.uid == noteOwnerId;
+    }
+
+    // Comments on shared notes
+    match /users/{noteOwnerId}/notes/{noteId}/comments/{commentId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == noteOwnerId
+            || get(/databases/$(database)/documents/users/$(noteOwnerId)/notes/$(noteId)).data.collaborators.hasAny([request.auth.uid]));
+      allow create: if request.auth != null
+        && (request.auth.uid == noteOwnerId
+            || get(/databases/$(database)/documents/users/$(noteOwnerId)/notes/$(noteId)).data.collaborators.hasAny([request.auth.uid]));
+      allow delete: if request.auth != null
+        && request.auth.uid == resource.data.authorUid;
+    }
+
+    // Note versions
+    match /users/{noteOwnerId}/notes/{noteId}/versions/{versionId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == noteOwnerId;
+    }
+  }
+}
