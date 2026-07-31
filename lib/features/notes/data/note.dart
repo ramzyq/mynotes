@@ -36,6 +36,7 @@ class Note {
   final Map<String, String>? encryptedKeys;
   final String? sharedBy;
   final DateTime? sharedAt;
+  final List<String>? tags;
 
   const Note({
     required this.id,
@@ -67,6 +68,7 @@ class Note {
     this.encryptedKeys,
     this.sharedBy,
     this.sharedAt,
+    this.tags,
   });
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -106,6 +108,7 @@ class Note {
             : null,
         sharedBy: data['sharedBy'] as String?,
         sharedAt: _timestampToDateTime(data['sharedAt']),
+        tags: (data['tags'] as List<dynamic>?)?.cast<String>(),
       );
     }
 
@@ -151,6 +154,7 @@ class Note {
             : null,
         sharedBy: data['sharedBy'] as String?,
         sharedAt: _timestampToDateTime(data['sharedAt']),
+        tags: (data['tags'] as List<dynamic>?)?.cast<String>(),
       );
   }
 
@@ -195,6 +199,7 @@ class Note {
     Object? encryptedKeys = _ignore,
     Object? sharedBy = _ignore,
     Object? sharedAt = _ignore,
+    Object? tags = _ignore,
   }) {
     return Note(
       id: id,
@@ -226,6 +231,7 @@ class Note {
       encryptedKeys: encryptedKeys == _ignore ? this.encryptedKeys : encryptedKeys as Map<String, String>?,
       sharedBy: sharedBy == _ignore ? this.sharedBy : sharedBy as String?,
       sharedAt: sharedAt == _ignore ? this.sharedAt : sharedAt as DateTime?,
+      tags: tags == _ignore ? this.tags : tags as List<String>?,
     );
   }
 
@@ -257,6 +263,7 @@ class Note {
       'encryptedKeys': encryptedKeys,
       'sharedBy': sharedBy,
       'sharedAt': sharedAt != null ? Timestamp.fromDate(sharedAt as DateTime) : null,
+      'tags': tags,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

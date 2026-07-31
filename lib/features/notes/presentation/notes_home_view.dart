@@ -31,6 +31,7 @@ class NotesHomeView extends ConsumerStatefulWidget {
 class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  String? _activeTag;
 
   static const List<Color> _palette = [
     Color(0xFF86E7C8),
@@ -146,6 +147,104 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     }
   }
 
+  Future<void> _showContextSwitcher(List<Note> notes) async {
+    final tagCounts = <String, int>{};
+    for (final note in notes) {
+      for (final tag in (note.tags ?? const [])) {
+        tagCounts[tag] = (tagCounts[tag] ?? 0) + 1;
+      }
+    }
+    final sortedTags = tagCounts.keys.toList()..sort();
+
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF141B2D), Color(0xFF0B0F1A)],
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.filter_list_rounded, color: Colors.white70),
+                const SizedBox(width: 12),
+                Text(
+                  'Context switcher',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              selected: _activeTag == null,
+              selectedTileColor: const Color(0xFF1A2340),
+              leading: const Icon(Icons.sticky_note_2_outlined),
+              title: const Text('All Notes'),
+              trailing: Text(
+                '${notes.length}',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Colors.white54,
+                    ),
+              ),
+              onTap: () => Navigator.of(context).pop(''),
+            ),
+            if (sortedTags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: sortedTags.length,
+                  itemBuilder: (context, index) {
+                    final tag = sortedTags[index];
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      selected: _activeTag == tag,
+                      selectedTileColor: const Color(0xFF1A2340),
+                      leading: const Icon(Icons.sell_outlined),
+                      title: Text(tag),
+                      trailing: Text(
+                        '${tagCounts[tag]}',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              color: Colors.white54,
+                            ),
+                      ),
+                      onTap: () => Navigator.of(context).pop(tag),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() => _activeTag = result.isEmpty ? null : result);
+    }
+  }
+
   Widget _buildLinkPreview(Note note, List<Note> allNotes) {
     final text = note.previewText;
     final matches = _linkRegex.allMatches(text).toList();
@@ -239,6 +338,11 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                       note.sharedBy != widget.authUser.uid),
               ];
               final filteredNotes = notes.where((note) {
+                if (_activeTag != null &&
+                    !(note.tags ?? const []).contains(_activeTag)) {
+                  return false;
+                }
+
                 if (_query.isEmpty) {
                   return true;
                 }
@@ -273,6 +377,17 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                       ],
                     ),
                     actions: [
+                      IconButton(
+                        tooltip: 'Filter by tag',
+                        onPressed: () => _showContextSwitcher(notes),
+                        icon: _activeTag != null
+                            ? Badge(
+                                isLabelVisible: true,
+                                label: const Text(''),
+                                child: const Icon(Icons.filter_list_rounded),
+                              )
+                            : const Icon(Icons.filter_list_rounded),
+                      ),
                       const ThemeToggleButton(),
                       ref.watch(dueCountProvider(widget.authUser.uid)).when(
                         data: (count) => Badge(
@@ -385,12 +500,53 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                       ),
                     ),
                   ),
+                  if (_activeTag != null)
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      sliver: SliverToBoxAdapter(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A2340),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFF27314A)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.sell_outlined,
+                                  color: Colors.white70, size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Focus: $_activeTag',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelLarge
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Clear filter',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () =>
+                                    setState(() => _activeTag = null),
+                                icon: const Icon(Icons.close, size: 18),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
                   if (filteredNotes.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: EmptyNotesState(
                         query: _query,
+                        activeTag: _activeTag,
                         onCreate: () => _openEditor(),
                       ),
                     )

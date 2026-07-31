@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 
 class EmptyNotesState extends StatelessWidget {
   final String query;
+  final String? activeTag;
   final VoidCallback onCreate;
 
-  const EmptyNotesState({super.key, required this.query, required this.onCreate});
+  const EmptyNotesState({
+    super.key,
+    required this.query,
+    this.activeTag,
+    required this.onCreate,
+  });
 
   @override
   Widget build(BuildContext context) {
     final hasQuery = query.isNotEmpty;
+    final hasTag = activeTag != null && activeTag!.isNotEmpty;
 
     return Center(
       child: Padding(
@@ -40,7 +47,11 @@ class EmptyNotesState extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               Text(
-                hasQuery ? 'No matching notes' : 'Your notes live here',
+                hasQuery
+                    ? 'No matching notes'
+                    : hasTag
+                        ? 'No notes in "$activeTag"'
+                        : 'Your notes live here',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w800,
@@ -50,7 +61,9 @@ class EmptyNotesState extends StatelessWidget {
               Text(
                 hasQuery
                     ? 'Try a different keyword or clear the search to see everything again.'
-                    : 'Start a new note and keep track of ideas, project drafts, and quick thoughts.',
+                    : hasTag
+                        ? 'Tag a note with "$activeTag" or switch context to see everything again.'
+                        : 'Start a new note and keep track of ideas, project drafts, and quick thoughts.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.white70,

@@ -50,6 +50,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   final TextEditingController _commentController = TextEditingController();
   bool _isAddingComment = false;
   List<String> _collaborators = [];
+  List<String> _tags = [];
 
   static const List<Color> _palette = [
     Color(0xFF86E7C8),
@@ -75,6 +76,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _latitude = note?.latitude;
     _longitude = note?.longitude;
     _collaborators = note?.collaborators ?? [];
+    _tags = note?.tags ?? [];
 
     _contentController.addListener(_onContentChanged);
 
@@ -361,7 +363,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     setState(() => _isSaving = true);
     try {
       if (widget.note == null) {
-        final note = await ref.read(notesServiceProvider).createNote(
+        var note = await ref.read(notesServiceProvider).createNote(
           uid: widget.authUser.uid,
           title: title.isEmpty && content.isEmpty ? 'Untitled note' : title,
           content: content,
@@ -372,6 +374,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           latitude: _latitude,
           longitude: _longitude,
         );
+        if (_tags.isNotEmpty) {
+          note = note.copyWith(tags: _tags);
+          await ref.read(notesServiceProvider).updateNote(
+            uid: widget.authUser.uid,
+            note: note,
+          );
+        }
         if (!mounted) {
           return;
         }
@@ -390,6 +399,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             audioAttachments: _audioAttachments,
             latitude: _latitude,
             longitude: _longitude,
+            tags: _tags,
           ),
         );
         if (!mounted) {
@@ -541,6 +551,113 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         _selfDestructAt = result['date'] as DateTime?;
         _selfDestructOnRead = result['onRead'] as bool;
       });
+    }
+  }
+
+  Future<void> _showTagsDialog() async {
+    final allNotes =
+        ref.read(notesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
+    final allTags = <String>{};
+    for (final note in allNotes) {
+      allTags.addAll(note.tags ?? const []);
+    }
+    allTags.addAll(_tags);
+
+    final controller = TextEditingController();
+    final selected = List<String>.of(_tags);
+
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void addNewTag() {
+            final tag = controller.text.trim();
+            if (tag.isEmpty) return;
+            setDialogState(() {
+              if (!selected.contains(tag)) selected.add(tag);
+              allTags.add(tag);
+              controller.clear();
+            });
+          }
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF141B2D),
+            title: const Text('Tags'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          onSubmitted: (_) => addNewTag(),
+                          decoration: const InputDecoration(
+                            hintText: 'New tag name',
+                            prefixIcon: Icon(Icons.add),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: addNewTag,
+                        icon: const Icon(Icons.add_circle_outline),
+                        tooltip: 'Add tag',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (allTags.isEmpty)
+                    Text(
+                      'No tags yet. Create one above.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white54,
+                          ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: allTags.map((tag) {
+                        return FilterChip(
+                          label: Text(tag),
+                          selected: selected.contains(tag),
+                          onSelected: (isSelected) {
+                            setDialogState(() {
+                              if (isSelected) {
+                                if (!selected.contains(tag)) selected.add(tag);
+                              } else {
+                                selected.remove(tag);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(selected),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    controller.dispose();
+
+    if (result != null && mounted) {
+      setState(() => _tags = result);
     }
   }
 
@@ -888,6 +1005,46 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     );
                   }),
                 ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Text(
+                      'Tags',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: _isSaving ? null : _showTagsDialog,
+                      icon: const Icon(Icons.sell_outlined, size: 18),
+                      label: const Text('Edit tags'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_tags.isEmpty)
+                  Text(
+                    'No tags yet. Tap "Edit tags" to organize this note.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white54,
+                        ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _tags.map((tag) {
+                      return InputChip(
+                        label: Text(tag),
+                        onDeleted: () {
+                          setState(() {
+                            _tags = _tags.where((t) => t != tag).toList();
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
                 if (_audioAttachments.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   Text(
