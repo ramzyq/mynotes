@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/features/capture/providers/capture_providers.dart';
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
@@ -51,6 +52,104 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
     if (note?.selfDestructOnRead == true) {
       _handleSelfDestructOnRead();
+    }
+  }
+
+  Future<void> _showOcrSheet() async {
+    final controller = _contentController;
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF141B2D), Color(0xFF0B0F1A)],
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.text_snippet, color: Colors.white70),
+                const SizedBox(width: 12),
+                Text(
+                  'Extract text from image',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop('camera'),
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Take Photo'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop('gallery'),
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Choose from Gallery'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    final ocrService = ref.read(ocrServiceProvider);
+    setState(() => _isSaving = true);
+    try {
+      final text = await ocrService.pickAndRecognizeText(
+        fromCamera: result == 'camera',
+      );
+      if (text == null || text.isEmpty || !mounted) return;
+
+      final cursorPos = controller.selection.baseOffset;
+      final currentText = controller.text;
+      final insertPos = cursorPos < 0 || cursorPos > currentText.length
+          ? currentText.length
+          : cursorPos;
+      final newText = currentText.substring(0, insertPos) +
+          text +
+          currentText.substring(insertPos);
+      controller.text = newText;
+      controller.selection = TextSelection.collapsed(
+        offset: insertPos + text.length,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 
@@ -270,6 +369,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       appBar: AppBar(
         title: Text(note == null ? 'New note' : 'Edit note'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.document_scanner),
+            onPressed: _isSaving || _isDeleting ? null : _showOcrSheet,
+          ),
           if (note != null)
             IconButton(
               icon: Icon(note.isLocked ? Icons.lock : Icons.lock_open),
