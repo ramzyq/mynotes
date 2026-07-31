@@ -14,6 +14,9 @@ class Note {
   final int encryptionVersion;
   final int colorIndex;
   final bool isPinned;
+  final bool isLocked;
+  final String? pinHash;
+  final String? pinSalt;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -27,6 +30,9 @@ class Note {
     this.encryptionVersion = 0,
     required this.colorIndex,
     required this.isPinned,
+    this.isLocked = false,
+    this.pinHash,
+    this.pinSalt,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -42,6 +48,9 @@ class Note {
         content: (data['content'] as String? ?? '').trim(),
         colorIndex: (data['colorIndex'] as int?) ?? 0,
         isPinned: (data['isPinned'] as bool?) ?? false,
+        isLocked: (data['isLocked'] as bool?) ?? false,
+        pinHash: data['pinHash'] as String?,
+        pinSalt: data['pinSalt'] as String?,
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
       );
@@ -63,6 +72,9 @@ class Note {
       encryptionVersion: encryptionVersion,
       colorIndex: (data['colorIndex'] as int?) ?? 0,
       isPinned: (data['isPinned'] as bool?) ?? false,
+      isLocked: (data['isLocked'] as bool?) ?? false,
+      pinHash: data['pinHash'] as String?,
+      pinSalt: data['pinSalt'] as String?,
       createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
       updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
     );
@@ -89,6 +101,9 @@ class Note {
     int? encryptionVersion,
     int? colorIndex,
     bool? isPinned,
+    bool? isLocked,
+    String? pinHash,
+    String? pinSalt,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -102,6 +117,9 @@ class Note {
       encryptionVersion: encryptionVersion ?? this.encryptionVersion,
       colorIndex: colorIndex ?? this.colorIndex,
       isPinned: isPinned ?? this.isPinned,
+      isLocked: isLocked ?? this.isLocked,
+      pinHash: pinHash ?? this.pinHash,
+      pinSalt: pinSalt ?? this.pinSalt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -117,6 +135,9 @@ class Note {
       'encryptionVersion': encryptionVersion,
       'colorIndex': colorIndex,
       'isPinned': isPinned,
+      'isLocked': isLocked,
+      'pinHash': pinHash,
+      'pinSalt': pinSalt,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

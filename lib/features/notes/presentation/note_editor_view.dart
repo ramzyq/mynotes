@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
@@ -136,6 +137,77 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
   }
 
+  Future<void> _toggleLock() async {
+    final note = widget.note;
+    if (note == null) return;
+
+    final lockService = ref.read(lockServiceProvider);
+    final canBio = await lockService.canUseBiometrics();
+
+    if (!note.isLocked) {
+      if (canBio) {
+        // Lock with biometrics only
+        await ref.read(notesServiceProvider).updateNote(
+          uid: widget.authUser.uid,
+          note: note.copyWith(isLocked: true),
+        );
+      } else {
+        // No biometrics - prompt for PIN
+        if (!mounted) return;
+        final pinController = TextEditingController();
+        final pin = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Set a PIN'),
+            content: TextField(
+              controller: pinController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                hintText: 'Enter PIN',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(pinController.text),
+                child: const Text('Set PIN'),
+              ),
+            ],
+          ),
+        );
+        if (pin != null && pin.isNotEmpty) {
+          final pinHash = await lockService.hashPin(pin);
+          await ref.read(notesServiceProvider).updateNote(
+            uid: widget.authUser.uid,
+            note: note.copyWith(
+              isLocked: true,
+              pinHash: pinHash.hash,
+              pinSalt: pinHash.salt,
+            ),
+          );
+        }
+      }
+      if (!mounted) return;
+      setState(() {});
+    } else {
+      // Unlock - clear lock
+      await ref.read(notesServiceProvider).updateNote(
+        uid: widget.authUser.uid,
+        note: note.copyWith(
+          isLocked: false,
+          pinHash: null,
+          pinSalt: null,
+        ),
+      );
+      if (!mounted) return;
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final note = widget.note;
@@ -145,6 +217,11 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       appBar: AppBar(
         title: Text(note == null ? 'New note' : 'Edit note'),
         actions: [
+          if (note != null)
+            IconButton(
+              icon: Icon(note.isLocked ? Icons.lock : Icons.lock_open),
+              onPressed: _isSaving || _isDeleting ? null : _toggleLock,
+            ),
           if (note != null)
             IconButton(
               onPressed: _isSaving || _isDeleting ? null : _deleteNote,

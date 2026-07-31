@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/lock/presentation/lock_screen.dart';
 import 'package:mynotes/features/notes/presentation/note_editor_view.dart';
 import 'package:mynotes/features/notes/presentation/widgets/empty_notes_state.dart';
 import 'package:mynotes/features/notes/presentation/widgets/info_chip.dart';
@@ -74,14 +75,30 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   }
 
   Future<void> _openEditor({Note? note}) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => NoteEditorView(
-          authUser: widget.authUser,
-          note: note,
+    if (note != null && note.isLocked) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => LockScreen(
+            noteId: note.id,
+            pinHash: note.pinHash,
+            pinSalt: note.pinSalt,
+            child: NoteEditorView(
+              authUser: widget.authUser,
+              note: note,
+            ),
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => NoteEditorView(
+            authUser: widget.authUser,
+            note: note,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _togglePin(Note note) async {
@@ -359,6 +376,12 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                                             color: color,
                                             label: 'Pinned',
                                             icon: Icons.push_pin,
+                                          ),
+                                        if (note.isLocked)
+                                          TagChip(
+                                            color: color,
+                                            label: 'Locked',
+                                            icon: Icons.lock,
                                           ),
                                         const Spacer(),
                                         Text(
