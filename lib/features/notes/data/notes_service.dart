@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/key_manager.dart';
+import 'package:mynotes/features/notes/data/comment.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 
 class NotesService {
@@ -314,5 +315,98 @@ class NotesService {
         .get();
     if (snapshot.docs.isNotEmpty) return snapshot.docs.first.id;
     return null;
+  }
+
+  Stream<List<Note>> getSharedNotes(String uid) {
+    return firestore
+        .collectionGroup('notes')
+        .where('collaborators', arrayContains: uid)
+        .orderBy('updatedAt', descending: true)
+        .snapshots()
+        .asyncMap((snapshot) async {
+      final futures = <Future<Note>>[];
+      for (final doc in snapshot.docs) {
+        final ownerUid = doc.reference.parent.parent!.id;
+        final note = Note.fromFirestore(doc);
+        futures.add(_decryptSharedNote(uid, note, ownerUid));
+      }
+      final decrypted = await Future.wait(futures);
+
+      decrypted.sort((left, right) {
+        if (left.isPinned != right.isPinned) {
+          return left.isPinned ? -1 : 1;
+        }
+        return right.updatedAt.compareTo(left.updatedAt);
+      });
+      return decrypted;
+    });
+  }
+
+  Future<Note> _decryptSharedNote(String uid, Note note, String ownerUid) async {
+    if (note.encryptionVersion >= 1 && note.encryptedKeys != null) {
+      final encryptedKeyStr = note.encryptedKeys![uid];
+      if (encryptedKeyStr != null) {
+        try {
+          final noteKey = await keyManager.unwrapCollaboratorNoteKey(
+            encryptedKeyStr: encryptedKeyStr,
+            ownerUid: ownerUid,
+          );
+          return note.decryptNote(noteKey, crypto);
+        } catch (_) {
+          return note;
+        }
+      }
+    }
+    return note;
+  }
+
+  CollectionReference<Map<String, dynamic>> _commentsCollection(
+      String noteOwnerId, String noteId) {
+    return firestore
+        .collection('users')
+        .doc(noteOwnerId)
+        .collection('notes')
+        .doc(noteId)
+        .collection('comments');
+  }
+
+  Future<void> addComment({
+    required String noteOwnerId,
+    required String noteId,
+    required String authorUid,
+    required String authorName,
+    required String content,
+  }) async {
+    final doc = _commentsCollection(noteOwnerId, noteId).doc();
+    await doc.set(Comment(
+      id: doc.id,
+      authorUid: authorUid,
+      authorName: authorName,
+      content: content,
+      createdAt: DateTime.now(),
+    ).toMap());
+  }
+
+  Stream<List<Comment>> watchComments(String noteOwnerId, String noteId) {
+    return _commentsCollection(noteOwnerId, noteId)
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) =>
+            snapshot.docs.map(Comment.fromFirestore).toList());
+  }
+
+  Future<void> deleteComment({
+    required String noteOwnerId,
+    required String noteId,
+    required String commentId,
+    required String authorUid,
+  }) async {
+    final doc = _commentsCollection(noteOwnerId, noteId).doc(commentId);
+    final snapshot = await doc.get();
+    final data = snapshot.data() ?? {};
+    if (data['authorUid'] != authorUid) {
+      throw Exception('Only the author can delete this comment');
+    }
+    await doc.delete();
   }
 }

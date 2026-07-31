@@ -32,6 +32,10 @@ class Note {
   final int? studyInterval;
   final double? studyEaseFactor;
   final int? studyRepetitions;
+  final List<String>? collaborators;
+  final Map<String, String>? encryptedKeys;
+  final String? sharedBy;
+  final DateTime? sharedAt;
 
   const Note({
     required this.id,
@@ -59,6 +63,10 @@ class Note {
     this.studyInterval,
     this.studyEaseFactor,
     this.studyRepetitions,
+    this.collaborators,
+    this.encryptedKeys,
+    this.sharedBy,
+    this.sharedAt,
   });
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -90,6 +98,14 @@ class Note {
         studyInterval: (data['studyInterval'] as int?),
         studyEaseFactor: (data['studyEaseFactor'] as num?)?.toDouble(),
         studyRepetitions: (data['studyRepetitions'] as int?),
+        collaborators: (data['collaborators'] as List<dynamic>?)?.cast<String>(),
+        encryptedKeys: data['encryptedKeys'] != null
+            ? (data['encryptedKeys'] as Map<String, dynamic>).map(
+                (k, v) => MapEntry(k, v as String),
+              )
+            : null,
+        sharedBy: data['sharedBy'] as String?,
+        sharedAt: _timestampToDateTime(data['sharedAt']),
       );
     }
 
@@ -127,6 +143,14 @@ class Note {
         studyInterval: (data['studyInterval'] as int?),
         studyEaseFactor: (data['studyEaseFactor'] as num?)?.toDouble(),
         studyRepetitions: (data['studyRepetitions'] as int?),
+        collaborators: (data['collaborators'] as List<dynamic>?)?.cast<String>(),
+        encryptedKeys: data['encryptedKeys'] != null
+            ? (data['encryptedKeys'] as Map<String, dynamic>).map(
+                (k, v) => MapEntry(k, v as String),
+              )
+            : null,
+        sharedBy: data['sharedBy'] as String?,
+        sharedAt: _timestampToDateTime(data['sharedAt']),
       );
   }
 
@@ -167,6 +191,10 @@ class Note {
     Object? studyInterval = _ignore,
     Object? studyEaseFactor = _ignore,
     Object? studyRepetitions = _ignore,
+    Object? collaborators = _ignore,
+    Object? encryptedKeys = _ignore,
+    Object? sharedBy = _ignore,
+    Object? sharedAt = _ignore,
   }) {
     return Note(
       id: id,
@@ -194,6 +222,10 @@ class Note {
       studyInterval: studyInterval == _ignore ? this.studyInterval : studyInterval as int?,
       studyEaseFactor: studyEaseFactor == _ignore ? this.studyEaseFactor : studyEaseFactor as double?,
       studyRepetitions: studyRepetitions == _ignore ? this.studyRepetitions : studyRepetitions as int?,
+      collaborators: collaborators == _ignore ? this.collaborators : collaborators as List<String>?,
+      encryptedKeys: encryptedKeys == _ignore ? this.encryptedKeys : encryptedKeys as Map<String, String>?,
+      sharedBy: sharedBy == _ignore ? this.sharedBy : sharedBy as String?,
+      sharedAt: sharedAt == _ignore ? this.sharedAt : sharedAt as DateTime?,
     );
   }
 
@@ -221,6 +253,10 @@ class Note {
       'studyInterval': studyInterval,
       'studyEaseFactor': studyEaseFactor,
       'studyRepetitions': studyRepetitions,
+      'collaborators': collaborators,
+      'encryptedKeys': encryptedKeys,
+      'sharedBy': sharedBy,
+      'sharedAt': sharedAt != null ? Timestamp.fromDate(sharedAt as DateTime) : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

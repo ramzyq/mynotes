@@ -5,6 +5,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
 
+final _sha256 = Sha256();
+
 class KeyManager {
   final CryptoService _crypto = CryptoService();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -96,5 +98,46 @@ class KeyManager {
   /// Check if a Master Key exists (user has set up encryption).
   Future<bool> hasMasterKey() async {
     return await _storage.read(key: _masterKeyKey) != null;
+  }
+
+  /// Encrypt a note key for sharing with a collaborator.
+  Future<String> wrapNoteKeyForCollaborator({
+    required SecretKey noteKey,
+    required String collaboratorUid,
+  }) async {
+    final sharingKey = await deriveSharingKey(collaboratorUid);
+    final noteKeyBytes = await noteKey.extractBytes();
+    final encrypted = await _crypto.encrypt(
+      key: sharingKey,
+      plaintext: base64Encode(noteKeyBytes),
+    );
+    final combined = encrypted.ciphertext + encrypted.nonce + encrypted.mac;
+    return base64Encode(combined);
+  }
+
+  /// Unwrap a note key that was shared by another user.
+  Future<SecretKey> unwrapCollaboratorNoteKey({
+    required String encryptedKeyStr,
+    required String ownerUid,
+  }) async {
+    final sharingKey = await deriveSharingKey(ownerUid);
+    final combined = base64Decode(encryptedKeyStr);
+    final payload = EncryptedPayload(
+      ciphertext: combined.sublist(0, combined.length - 24),
+      nonce: combined.sublist(combined.length - 24, combined.length - 12),
+      mac: combined.sublist(combined.length - 12),
+    );
+    final noteKeyStr = await _crypto.decrypt(key: sharingKey, payload: payload);
+    return SecretKey(base64Decode(noteKeyStr));
+  }
+
+  /// Derive a deterministic key for sharing with a specific collaborator.
+  Future<SecretKey> deriveSharingKey(String collaboratorUid) async {
+    final masterKey = await loadMasterKey();
+    if (masterKey == null) throw Exception('Master Key not initialized');
+    final masterBytes = await masterKey.extractBytes();
+    final combined = [...masterBytes, ...utf8.encode(collaboratorUid)];
+    final hash = await _sha256.hash(combined);
+    return SecretKey(hash.bytes);
   }
 }

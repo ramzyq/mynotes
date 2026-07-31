@@ -42,6 +42,18 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(shareServiceProvider).ensureUserProfile(
+        uid: widget.authUser.uid,
+        email: widget.authUser.email,
+        displayName: widget.authUser.displayName,
+      );
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -216,7 +228,16 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
         child: SafeArea(
           bottom: false,
           child: ref.watch(notesProvider(widget.authUser.uid)).when(
-            data: (notes) {
+            data: (ownNotes) {
+              final sharedNotes = ref
+                  .watch(sharedNotesProvider(widget.authUser.uid))
+                  .valueOrNull;
+              final notes = [
+                ...ownNotes,
+                if (sharedNotes != null)
+                  ...sharedNotes.where((note) =>
+                      note.sharedBy != widget.authUser.uid),
+              ];
               final filteredNotes = notes.where((note) {
                 if (_query.isEmpty) {
                   return true;
@@ -479,6 +500,12 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                                             color: color,
                                             label: 'Read-once',
                                             icon: Icons.visibility_off_outlined,
+                                          ),
+                                        if ((note.collaborators ?? []).isNotEmpty)
+                                          TagChip(
+                                            color: const Color(0xFF8AA7FF),
+                                            label: 'Shared',
+                                            icon: Icons.group_outlined,
                                           ),
                                         const Spacer(),
                                         Text(

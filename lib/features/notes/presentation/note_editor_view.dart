@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -46,6 +47,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   bool _showSuggestions = false;
   final LayerLink _suggestionLayerLink = LayerLink();
   final FocusNode _contentFocusNode = FocusNode();
+  final TextEditingController _commentController = TextEditingController();
+  bool _isAddingComment = false;
+  List<String> _collaborators = [];
 
   static const List<Color> _palette = [
     Color(0xFF86E7C8),
@@ -70,6 +74,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _audioAttachments = note?.audioAttachments ?? [];
     _latitude = note?.latitude;
     _longitude = note?.longitude;
+    _collaborators = note?.collaborators ?? [];
 
     _contentController.addListener(_onContentChanged);
 
@@ -345,6 +350,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _titleController.dispose();
     _contentController.dispose();
     _contentFocusNode.dispose();
+    _commentController.dispose();
     super.dispose();
   }
 
@@ -538,6 +544,95 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
   }
 
+  bool get _isShared {
+    if (widget.note == null) return false;
+    return _collaborators.isNotEmpty || widget.note!.sharedBy != null;
+  }
+
+  Future<void> _showShareSheet() async {
+    final note = widget.note;
+    if (note == null) return;
+
+    final emailController = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _ShareSheet(
+        collaborators: List.of(_collaborators),
+        emailController: emailController,
+        onAddCollaborator: (email) async {
+          final shareService = ref.read(shareServiceProvider);
+          final collaboratorUid =
+              await shareService.lookupUserByEmail(email);
+          await shareService.shareNote(
+            uid: widget.authUser.uid,
+            note: note,
+            collaboratorEmail: email,
+            collaboratorName: '',
+          );
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Note shared')),
+          );
+          return collaboratorUid ?? '';
+        },
+        onRemoveCollaborator: (collaboratorUid) async {
+          final shareService = ref.read(shareServiceProvider);
+          await shareService.removeCollaborator(
+            uid: widget.authUser.uid,
+            note: note,
+            collaboratorUid: collaboratorUid,
+          );
+          if (!mounted) return;
+          setState(() {
+            _collaborators =
+                _collaborators.where((uid) => uid != collaboratorUid).toList();
+          });
+        },
+      ),
+    );
+
+    emailController.dispose();
+    if (result == true && mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _addComment(String content) async {
+    final note = widget.note;
+    if (note == null) return;
+
+    setState(() => _isAddingComment = true);
+    try {
+      await ref.read(notesServiceProvider).addComment(
+            noteOwnerId: note.sharedBy ?? widget.authUser.uid,
+            noteId: note.id,
+            authorUid: widget.authUser.uid,
+            authorName: widget.authUser.displayName ?? widget.authUser.email.split('@').first,
+            content: content,
+          );
+      if (!mounted) return;
+      _commentController.clear();
+    } finally {
+      if (mounted) setState(() => _isAddingComment = false);
+    }
+  }
+
+  Future<void> _deleteComment(String commentId) async {
+    final note = widget.note;
+    if (note == null) return;
+
+    try {
+      await ref.read(notesServiceProvider).deleteComment(
+            noteOwnerId: note.sharedBy ?? widget.authUser.uid,
+            noteId: note.id,
+            commentId: commentId,
+            authorUid: widget.authUser.uid,
+          );
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final note = widget.note;
@@ -583,6 +678,12 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     : Icons.timer_outlined,
               ),
               onPressed: _isSaving || _isDeleting ? null : _showSelfDestructSheet,
+            ),
+          if (note != null)
+            IconButton(
+              icon: const Icon(Icons.share_outlined),
+              tooltip: 'Share',
+              onPressed: _isSaving || _isDeleting ? null : _showShareSheet,
             ),
           if (note != null)
             IconButton(
@@ -945,52 +1046,214 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                           ),
                     )
                   else
-                    ..._backlinks.map(
-                      (bl) => GestureDetector(
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => NoteEditorView(
-                                authUser: widget.authUser,
-                                note: bl,
+                      ..._backlinks.map(
+                        (bl) => GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => NoteEditorView(
+                                  authUser: widget.authUser,
+                                  note: bl,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF141B2D),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF27314A)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: _palette[bl.colorIndex % _palette.length],
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    bl.displayTitle,
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          color: Colors.white70,
+                                        ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                ],
+                if (_isShared && note != null) ...[
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      const Icon(Icons.comment_outlined, color: Colors.white70, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Comments',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const Spacer(),
+                      ref.watch(
+                        commentsProvider(
+                          (noteOwnerId: note.sharedBy ?? widget.authUser.uid, noteId: note.id),
+                        ),
+                      ).when(
+                        data: (comments) => Badge(
+                          isLabelVisible: comments.isNotEmpty,
+                          label: Text('${comments.length}'),
+                          child: const Icon(Icons.chat_bubble_outline, color: Colors.white54, size: 20),
+                        ),
+                        loading: () => const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        error: (_, _) => const Icon(Icons.chat_bubble_outline, color: Colors.white54, size: 20),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141B2D),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF27314A)),
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: ref.watch(
+                      commentsProvider(
+                        (noteOwnerId: note.sharedBy ?? widget.authUser.uid, noteId: note.id),
+                      ),
+                    ).when(
+                      data: (comments) {
+                        if (comments.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                              child: Text(
+                                'No comments yet.',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.white54,
+                                    ),
                               ),
                             ),
                           );
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF141B2D),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFF27314A)),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: _palette[bl.colorIndex % _palette.length],
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  bl.displayTitle,
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: Colors.white70,
+                        }
+                        return Column(
+                          children: comments
+                              .map(
+                                (comment) => Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1A2340),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              comment.authorName,
+                                              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                                    color: Colors.white70,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                            ),
+                                          ),
+                                          Text(
+                                            _commentTime(comment.createdAt),
+                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                  color: Colors.white38,
+                                                ),
+                                          ),
+                                          if (comment.authorUid == widget.authUser.uid)
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.white38),
+                                              visualDensity: VisualDensity.compact,
+                                              onPressed: () => _deleteComment(comment.id),
+                                            ),
+                                        ],
                                       ),
-                                  overflow: TextOverflow.ellipsis,
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        comment.content,
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                              color: Colors.white70,
+                                              height: 1.35,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
-                            ],
+                              )
+                              .toList(),
+                        );
+                      },
+                      loading: () => const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                      error: (_, _) => Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Center(
+                          child: Text(
+                            'Unable to load comments.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white54),
                           ),
                         ),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _commentController,
+                          enabled: !_isAddingComment,
+                          minLines: 1,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            hintText: 'Add a comment...',
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _isAddingComment ||
+                                _commentController.text.trim().isEmpty
+                            ? null
+                            : () => _addComment(_commentController.text.trim()),
+                        icon: _isAddingComment
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send_rounded),
+                      ),
+                    ],
+                  ),
                 ],
               ],
             ),
@@ -998,6 +1261,14 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         ),
       ),
     );
+  }
+
+  String _commentTime(DateTime time) {
+    final difference = DateTime.now().difference(time);
+    if (difference.inMinutes < 1) return 'just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m';
+    if (difference.inHours < 24) return '${difference.inHours}h';
+    return '${time.month}/${time.day}/${time.year}';
   }
 }
 
@@ -1148,6 +1419,242 @@ class _SelfDestructSheetState extends State<_SelfDestructSheet> {
                 child: const Text('Apply'),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShareSheet extends ConsumerStatefulWidget {
+  final List<String> collaborators;
+  final TextEditingController emailController;
+  final Future<String> Function(String email) onAddCollaborator;
+  final Future<void> Function(String collaboratorUid) onRemoveCollaborator;
+
+  const _ShareSheet({
+    required this.collaborators,
+    required this.emailController,
+    required this.onAddCollaborator,
+    required this.onRemoveCollaborator,
+  });
+
+  @override
+  ConsumerState<_ShareSheet> createState() => _ShareSheetState();
+}
+
+class _ShareSheetState extends ConsumerState<_ShareSheet> {
+  late List<String> _collaborators;
+  bool _isAdding = false;
+  String? _error;
+  final Map<String, String> _emails = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _collaborators = List.of(widget.collaborators);
+    _loadEmails();
+  }
+
+  Future<void> _loadEmails() async {
+    final emails = <String, String>{};
+    for (final uid in _collaborators) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        if (doc.exists) {
+          emails[uid] = doc.data()?['email'] as String? ?? uid;
+        } else {
+          emails[uid] = uid;
+        }
+      } catch (_) {
+        emails[uid] = uid;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _emails.addAll(emails));
+  }
+
+  Future<void> _submit() async {
+    final email = widget.emailController.text.trim();
+    if (email.isEmpty) return;
+
+    setState(() {
+      _isAdding = true;
+      _error = null;
+    });
+    try {
+      final collaboratorUid = await widget.onAddCollaborator(email);
+      if (!mounted) return;
+      widget.emailController.clear();
+      setState(() {
+        if (collaboratorUid.isNotEmpty) {
+          _collaborators = [..._collaborators, collaboratorUid];
+          _emails[collaboratorUid] = email;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _isAdding = false);
+    }
+  }
+
+  Future<void> _remove(String collaboratorUid) async {
+    setState(() {
+      _error = null;
+      _isAdding = true;
+    });
+    try {
+      await widget.onRemoveCollaborator(collaboratorUid);
+      if (!mounted) return;
+      setState(() {
+        _collaborators =
+            _collaborators.where((uid) => uid != collaboratorUid).toList();
+        _emails.remove(collaboratorUid);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _isAdding = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.emailController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF141B2D), Color(0xFF0B0F1A)],
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.group_add_outlined, color: Colors.white70),
+                const SizedBox(width: 12),
+                Text(
+                  'Share note',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Shared',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: const Color(0xFF86E7C8),
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: widget.emailController,
+                    enabled: !_isAdding,
+                    decoration: const InputDecoration(
+                      hintText: 'Add people by email',
+                      prefixIcon: Icon(Icons.alternate_email),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: _isAdding ? null : _submit,
+                  icon: _isAdding
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send_rounded),
+                ),
+              ],
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 16),
+            if (_collaborators.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    'No collaborators yet.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white54,
+                        ),
+                  ),
+                ),
+              )
+            else
+              ..._collaborators.map(
+                (uid) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A2340),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person_outline, color: Colors.white54, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _emails[uid] ?? uid,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Colors.white70,
+                              ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _isAdding ? null : () => _remove(uid),
+                        icon: const Icon(Icons.person_remove_outlined, size: 16),
+                        label: const Text('Remove'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),
