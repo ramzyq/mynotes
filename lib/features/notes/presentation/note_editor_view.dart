@@ -7,6 +7,7 @@ import 'package:mynotes/features/capture/providers/capture_providers.dart';
 
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/notes/presentation/version_history_view.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class NoteEditorView extends ConsumerStatefulWidget {
@@ -582,6 +583,22 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     : Icons.timer_outlined,
               ),
               onPressed: _isSaving || _isDeleting ? null : _showSelfDestructSheet,
+            ),
+          if (note != null)
+            IconButton(
+              icon: const Icon(Icons.history),
+              onPressed: _isSaving || _isDeleting
+                  ? null
+                  : () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => VersionHistoryView(
+                            authUser: widget.authUser,
+                            noteId: note.id,
+                          ),
+                        ),
+                      );
+                    },
             ),
           if (note != null)
             IconButton(

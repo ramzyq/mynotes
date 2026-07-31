@@ -8,11 +8,13 @@ class NotesService {
   final CryptoService crypto;
   final KeyManager keyManager;
 
-  const NotesService({
+  NotesService({
     required this.firestore,
     required this.crypto,
     required this.keyManager,
   });
+
+  final _lastVersionTime = <String, DateTime>{};
 
   CollectionReference<Map<String, dynamic>> _notesCollection(String uid) {
     return firestore.collection('users').doc(uid).collection('notes');
@@ -95,6 +97,88 @@ class NotesService {
     return ids;
   }
 
+  Future<void> saveVersion(String uid, Note note) async {
+    final now = DateTime.now();
+    final lastTime = _lastVersionTime[note.id];
+    if (lastTime != null && now.difference(lastTime).inMinutes < 5) return;
+
+    final versionsRef =
+        _notesCollection(uid).doc(note.id).collection('versions');
+
+    final existingVersions =
+        await versionsRef.orderBy('createdAt').get();
+    if (existingVersions.docs.length >= 50) {
+      await existingVersions.docs.first.reference.delete();
+    }
+
+    final data = <String, dynamic>{
+      'versionNumber': existingVersions.docs.length + 1,
+      'createdAt': Timestamp.fromDate(now),
+    };
+
+    if (note.encryptionVersion >= 1) {
+      data['encryptedContent'] = note.encryptedContent;
+      data['encryptedTitle'] = note.encryptedTitle;
+    } else {
+      data['content'] = note.content;
+      data['title'] = note.title;
+    }
+
+    await versionsRef.add(data);
+    _lastVersionTime[note.id] = now;
+  }
+
+  Future<List<Map<String, dynamic>>> getVersions(
+      String uid, String noteId) async {
+    final snapshot = await _notesCollection(uid)
+        .doc(noteId)
+        .collection('versions')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snapshot.docs.map((doc) {
+      return <String, dynamic>{'id': doc.id, ...doc.data()};
+    }).toList();
+  }
+
+  Future<void> restoreVersion(
+      String uid, String noteId, String versionId) async {
+    final versionDoc = await _notesCollection(uid)
+        .doc(noteId)
+        .collection('versions')
+        .doc(versionId)
+        .get();
+
+    final versionData = versionDoc.data()!;
+    final updateData = <String, dynamic>{
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    };
+
+    if (versionData.containsKey('encryptedContent')) {
+      updateData['encryptedContent'] = versionData['encryptedContent'];
+      updateData['encryptedTitle'] = versionData['encryptedTitle'];
+    } else {
+      updateData['content'] = versionData['content'];
+      updateData['title'] = versionData['title'];
+    }
+
+    await _notesCollection(uid).doc(noteId).update(updateData);
+  }
+
+  Future<void> deleteNoteVersions(String uid, String noteId) async {
+    final versions = await _notesCollection(uid)
+        .doc(noteId)
+        .collection('versions')
+        .get();
+
+    if (versions.docs.isEmpty) return;
+
+    final batch = firestore.batch();
+    for (final doc in versions.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
   Future<Note> createNote({
     required String uid,
     required String title,
@@ -147,6 +231,8 @@ class NotesService {
       throw Exception('Note has no wrapped key - cannot update encrypted');
     }
 
+    await saveVersion(uid, existing);
+
     final noteKey = await keyManager.unwrapNoteKey(existing.wrappedKey!);
     final links = note.content != null ? await _resolveLinks(uid, note.content!) : existing.links;
     final updatedPlain = note.copyWith(updatedAt: DateTime.now(), links: links);
@@ -158,6 +244,7 @@ class NotesService {
     required String uid,
     required String noteId,
   }) async {
+    await deleteNoteVersions(uid, noteId);
     await _notesCollection(uid).doc(noteId).delete();
   }
 
