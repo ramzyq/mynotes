@@ -938,15 +938,326 @@ class LocalNotesCompanion extends UpdateCompanion<LocalNote> {
   }
 }
 
+class $NoteFtsTable extends NoteFts with TableInfo<$NoteFtsTable, NoteFt> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $NoteFtsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _noteIdMeta = const VerificationMeta('noteId');
+  @override
+  late final GeneratedColumn<String> noteId = GeneratedColumn<String>(
+    'note_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ownerIdMeta = const VerificationMeta(
+    'ownerId',
+  );
+  @override
+  late final GeneratedColumn<String> ownerId = GeneratedColumn<String>(
+    'owner_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contentMeta = const VerificationMeta(
+    'content',
+  );
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+    'content',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [noteId, ownerId, title, content];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'note_fts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<NoteFt> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('note_id')) {
+      context.handle(
+        _noteIdMeta,
+        noteId.isAcceptableOrUnknown(data['note_id']!, _noteIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_noteIdMeta);
+    }
+    if (data.containsKey('owner_id')) {
+      context.handle(
+        _ownerIdMeta,
+        ownerId.isAcceptableOrUnknown(data['owner_id']!, _ownerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ownerIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(
+        _contentMeta,
+        content.isAcceptableOrUnknown(data['content']!, _contentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {noteId};
+  @override
+  NoteFt map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return NoteFt(
+      noteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_id'],
+      )!,
+      ownerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      content: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content'],
+      )!,
+    );
+  }
+
+  @override
+  $NoteFtsTable createAlias(String alias) {
+    return $NoteFtsTable(attachedDatabase, alias);
+  }
+}
+
+class NoteFt extends DataClass implements Insertable<NoteFt> {
+  final String noteId;
+  final String ownerId;
+  final String title;
+  final String content;
+  const NoteFt({
+    required this.noteId,
+    required this.ownerId,
+    required this.title,
+    required this.content,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['note_id'] = Variable<String>(noteId);
+    map['owner_id'] = Variable<String>(ownerId);
+    map['title'] = Variable<String>(title);
+    map['content'] = Variable<String>(content);
+    return map;
+  }
+
+  NoteFtsCompanion toCompanion(bool nullToAbsent) {
+    return NoteFtsCompanion(
+      noteId: Value(noteId),
+      ownerId: Value(ownerId),
+      title: Value(title),
+      content: Value(content),
+    );
+  }
+
+  factory NoteFt.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return NoteFt(
+      noteId: serializer.fromJson<String>(json['noteId']),
+      ownerId: serializer.fromJson<String>(json['ownerId']),
+      title: serializer.fromJson<String>(json['title']),
+      content: serializer.fromJson<String>(json['content']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'noteId': serializer.toJson<String>(noteId),
+      'ownerId': serializer.toJson<String>(ownerId),
+      'title': serializer.toJson<String>(title),
+      'content': serializer.toJson<String>(content),
+    };
+  }
+
+  NoteFt copyWith({
+    String? noteId,
+    String? ownerId,
+    String? title,
+    String? content,
+  }) => NoteFt(
+    noteId: noteId ?? this.noteId,
+    ownerId: ownerId ?? this.ownerId,
+    title: title ?? this.title,
+    content: content ?? this.content,
+  );
+  NoteFt copyWithCompanion(NoteFtsCompanion data) {
+    return NoteFt(
+      noteId: data.noteId.present ? data.noteId.value : this.noteId,
+      ownerId: data.ownerId.present ? data.ownerId.value : this.ownerId,
+      title: data.title.present ? data.title.value : this.title,
+      content: data.content.present ? data.content.value : this.content,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NoteFt(')
+          ..write('noteId: $noteId, ')
+          ..write('ownerId: $ownerId, ')
+          ..write('title: $title, ')
+          ..write('content: $content')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(noteId, ownerId, title, content);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is NoteFt &&
+          other.noteId == this.noteId &&
+          other.ownerId == this.ownerId &&
+          other.title == this.title &&
+          other.content == this.content);
+}
+
+class NoteFtsCompanion extends UpdateCompanion<NoteFt> {
+  final Value<String> noteId;
+  final Value<String> ownerId;
+  final Value<String> title;
+  final Value<String> content;
+  final Value<int> rowid;
+  const NoteFtsCompanion({
+    this.noteId = const Value.absent(),
+    this.ownerId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.content = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  NoteFtsCompanion.insert({
+    required String noteId,
+    required String ownerId,
+    required String title,
+    required String content,
+    this.rowid = const Value.absent(),
+  }) : noteId = Value(noteId),
+       ownerId = Value(ownerId),
+       title = Value(title),
+       content = Value(content);
+  static Insertable<NoteFt> custom({
+    Expression<String>? noteId,
+    Expression<String>? ownerId,
+    Expression<String>? title,
+    Expression<String>? content,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (noteId != null) 'note_id': noteId,
+      if (ownerId != null) 'owner_id': ownerId,
+      if (title != null) 'title': title,
+      if (content != null) 'content': content,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  NoteFtsCompanion copyWith({
+    Value<String>? noteId,
+    Value<String>? ownerId,
+    Value<String>? title,
+    Value<String>? content,
+    Value<int>? rowid,
+  }) {
+    return NoteFtsCompanion(
+      noteId: noteId ?? this.noteId,
+      ownerId: ownerId ?? this.ownerId,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (noteId.present) {
+      map['note_id'] = Variable<String>(noteId.value);
+    }
+    if (ownerId.present) {
+      map['owner_id'] = Variable<String>(ownerId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NoteFtsCompanion(')
+          ..write('noteId: $noteId, ')
+          ..write('ownerId: $ownerId, ')
+          ..write('title: $title, ')
+          ..write('content: $content, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $LocalNotesTable localNotes = $LocalNotesTable(this);
+  late final $NoteFtsTable noteFts = $NoteFtsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities => [localNotes];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [localNotes, noteFts];
 }
 
 typedef $$LocalNotesTableCreateCompanionBuilder =
@@ -1365,10 +1676,187 @@ typedef $$LocalNotesTableProcessedTableManager =
       LocalNote,
       PrefetchHooks Function()
     >;
+typedef $$NoteFtsTableCreateCompanionBuilder =
+    NoteFtsCompanion Function({
+      required String noteId,
+      required String ownerId,
+      required String title,
+      required String content,
+      Value<int> rowid,
+    });
+typedef $$NoteFtsTableUpdateCompanionBuilder =
+    NoteFtsCompanion Function({
+      Value<String> noteId,
+      Value<String> ownerId,
+      Value<String> title,
+      Value<String> content,
+      Value<int> rowid,
+    });
+
+class $$NoteFtsTableFilterComposer
+    extends Composer<_$AppDatabase, $NoteFtsTable> {
+  $$NoteFtsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ownerId => $composableBuilder(
+    column: $table.ownerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$NoteFtsTableOrderingComposer
+    extends Composer<_$AppDatabase, $NoteFtsTable> {
+  $$NoteFtsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ownerId => $composableBuilder(
+    column: $table.ownerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get content => $composableBuilder(
+    column: $table.content,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$NoteFtsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $NoteFtsTable> {
+  $$NoteFtsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get noteId =>
+      $composableBuilder(column: $table.noteId, builder: (column) => column);
+
+  GeneratedColumn<String> get ownerId =>
+      $composableBuilder(column: $table.ownerId, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+}
+
+class $$NoteFtsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $NoteFtsTable,
+          NoteFt,
+          $$NoteFtsTableFilterComposer,
+          $$NoteFtsTableOrderingComposer,
+          $$NoteFtsTableAnnotationComposer,
+          $$NoteFtsTableCreateCompanionBuilder,
+          $$NoteFtsTableUpdateCompanionBuilder,
+          (NoteFt, BaseReferences<_$AppDatabase, $NoteFtsTable, NoteFt>),
+          NoteFt,
+          PrefetchHooks Function()
+        > {
+  $$NoteFtsTableTableManager(_$AppDatabase db, $NoteFtsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$NoteFtsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$NoteFtsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$NoteFtsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> noteId = const Value.absent(),
+                Value<String> ownerId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> content = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => NoteFtsCompanion(
+                noteId: noteId,
+                ownerId: ownerId,
+                title: title,
+                content: content,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String noteId,
+                required String ownerId,
+                required String title,
+                required String content,
+                Value<int> rowid = const Value.absent(),
+              }) => NoteFtsCompanion.insert(
+                noteId: noteId,
+                ownerId: ownerId,
+                title: title,
+                content: content,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$NoteFtsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $NoteFtsTable,
+      NoteFt,
+      $$NoteFtsTableFilterComposer,
+      $$NoteFtsTableOrderingComposer,
+      $$NoteFtsTableAnnotationComposer,
+      $$NoteFtsTableCreateCompanionBuilder,
+      $$NoteFtsTableUpdateCompanionBuilder,
+      (NoteFt, BaseReferences<_$AppDatabase, $NoteFtsTable, NoteFt>),
+      NoteFt,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
   $AppDatabaseManager(this._db);
   $$LocalNotesTableTableManager get localNotes =>
       $$LocalNotesTableTableManager(_db, _db.localNotes);
+  $$NoteFtsTableTableManager get noteFts =>
+      $$NoteFtsTableTableManager(_db, _db.noteFts);
 }

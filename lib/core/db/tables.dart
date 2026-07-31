@@ -21,3 +21,23 @@ class LocalNotes extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+class NoteFts extends Table {
+  TextColumn get noteId => text()();
+  TextColumn get ownerId => text()();
+  TextColumn get title => text()();
+  TextColumn get content => text()();
+
+  @override
+  Set<Column>? get primaryKey => {noteId};
+
+  String get createTable => '''
+    CREATE VIRTUAL TABLE IF NOT EXISTS note_fts USING fts5(
+      note_id UNINDEXED,
+      owner_id UNINDEXED,
+      title,
+      content,
+      tokenize='porter unicode61'
+    )
+  ''';
+}
