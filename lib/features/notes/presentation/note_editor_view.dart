@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
 
@@ -32,6 +34,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   bool _isDeleting = false;
   bool _isRecording = false;
   List<String> _audioAttachments = [];
+  double? _latitude;
+  double? _longitude;
+  String? _placeName;
+  bool _isCapturingLocation = false;
 
   static const List<Color> _palette = [
     Color(0xFF86E7C8),
@@ -53,6 +59,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _selfDestructAt = note?.selfDestructAt;
     _selfDestructOnRead = note?.selfDestructOnRead ?? false;
     _audioAttachments = note?.audioAttachments ?? [];
+    _latitude = note?.latitude;
+    _longitude = note?.longitude;
 
     if (note?.selfDestructOnRead == true) {
       _handleSelfDestructOnRead();
@@ -157,6 +165,26 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
   }
 
+  Future<void> _captureLocation() async {
+    setState(() => _isCapturingLocation = true);
+    try {
+      final locationService = ref.read(locationServiceProvider);
+      final result = await locationService.getCurrentLocation();
+      if (!mounted) return;
+      if (result != null) {
+        setState(() {
+          _latitude = result.latitude;
+          _longitude = result.longitude;
+          _placeName = result.placeName;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCapturingLocation = false);
+      }
+    }
+  }
+
   Future<void> _startVoiceRecording() async {
     final voiceService = ref.read(voiceServiceProvider);
     final permitted = await voiceService.requestPermission();
@@ -236,6 +264,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           colorIndex: _selectedColorIndex,
           isPinned: _isPinned,
           audioAttachments: _audioAttachments,
+          latitude: _latitude,
+          longitude: _longitude,
         );
         if (!mounted) {
           return;
@@ -252,6 +282,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             selfDestructAt: _selfDestructAt,
             selfDestructOnRead: _selfDestructOnRead,
             audioAttachments: _audioAttachments,
+            latitude: _latitude,
+            longitude: _longitude,
           ),
         );
         if (!mounted) {
@@ -426,6 +458,17 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                 : _isRecording
                     ? _stopVoiceRecording
                     : _startVoiceRecording,
+          ),
+          IconButton(
+            icon: _isCapturingLocation
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(_latitude != null ? Icons.location_on : Icons.location_on_outlined),
+            onPressed:
+                _isSaving || _isDeleting || _isCapturingLocation ? null : _captureLocation,
           ),
           if (note != null)
             IconButton(
@@ -628,6 +671,75 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                           ],
                         ),
                       )),
+                ],
+                if (_latitude != null && _longitude != null) ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, color: Colors.white70, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Location',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => setState(() {
+                          _latitude = null;
+                          _longitude = null;
+                          _placeName = null;
+                        }),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (_placeName != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        _placeName!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white60,
+                            ),
+                      ),
+                    ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: SizedBox(
+                      height: 160,
+                      child: FlutterMap(
+                        options: MapOptions(
+                          initialCenter: LatLng(_latitude!, _longitude!),
+                          initialZoom: 15,
+                          interactionOptions: const InteractionOptions(
+                            flags: InteractiveFlag.all,
+                          ),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.flutter.mynotes',
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: LatLng(_latitude!, _longitude!),
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.red,
+                                  size: 36,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 28),
                 SizedBox(

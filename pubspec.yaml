@@ -54,6 +54,10 @@ dependencies:
   record: ^5.2.0
   speech_to_text: ^7.0.0
   permission_handler: ^11.3.1
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:

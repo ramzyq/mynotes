@@ -24,6 +24,8 @@ class Note {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<String> audioAttachments;
+  final double? latitude;
+  final double? longitude;
 
   const Note({
     required this.id,
@@ -43,6 +45,8 @@ class Note {
     required this.createdAt,
     required this.updatedAt,
     this.audioAttachments = const [],
+    this.latitude,
+    this.longitude,
   });
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -64,6 +68,8 @@ class Note {
         audioAttachments: (data['audioAttachments'] as List<dynamic>?)
                 ?.cast<String>() ??
             const [],
+        latitude: (data['latitude'] as num?)?.toDouble(),
+        longitude: (data['longitude'] as num?)?.toDouble(),
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
       );
@@ -77,25 +83,27 @@ class Note {
       );
     }
 
-    return Note(
-      id: doc.id,
-      encryptedTitle: data['encryptedTitle'] as String?,
-      encryptedContent: data['encryptedContent'] as String?,
-      wrappedKey: wrappedKey,
-      encryptionVersion: encryptionVersion,
-      colorIndex: (data['colorIndex'] as int?) ?? 0,
-      isPinned: (data['isPinned'] as bool?) ?? false,
-      isLocked: (data['isLocked'] as bool?) ?? false,
-      pinHash: data['pinHash'] as String?,
-      pinSalt: data['pinSalt'] as String?,
-      selfDestructAt: _timestampToDateTime(data['selfDestructAt']),
-      selfDestructOnRead: (data['selfDestructOnRead'] as bool?) ?? false,
-      audioAttachments: (data['audioAttachments'] as List<dynamic>?)
-              ?.cast<String>() ??
-          const [],
-      createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
-      updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
-    );
+      return Note(
+        id: doc.id,
+        encryptedTitle: data['encryptedTitle'] as String?,
+        encryptedContent: data['encryptedContent'] as String?,
+        wrappedKey: wrappedKey,
+        encryptionVersion: encryptionVersion,
+        colorIndex: (data['colorIndex'] as int?) ?? 0,
+        isPinned: (data['isPinned'] as bool?) ?? false,
+        isLocked: (data['isLocked'] as bool?) ?? false,
+        pinHash: data['pinHash'] as String?,
+        pinSalt: data['pinSalt'] as String?,
+        selfDestructAt: _timestampToDateTime(data['selfDestructAt']),
+        selfDestructOnRead: (data['selfDestructOnRead'] as bool?) ?? false,
+        audioAttachments: (data['audioAttachments'] as List<dynamic>?)
+                ?.cast<String>() ??
+            const [],
+        latitude: (data['latitude'] as num?)?.toDouble(),
+        longitude: (data['longitude'] as num?)?.toDouble(),
+        createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
+        updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
+      );
   }
 
   static DateTime? _timestampToDateTime(Object? value) {
@@ -127,6 +135,8 @@ class Note {
     DateTime? createdAt,
     DateTime? updatedAt,
     List<String>? audioAttachments,
+    Object? latitude = _ignore,
+    Object? longitude = _ignore,
   }) {
     return Note(
       id: id,
@@ -146,6 +156,8 @@ class Note {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       audioAttachments: audioAttachments ?? this.audioAttachments,
+      latitude: latitude == _ignore ? this.latitude : latitude as double?,
+      longitude: longitude == _ignore ? this.longitude : longitude as double?,
     );
   }
 
@@ -165,6 +177,8 @@ class Note {
       'selfDestructAt': selfDestructAt != null ? Timestamp.fromDate(selfDestructAt as DateTime) : null,
       'selfDestructOnRead': selfDestructOnRead,
       'audioAttachments': audioAttachments,
+      'latitude': latitude,
+      'longitude': longitude,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
