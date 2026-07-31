@@ -26,6 +26,7 @@ class Note {
   final List<String> audioAttachments;
   final double? latitude;
   final double? longitude;
+  final List<String>? links;
 
   const Note({
     required this.id,
@@ -47,6 +48,7 @@ class Note {
     this.audioAttachments = const [],
     this.latitude,
     this.longitude,
+    this.links,
   });
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -70,6 +72,7 @@ class Note {
             const [],
         latitude: (data['latitude'] as num?)?.toDouble(),
         longitude: (data['longitude'] as num?)?.toDouble(),
+        links: (data['links'] as List<dynamic>?)?.cast<String>(),
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
       );
@@ -101,6 +104,7 @@ class Note {
             const [],
         latitude: (data['latitude'] as num?)?.toDouble(),
         longitude: (data['longitude'] as num?)?.toDouble(),
+        links: (data['links'] as List<dynamic>?)?.cast<String>(),
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
       );
@@ -137,6 +141,7 @@ class Note {
     List<String>? audioAttachments,
     Object? latitude = _ignore,
     Object? longitude = _ignore,
+    Object? links = _ignore,
   }) {
     return Note(
       id: id,
@@ -158,6 +163,7 @@ class Note {
       audioAttachments: audioAttachments ?? this.audioAttachments,
       latitude: latitude == _ignore ? this.latitude : latitude as double?,
       longitude: longitude == _ignore ? this.longitude : longitude as double?,
+      links: links == _ignore ? this.links : links as List<String>?,
     );
   }
 
@@ -179,6 +185,7 @@ class Note {
       'audioAttachments': audioAttachments,
       'latitude': latitude,
       'longitude': longitude,
+      'links': links,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };

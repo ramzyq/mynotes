@@ -38,6 +38,12 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   double? _longitude;
   String? _placeName;
   bool _isCapturingLocation = false;
+  List<Note> _backlinks = [];
+  bool _loadingBacklinks = false;
+  List<String> _suggestions = [];
+  bool _showSuggestions = false;
+  final LayerLink _suggestionLayerLink = LayerLink();
+  final FocusNode _contentFocusNode = FocusNode();
 
   static const List<Color> _palette = [
     Color(0xFF86E7C8),
@@ -62,8 +68,95 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _latitude = note?.latitude;
     _longitude = note?.longitude;
 
+    _contentController.addListener(_onContentChanged);
+
+    if (note != null) {
+      _loadBacklinks();
+    }
+
     if (note?.selfDestructOnRead == true) {
       _handleSelfDestructOnRead();
+    }
+  }
+
+  void _onContentChanged() {
+    final text = _contentController.text;
+    final sel = _contentController.selection;
+    if (!sel.isValid || sel.baseOffset != sel.extentOffset) {
+      _hideSuggestions();
+      return;
+    }
+    final cursorPos = sel.baseOffset;
+    if (cursorPos < 2) {
+      _hideSuggestions();
+      return;
+    }
+    final before = text.substring(0, cursorPos);
+    final openIdx = before.lastIndexOf('[[');
+    if (openIdx == -1 || openIdx < cursorPos - 50) {
+      _hideSuggestions();
+      return;
+    }
+    final afterOpen = before.substring(openIdx + 2);
+    if (afterOpen.contains(']]')) {
+      _hideSuggestions();
+      return;
+    }
+    _fetchSuggestions(afterOpen);
+  }
+
+  void _hideSuggestions() {
+    if (_showSuggestions) {
+      setState(() {
+        _showSuggestions = false;
+        _suggestions = [];
+      });
+    }
+  }
+
+  Future<void> _fetchSuggestions(String query) async {
+    final titles = await ref.read(notesServiceProvider).searchTitles(
+      widget.authUser.uid,
+      query,
+    );
+    if (!mounted) return;
+    setState(() {
+      _suggestions = titles.where((t) => t.toLowerCase().contains(query.toLowerCase())).toList();
+      _showSuggestions = _suggestions.isNotEmpty;
+    });
+  }
+
+  void _insertSuggestion(String title) {
+    final text = _contentController.text;
+    final cursorPos = _contentController.selection.baseOffset;
+    final before = text.substring(0, cursorPos);
+    final openIdx = before.lastIndexOf('[[');
+    if (openIdx == -1) return;
+    final closeIdx = text.indexOf(']]', cursorPos);
+    int endIdx = closeIdx != -1 ? closeIdx + 2 : cursorPos;
+    final newText = '${text.substring(0, openIdx)}[[$title]]${text.substring(endIdx)}';
+    _contentController.text = newText;
+    final newCursor = openIdx + title.length + 4;
+    _contentController.selection = TextSelection.collapsed(offset: newCursor);
+    _hideSuggestions();
+  }
+
+  Future<void> _loadBacklinks() async {
+    final note = widget.note;
+    if (note == null) return;
+    setState(() => _loadingBacklinks = true);
+    try {
+      final backlinks = await ref.read(notesServiceProvider).getBacklinks(
+        widget.authUser.uid,
+        note.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _backlinks = backlinks;
+        _loadingBacklinks = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingBacklinks = false);
     }
   }
 
@@ -245,8 +338,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   @override
   void dispose() {
+    _contentController.removeListener(_onContentChanged);
     _titleController.dispose();
     _contentController.dispose();
+    _contentFocusNode.dispose();
     super.dispose();
   }
 
@@ -558,18 +653,47 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: _contentController,
-                        enabled: !_isSaving,
-                        minLines: 12,
-                        maxLines: null,
-                        textAlignVertical: TextAlignVertical.top,
-                        decoration: const InputDecoration(
-                          hintText: 'Write your note here...',
-                          border: InputBorder.none,
-                          filled: false,
+                      CompositedTransformTarget(
+                        link: _suggestionLayerLink,
+                        child: TextField(
+                          controller: _contentController,
+                          focusNode: _contentFocusNode,
+                          enabled: !_isSaving,
+                          minLines: 12,
+                          maxLines: null,
+                          textAlignVertical: TextAlignVertical.top,
+                          decoration: const InputDecoration(
+                            hintText: 'Write your note here...',
+                            border: InputBorder.none,
+                            filled: false,
+                          ),
                         ),
                       ),
+                      if (_showSuggestions)
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A2340),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF27314A)),
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: _suggestions.length,
+                            itemBuilder: (context, index) {
+                              final title = _suggestions[index];
+                              return ListTile(
+                                dense: true,
+                                leading: const Icon(Icons.link, size: 18, color: Colors.white60),
+                                title: Text(
+                                  title,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                onTap: () => _insertSuggestion(title),
+                              );
+                            },
+                          ),
+                        ),
                       if (_isRecording)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -764,6 +888,81 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     ),
                   ),
                 ),
+                if (note != null) ...[
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      const Icon(Icons.link, color: Colors.white70, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Backlinks',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_loadingBacklinks)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  else if (_backlinks.isEmpty)
+                    Text(
+                      'No other notes link to this one.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white54,
+                          ),
+                    )
+                  else
+                    ..._backlinks.map(
+                      (bl) => GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => NoteEditorView(
+                                authUser: widget.authUser,
+                                note: bl,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF141B2D),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFF27314A)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: _palette[bl.colorIndex % _palette.length],
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  bl.displayTitle,
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Colors.white70,
+                                      ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ],
             ),
           ),

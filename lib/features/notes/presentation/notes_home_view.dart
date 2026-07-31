@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -10,6 +11,8 @@ import 'package:mynotes/features/notes/presentation/widgets/tag_chip.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
+
+final _linkRegex = RegExp(r'\[\[([^\]]+)\]\]');
 
 class NotesHomeView extends ConsumerStatefulWidget {
   final AuthUser authUser;
@@ -127,6 +130,67 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     if (confirmed == true) {
       await ref.read(notesServiceProvider).deleteNote(uid: widget.authUser.uid, noteId: note.id);
     }
+  }
+
+  Widget _buildLinkPreview(Note note, List<Note> allNotes) {
+    final text = note.previewText;
+    final matches = _linkRegex.allMatches(text).toList();
+    if (matches.isEmpty) {
+      return Text(
+        text,
+        maxLines: 4,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.white70,
+              height: 1.45,
+            ),
+      );
+    }
+
+    final existingTitles = allNotes.map((n) => n.title?.trim()).whereType<String>().toSet();
+    final spans = <TextSpan>[];
+    int lastEnd = 0;
+
+    for (final match in matches) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+      }
+      final title = match.group(1)!.trim();
+      final exists = existingTitles.contains(title);
+      spans.add(
+        TextSpan(
+          text: title,
+          style: TextStyle(
+            color: exists ? const Color(0xFF8AA7FF) : Colors.white38,
+            decoration: exists ? TextDecoration.underline : TextDecoration.lineThrough,
+            decorationColor: exists ? const Color(0xFF8AA7FF) : Colors.white38,
+            fontSize: Theme.of(context).textTheme.bodyMedium?.fontSize,
+            fontWeight: FontWeight.w500,
+          ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () {
+              final target = allNotes.where((n) => n.title?.trim() == title).firstOrNull;
+              if (target != null) {
+                _openEditor(note: target);
+              }
+            },
+        ),
+      );
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+
+    return Text.rich(
+      TextSpan(children: spans),
+      maxLines: 4,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Colors.white70,
+            height: 1.45,
+          ),
+    );
   }
 
   @override
@@ -359,15 +423,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                                       ],
                                     ),
                                     const SizedBox(height: 14),
-                                    Text(
-                                      note.previewText,
-                                      maxLines: 4,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                            color: Colors.white70,
-                                            height: 1.45,
-                                          ),
-                                    ),
+                                    _buildLinkPreview(note, notes),
                                     const SizedBox(height: 16),
                                     Row(
                                       children: [

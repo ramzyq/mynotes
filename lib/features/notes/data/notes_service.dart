@@ -50,6 +50,25 @@ class NotesService {
     });
   }
 
+  Future<List<String>> _resolveLinks(String uid, String content) async {
+    final regex = RegExp(r'\[\[([^\]]+)\]\]');
+    final matches = regex.allMatches(content);
+    if (matches.isEmpty) return [];
+
+    final titles = matches.map((m) => m.group(1)!.trim()).toSet().toList();
+    final ids = <String>[];
+    for (final title in titles) {
+      final snapshot = await _notesCollection(uid)
+          .where('title', isEqualTo: title)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isNotEmpty) {
+        ids.add(snapshot.docs.first.id);
+      }
+    }
+    return ids;
+  }
+
   Future<Note> createNote({
     required String uid,
     required String title,
@@ -67,6 +86,8 @@ class NotesService {
     final wrappedKey = await keyManager.createNoteKey(noteId);
     final noteKey = await keyManager.unwrapNoteKey(wrappedKey);
 
+    final links = await _resolveLinks(uid, content);
+
     final plainNote = Note(
       id: noteId,
       title: title,
@@ -78,6 +99,7 @@ class NotesService {
       longitude: longitude,
       createdAt: now,
       updatedAt: now,
+      links: links,
     );
 
     final encryptedNote = await plainNote.encryptNote(noteKey, crypto);
@@ -98,7 +120,8 @@ class NotesService {
     }
 
     final noteKey = await keyManager.unwrapNoteKey(existing.wrappedKey!);
-    final updatedPlain = note.copyWith(updatedAt: DateTime.now());
+    final links = note.content != null ? await _resolveLinks(uid, note.content!) : existing.links;
+    final updatedPlain = note.copyWith(updatedAt: DateTime.now(), links: links);
     final encrypted = await updatedPlain.encryptNote(noteKey, crypto);
     await docRef.update(encrypted.copyWith(wrappedKey: existing.wrappedKey).toMap());
   }
@@ -118,5 +141,47 @@ class NotesService {
       'isPinned': !note.isPinned,
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
+  }
+
+  Future<List<Note>> getBacklinks(String uid, String noteId) async {
+    final snapshot = await _notesCollection(uid)
+        .where('links', arrayContains: noteId)
+        .get();
+    final notes = snapshot.docs.map(Note.fromFirestore).toList();
+    final decrypted = <Note>[];
+    for (final note in notes) {
+      if (note.encryptionVersion >= 1 && note.wrappedKey != null) {
+        try {
+          final noteKey = await keyManager.unwrapNoteKey(note.wrappedKey!);
+          decrypted.add(await note.decryptNote(noteKey, crypto));
+        } catch (_) {
+          decrypted.add(note);
+        }
+      } else {
+        decrypted.add(note);
+      }
+    }
+    return decrypted;
+  }
+
+  Future<List<String>> searchTitles(String uid, String query) async {
+    final snapshot = await _notesCollection(uid)
+        .orderBy('title')
+        .startAt([query])
+        .endAt(['$query\uf8ff'])
+        .get();
+    return snapshot.docs
+        .map((doc) => (doc.data()['title'] as String? ?? '').trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+  }
+
+  Future<String?> resolveTitleToId(String uid, String title) async {
+    final snapshot = await _notesCollection(uid)
+        .where('title', isEqualTo: title)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isNotEmpty) return snapshot.docs.first.id;
+    return null;
   }
 }
