@@ -1,7 +1,77 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/features/auth/providers/auth_providers.dart';
+import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
-class ArchivedNotesView extends StatelessWidget {
-  const ArchivedNotesView({super.key});
+class ArchivedNotesView extends ConsumerWidget {
+  final AuthUser? authUser;
+  const ArchivedNotesView({super.key, this.authUser});
+
   @override
-  Widget build(BuildContext context) => const Scaffold(body: Center(child: Text('Archived')));
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notely = NotelyTheme.of(context);
+    final uid = authUser?.uid ?? ref.read(authStateProvider).valueOrNull?.uid ?? '';
+    final own = ref.watch(notesProvider(uid)).valueOrNull ?? const <Note>[];
+    final shared = ref.watch(sharedNotesProvider(uid)).valueOrNull ?? const <Note>[];
+    final archived = [...own, ...shared].where((n) => n.isArchived).toList();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Archive')),
+      body: archived.isEmpty
+          ? Center(child: Text('No archived notes', style: TextStyle(color: notely.text3)))
+          : ListView.separated(
+              padding: const EdgeInsets.all(20),
+              itemCount: archived.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final note = archived[index];
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: notely.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: notely.border)),
+                  child: Row(children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          try {
+                            await ref.read(notesServiceProvider).setArchived(uid: uid, note: note, archived: false);
+                          } catch (_) {}
+                        },
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(note.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
+                          const SizedBox(height: 2),
+                          Text('Tap to restore', style: TextStyle(fontSize: 12, color: notely.text3)),
+                        ]),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete forever',
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Delete forever?'),
+                            content: const Text('This cannot be undone.'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+                              FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          try {
+                            await ref.read(notesServiceProvider).deleteNote(uid: uid, noteId: note.id);
+                          } catch (_) {}
+                        }
+                      },
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ]),
+                );
+              },
+            ),
+    );
+  }
 }
