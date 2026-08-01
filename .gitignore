@@ -46,3 +46,6 @@ app.*.map.json
 node_modules
 
 tests/node_modules/
+
+# Worktrees
+.worktrees/
