@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/theme/note_palette.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
+import 'package:mynotes/core/theme/widgets/tag_pill.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
 
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
@@ -51,15 +55,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   bool _isAddingComment = false;
   List<String> _collaborators = [];
   List<String> _tags = [];
-
-  static const List<Color> _palette = [
-    Color(0xFF86E7C8),
-    Color(0xFF8AA7FF),
-    Color(0xFFFFC46B),
-    Color(0xFFFF8FA3),
-    Color(0xFF9D93FF),
-    Color(0xFF67D3FF),
-  ];
 
   @override
   void initState() {
@@ -174,69 +169,64 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     final controller = _contentController;
     final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF141B2D), Color(0xFF0B0F1A)],
+      builder: (context) {
+        final notely = NotelyTheme.of(context);
+        return NotelySheet(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.text_snippet, color: notely.text2),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Extract text from image',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop('camera'),
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Take Photo'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop('gallery'),
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Choose from Gallery'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.text_snippet, color: Colors.white70),
-                const SizedBox(width: 12),
-                Text(
-                  'Extract text from image',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop('camera'),
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Take Photo'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop('gallery'),
-                icon: const Icon(Icons.photo_library),
-                label: const Text('Choose from Gallery'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
 
     if (result == null || !mounted) return;
@@ -566,28 +556,42 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     final controller = TextEditingController();
     final selected = List<String>.of(_tags);
 
-    final result = await showDialog<List<String>>(
+    final result = await showModalBottomSheet<List<String>>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          void addNewTag() {
-            final tag = controller.text.trim();
-            if (tag.isEmpty) return;
-            setDialogState(() {
-              if (!selected.contains(tag)) selected.add(tag);
-              allTags.add(tag);
-              controller.clear();
-            });
-          }
+      builder: (context) {
+        final notely = NotelyTheme.of(context);
+        return NotelySheet(
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              void addNewTag() {
+                final tag = controller.text.trim();
+                if (tag.isEmpty) return;
+                setDialogState(() {
+                  if (!selected.contains(tag)) selected.add(tag);
+                  allTags.add(tag);
+                  controller.clear();
+                });
+              }
 
-          return AlertDialog(
-            backgroundColor: const Color(0xFF141B2D),
-            title: const Text('Tags'),
-            content: SingleChildScrollView(
-              child: Column(
+              return Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Tags',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -612,9 +616,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                   if (allTags.isEmpty)
                     Text(
                       'No tags yet. Create one above.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.white54,
-                          ),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: notely.text3),
                     )
                   else
                     Wrap(
@@ -636,22 +638,20 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         );
                       }).toList(),
                     ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(selected),
+                      child: const Text('Save'),
+                    ),
+                  ),
                 ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(selected),
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
-      ),
+              );
+            },
+          ),
+        );
+      },
     );
 
     controller.dispose();
@@ -753,7 +753,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   @override
   Widget build(BuildContext context) {
     final note = widget.note;
-    final accent = _palette[_selectedColorIndex % _palette.length];
+    final notely = NotelyTheme.of(context);
+    final accent = kNotePalette[_selectedColorIndex % kNotePalette.length];
 
     return Scaffold(
       appBar: AppBar(
@@ -832,16 +833,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         ],
       ),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0B0F1A),
-              Color(0xFF0F1627),
-            ],
-          ),
-        ),
+        color: notely.bg,
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -851,9 +843,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                 Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF141B2D),
+                    color: notely.surface,
                     borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: accent.withValues(alpha: 0.25)),
+                    border: Border.all(color: notely.border),
                   ),
                   padding: const EdgeInsets.all(18),
                   child: Column(
@@ -890,9 +882,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                       TextField(
                         controller: _titleController,
                         enabled: !_isSaving,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                        style: const TextStyle(fontFamily: 'Instrument Serif', fontSize: 30, height: 1.1, letterSpacing: -0.6),
                         decoration: const InputDecoration(
                           hintText: 'Note title',
                           border: InputBorder.none,
@@ -920,9 +910,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         Container(
                           constraints: const BoxConstraints(maxHeight: 200),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1A2340),
+                            color: notely.surface2,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF27314A)),
+                            border: Border.all(color: notely.border),
                           ),
                           child: ListView.builder(
                             shrinkWrap: true,
@@ -931,7 +921,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                               final title = _suggestions[index];
                               return ListTile(
                                 dense: true,
-                                leading: const Icon(Icons.link, size: 18, color: Colors.white60),
+                                leading: Icon(Icons.link, size: 18, color: notely.text3),
                                 title: Text(
                                   title,
                                   style: const TextStyle(fontSize: 14),
@@ -973,8 +963,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                 Wrap(
                   spacing: 12,
                   runSpacing: 12,
-                  children: List.generate(_palette.length, (index) {
-                    final color = _palette[index];
+                  children: List.generate(kNotePalette.length, (index) {
+                    final color = kNotePalette[index];
                     final selected = _selectedColorIndex == index;
                     return GestureDetector(
                       onTap: _isSaving ? null : () => setState(() => _selectedColorIndex = index),
@@ -1027,7 +1017,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                   Text(
                     'No tags yet. Tap "Edit tags" to organize this note.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white54,
+                          color: notely.text3,
                         ),
                   )
                 else
@@ -1035,14 +1025,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     spacing: 8,
                     runSpacing: 8,
                     children: _tags.map((tag) {
-                      return InputChip(
-                        label: Text(tag),
-                        onDeleted: () {
-                          setState(() {
-                            _tags = _tags.where((t) => t != tag).toList();
-                          });
-                        },
-                      );
+                      return TagPill(name: tag, style: TagPillStyle.outlined);
                     }).toList(),
                   ),
                 if (_audioAttachments.isNotEmpty) ...[
@@ -1059,15 +1042,15 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF141B2D),
+                          color: notely.surface,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                               color: accent.withValues(alpha: 0.25)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.audiotrack,
-                                color: Colors.white70, size: 20),
+                            Icon(Icons.audiotrack,
+                                color: notely.text2, size: 20),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -1075,7 +1058,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
-                                    ?.copyWith(color: Colors.white70),
+                                    ?.copyWith(color: notely.text2),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -1087,7 +1070,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                   const SizedBox(height: 24),
                   Row(
                     children: [
-                      const Icon(Icons.location_on, color: Colors.white70, size: 20),
+                      Icon(Icons.location_on, color: notely.text2, size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'Location',
@@ -1113,7 +1096,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                       child: Text(
                         _placeName!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.white60,
+                              color: notely.text3,
                             ),
                       ),
                     ),
@@ -1166,8 +1149,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         : const Icon(Icons.check),
                     label: Text(note == null ? 'Create note' : 'Save changes'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: accent,
-                      foregroundColor: Colors.black,
+                      backgroundColor: notely.violet,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
@@ -1179,7 +1162,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                   const SizedBox(height: 28),
                   Row(
                     children: [
-                      const Icon(Icons.link, color: Colors.white70, size: 20),
+                      Icon(Icons.link, color: notely.text2, size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'Backlinks',
@@ -1199,7 +1182,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     Text(
                       'No other notes link to this one.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.white54,
+                            color: notely.text3,
                           ),
                     )
                   else
@@ -1219,9 +1202,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF141B2D),
+                              color: notely.surface,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFF27314A)),
+                              border: Border.all(color: notely.border),
                             ),
                             child: Row(
                               children: [
@@ -1229,7 +1212,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                   width: 8,
                                   height: 8,
                                   decoration: BoxDecoration(
-                                    color: _palette[bl.colorIndex % _palette.length],
+                                    color: kNotePalette[bl.colorIndex % kNotePalette.length],
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -1238,12 +1221,12 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                   child: Text(
                                     bl.displayTitle,
                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          color: Colors.white70,
+                                          color: notely.text2,
                                         ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
+                                Icon(Icons.chevron_right, color: notely.text4, size: 18),
                               ],
                             ),
                           ),
@@ -1254,7 +1237,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                   const SizedBox(height: 28),
                   Row(
                     children: [
-                      const Icon(Icons.comment_outlined, color: Colors.white70, size: 20),
+                      Icon(Icons.comment_outlined, color: notely.text2, size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'Comments',
@@ -1271,23 +1254,23 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         data: (comments) => Badge(
                           isLabelVisible: comments.isNotEmpty,
                           label: Text('${comments.length}'),
-                          child: const Icon(Icons.chat_bubble_outline, color: Colors.white54, size: 20),
+                          child: Icon(Icons.chat_bubble_outline, color: notely.text3, size: 20),
                         ),
                         loading: () => const SizedBox(
                           height: 18,
                           width: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        error: (_, _) => const Icon(Icons.chat_bubble_outline, color: Colors.white54, size: 20),
+                        error: (_, _) => Icon(Icons.chat_bubble_outline, color: notely.text3, size: 20),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF141B2D),
+                      color: notely.surface,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF27314A)),
+                      border: Border.all(color: notely.border),
                     ),
                     padding: const EdgeInsets.all(12),
                     child: ref.watch(
@@ -1303,7 +1286,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                               child: Text(
                                 'No comments yet.',
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Colors.white54,
+                                      color: notely.text3,
                                     ),
                               ),
                             ),
@@ -1316,7 +1299,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                   margin: const EdgeInsets.only(bottom: 10),
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF1A2340),
+                                    color: notely.surface2,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Column(
@@ -1328,7 +1311,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                             child: Text(
                                               comment.authorName,
                                               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                                    color: Colors.white70,
+                                                    color: notely.text2,
                                                     fontWeight: FontWeight.w700,
                                                   ),
                                             ),
@@ -1336,12 +1319,12 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                           Text(
                                             _commentTime(comment.createdAt),
                                             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                                  color: Colors.white38,
+                                                  color: notely.text4,
                                                 ),
                                           ),
                                           if (comment.authorUid == widget.authUser.uid)
                                             IconButton(
-                                              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.white38),
+                                              icon: Icon(Icons.delete_outline, size: 16, color: notely.text4),
                                               visualDensity: VisualDensity.compact,
                                               onPressed: () => _deleteComment(comment.id),
                                             ),
@@ -1351,7 +1334,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                       Text(
                                         comment.content,
                                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                              color: Colors.white70,
+                                              color: notely.text2,
                                               height: 1.35,
                                             ),
                                       ),
@@ -1373,7 +1356,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         child: Center(
                           child: Text(
                             'Unable to load comments.',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white54),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: notely.text3),
                           ),
                         ),
                       ),
@@ -1457,125 +1440,113 @@ class _SelfDestructSheetState extends State<_SelfDestructSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF141B2D), Color(0xFF0B0F1A)],
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.timer_outlined, color: Colors.white70),
-                const SizedBox(width: 12),
-                Text(
-                  'Self-destruct settings',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.schedule, color: Colors.white70),
-              title: const Text('Timed destruction'),
-              subtitle: Text(
-                _date != null
-                    ? '${_date!.month}/${_date!.day}/${_date!.year} ${_date!.hour.toString().padLeft(2, '0')}:${_date!.minute.toString().padLeft(2, '0')}'
-                    : 'Not set',
-              ),
-              trailing: FilledButton.tonal(
-                onPressed: () async {
-                  final date = await showDatePicker(
-                    context: context,
-                    initialDate: _date ?? DateTime.now().add(const Duration(hours: 1)),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                  );
-                  if (date == null || !context.mounted) return;
-                  final time = await showTimePicker(
-                    context: context,
-                    initialTime: TimeOfDay.fromDateTime(
-                      _date ?? DateTime.now().add(const Duration(hours: 1)),
+    final notely = NotelyTheme.of(context);
+    return NotelySheet(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timer_outlined, color: notely.text2),
+              const SizedBox(width: 12),
+              Text(
+                'Self-destruct settings',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
-                  );
-                  if (time == null || !mounted) return;
-                  setState(() {
-                    _date = DateTime(
-                      date.year,
-                      date.month,
-                      date.day,
-                      time.hour,
-                      time.minute,
-                    );
-                  });
-                },
-                child: const Text('Pick'),
               ),
-            ),
-            const Divider(height: 32),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              secondary: const Icon(Icons.visibility_off_outlined, color: Colors.white70),
-              title: const Text('Delete after first read'),
-              subtitle: const Text('Note disappears once opened'),
-              value: _onRead,
-              onChanged: (value) {
-                setState(() => _onRead = value);
-              },
-            ),
-            if (_hasSettings) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop(<String, dynamic>{
-                      'date': null,
-                      'onRead': false,
-                    });
-                  },
-                  icon: const Icon(Icons.remove_circle_outline),
-                  label: const Text('Remove self-destruct'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.redAccent,
-                    side: const BorderSide(color: Colors.redAccent),
-                  ),
-                ),
+              const Spacer(),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
               ),
             ],
-            const SizedBox(height: 24),
+          ),
+          const SizedBox(height: 24),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.schedule, color: notely.text2),
+            title: const Text('Timed destruction'),
+            subtitle: Text(
+              _date != null
+                  ? '${_date!.month}/${_date!.day}/${_date!.year} ${_date!.hour.toString().padLeft(2, '0')}:${_date!.minute.toString().padLeft(2, '0')}'
+                  : 'Not set',
+            ),
+            trailing: FilledButton.tonal(
+              onPressed: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _date ?? DateTime.now().add(const Duration(hours: 1)),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (date == null || !context.mounted) return;
+                final time = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(
+                    _date ?? DateTime.now().add(const Duration(hours: 1)),
+                  ),
+                );
+                if (time == null || !mounted) return;
+                setState(() {
+                  _date = DateTime(
+                    date.year,
+                    date.month,
+                    date.day,
+                    time.hour,
+                    time.minute,
+                  );
+                });
+              },
+              child: const Text('Pick'),
+            ),
+          ),
+          const Divider(height: 32),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: Icon(Icons.visibility_off_outlined, color: notely.text2),
+            title: const Text('Delete after first read'),
+            subtitle: const Text('Note disappears once opened'),
+            value: _onRead,
+            onChanged: (value) {
+              setState(() => _onRead = value);
+            },
+          ),
+          if (_hasSettings) ...[
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
+              child: OutlinedButton.icon(
                 onPressed: () {
                   Navigator.of(context).pop(<String, dynamic>{
-                    'date': _date,
-                    'onRead': _onRead,
+                    'date': null,
+                    'onRead': false,
                   });
                 },
-                child: const Text('Apply'),
+                icon: const Icon(Icons.remove_circle_outline),
+                label: const Text('Remove self-destruct'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.redAccent,
+                  side: const BorderSide(color: Colors.redAccent),
+                ),
               ),
             ),
           ],
-        ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop(<String, dynamic>{
+                  'date': _date,
+                  'onRead': _onRead,
+                });
+              },
+              child: const Text('Apply'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1687,131 +1658,119 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF141B2D), Color(0xFF0B0F1A)],
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.group_add_outlined, color: Colors.white70),
-                const SizedBox(width: 12),
-                Text(
-                  'Share note',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Shared',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: const Color(0xFF86E7C8),
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: widget.emailController,
-                    enabled: !_isAdding,
-                    decoration: const InputDecoration(
-                      hintText: 'Add people by email',
-                      prefixIcon: Icon(Icons.alternate_email),
+    final notely = NotelyTheme.of(context);
+    return NotelySheet(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.group_add_outlined, color: notely.text2),
+              const SizedBox(width: 12),
+              Text(
+                'Share note',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Shared',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: const Color(0xFF86E7C8),
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: widget.emailController,
+                  enabled: !_isAdding,
+                  decoration: const InputDecoration(
+                    hintText: 'Add people by email',
+                    prefixIcon: Icon(Icons.alternate_email),
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: _isAdding ? null : _submit,
-                  icon: _isAdding
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send_rounded),
-                ),
-              ],
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                onPressed: _isAdding ? null : _submit,
+                icon: _isAdding
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded),
+              ),
+            ],
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _error!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
             ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
+          const SizedBox(height: 16),
+          if (_collaborators.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
                 child: Text(
-                  _error!,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                  'No collaborators yet.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: notely.text3,
+                      ),
                 ),
               ),
-            const SizedBox(height: 16),
-            if (_collaborators.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text(
-                    'No collaborators yet.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.white54,
-                        ),
-                  ),
+            )
+          else
+            ..._collaborators.map(
+              (uid) => Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: notely.surface2,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              )
-            else
-              ..._collaborators.map(
-                (uid) => Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A2340),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.person_outline, color: Colors.white54, size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _emails[uid] ?? uid,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Colors.white70,
-                              ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                child: Row(
+                  children: [
+                    Icon(Icons.person_outline, color: notely.text3, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _emails[uid] ?? uid,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: notely.text2,
+                            ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      TextButton.icon(
-                        onPressed: _isAdding ? null : () => _remove(uid),
-                        icon: const Icon(Icons.person_remove_outlined, size: 16),
-                        label: const Text('Remove'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.redAccent,
-                        ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _isAdding ? null : () => _remove(uid),
+                      icon: const Icon(Icons.person_remove_outlined, size: 16),
+                      label: const Text('Remove'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
