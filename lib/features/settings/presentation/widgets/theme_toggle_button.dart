@@ -1,42 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/providers/theme_mode_provider.dart';
 
-class AppThemeScope extends InheritedWidget {
-  final bool isDarkMode;
-  final VoidCallback toggleTheme;
-
-  const AppThemeScope({
-    super.key,
-    required this.isDarkMode,
-    required this.toggleTheme,
-    required super.child,
-  });
-
-  static AppThemeScope of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<AppThemeScope>();
-    assert(scope != null, 'AppThemeScope not found in context');
-    return scope!;
-  }
-
-  @override
-  bool updateShouldNotify(AppThemeScope oldWidget) {
-    return isDarkMode != oldWidget.isDarkMode;
-  }
-}
-
-class ThemeToggleButton extends StatelessWidget {
+class ThemeToggleButton extends ConsumerWidget {
   final Color? foregroundColor;
 
   const ThemeToggleButton({super.key, this.foregroundColor});
 
   @override
-  Widget build(BuildContext context) {
-    final scope = AppThemeScope.of(context);
-    final icon = scope.isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined;
-    final label = scope.isDarkMode ? 'Light theme' : 'Dark theme';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark;
+    final icon = isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined;
+    final label = isDark ? 'Light theme' : 'Dark theme';
 
     return IconButton(
       tooltip: label,
-      onPressed: scope.toggleTheme,
+      onPressed: () {
+        ref.read(themeModeProvider.notifier).set(isDark ? ThemeMode.light : ThemeMode.dark);
+      },
       icon: Icon(icon, color: foregroundColor),
     );
   }

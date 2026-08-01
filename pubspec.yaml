@@ -59,6 +59,7 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
   flutter_local_notifications: ^18.0.1
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -114,3 +115,16 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/Geist-Regular.ttf
+    - family: Instrument Serif
+      fonts:
+        - asset: assets/fonts/InstrumentSerif-Regular.ttf
+        - asset: assets/fonts/InstrumentSerif-Italic.ttf
+          style: italic
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
