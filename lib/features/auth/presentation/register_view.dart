@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
-import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
 
 class RegisterView extends ConsumerStatefulWidget {
   const RegisterView({
@@ -130,7 +129,6 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create account'),
-        actions: const [ThemeToggleButton()],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -149,7 +147,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                   hintText: 'First Name',
                   prefixIcon: const Icon(Icons.person_outline),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -168,7 +166,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                   hintText: 'Email',
                   prefixIcon: const Icon(Icons.email_outlined),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -195,7 +193,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                     },
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -225,7 +223,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                     },
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -239,7 +237,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
                 child: _isLoading

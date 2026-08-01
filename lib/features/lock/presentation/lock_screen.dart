@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/lock/services/lock_service.dart';
 
@@ -28,6 +29,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
     final unlockedNotes = ref.watch(unlockedNotesProvider);
 
     if (!_isLocked || unlockedNotes.contains(widget.noteId)) {
@@ -40,14 +42,25 @@ class _LockScreenState extends ConsumerState<LockScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.lock_outline, size: 64),
+            Icon(Icons.lock_outline, size: 64, color: notely.violet),
             const SizedBox(height: 24),
-            const Text('This note is locked'),
+            Text(
+              'This note is locked',
+              style: TextStyle(
+                fontFamily: 'Instrument Serif',
+                fontSize: 28,
+                color: notely.text,
+              ),
+            ),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
+            FilledButton.icon(
               onPressed: _canAttempt() ? _authenticate : null,
               icon: const Icon(Icons.fingerprint),
               label: const Text('Unlock with biometrics'),
+              style: FilledButton.styleFrom(
+                backgroundColor: notely.violet,
+                foregroundColor: Colors.white,
+              ),
             ),
             if (widget.pinHash != null) ...[
               const SizedBox(height: 16),

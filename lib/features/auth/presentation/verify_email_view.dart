@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
-import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
 
 class VerifyEmailView extends ConsumerStatefulWidget {
   const VerifyEmailView({
@@ -99,7 +99,7 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
         icon: const Icon(Icons.verified, color: Colors.green, size: 48),
         title: const Text('Email Verified!'),
         content: const Text(
-          'Your email has been successfully verified. Welcome to Note Log!',
+          'Your email has been successfully verified. Welcome to Notely!',
         ),
         actions: [
           TextButton(
@@ -128,12 +128,12 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
   @override
   Widget build(BuildContext context) {
     final email = ref.read(authServiceProvider).currentUser?.email ?? 'your email';
+    final notely = NotelyTheme.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Verify Email'),
         automaticallyImplyLeading: false,
-        actions: const [ThemeToggleButton()],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -153,13 +153,13 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
             const SizedBox(height: 12),
             Text(
               'We\'ve sent a verification email to\n$email',
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(fontSize: 16, color: notely.text3),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Click the link in the email to verify your account, then tap the button below.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: notely.text3),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -176,7 +176,7 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
             ),
@@ -194,7 +194,7 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
             ),

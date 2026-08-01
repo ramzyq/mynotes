@@ -24,8 +24,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Note Log'), findsOneWidget);
-    expect(find.text('Dark notes workspace for ideas and drafts'), findsOneWidget);
+    expect(find.text('Notely'), findsOneWidget);
     expect(find.byType(Scaffold), findsWidgets);
   });
 }
