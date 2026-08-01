@@ -1,29 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
-import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/features/account/presentation/account_sheet.dart';
 import 'package:mynotes/features/lock/presentation/lock_screen.dart';
+import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/notes/data/note_sort.dart';
 import 'package:mynotes/features/notes/presentation/note_editor_view.dart';
-import 'package:mynotes/features/notes/presentation/widgets/empty_notes_state.dart';
-import 'package:mynotes/features/notes/presentation/widgets/info_chip.dart';
-import 'package:mynotes/features/notes/presentation/widgets/tag_chip.dart';
+import 'package:mynotes/features/notes/presentation/widgets/empty_state.dart';
+import 'package:mynotes/features/notes/presentation/widgets/home_fab.dart';
+import 'package:mynotes/features/notes/presentation/widgets/list_header.dart';
+import 'package:mynotes/features/notes/presentation/widgets/note_card.dart';
+import 'package:mynotes/features/notes/presentation/widgets/note_preview.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
-import 'package:mynotes/features/auth/providers/auth_providers.dart';
-import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
-import 'package:mynotes/features/study/presentation/review_view.dart';
-import 'package:mynotes/features/study/providers/study_providers.dart';
-
-final _linkRegex = RegExp(r'\[\[([^\]]+)\]\]');
 
 class NotesHomeView extends ConsumerStatefulWidget {
   final AuthUser authUser;
-
-  const NotesHomeView({
-    super.key,
-    required this.authUser,
-  });
-
+  const NotesHomeView({super.key, required this.authUser});
   @override
   ConsumerState<NotesHomeView> createState() => _NotesHomeViewState();
 }
@@ -32,25 +25,22 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   String? _activeTag;
-
-  static const List<Color> _palette = [
-    Color(0xFF86E7C8),
-    Color(0xFF8AA7FF),
-    Color(0xFFFFC46B),
-    Color(0xFFFF8FA3),
-    Color(0xFF9D93FF),
-    Color(0xFF67D3FF),
-  ];
+  String _filter = 'All';
+  NoteSort _sort = NoteSort.updated;
+  bool _selectMode = false;
+  final Set<String> _selected = {};
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(shareServiceProvider).ensureUserProfile(
-        uid: widget.authUser.uid,
-        email: widget.authUser.email,
-        displayName: widget.authUser.displayName,
-      );
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.read(shareServiceProvider).ensureUserProfile(
+              uid: widget.authUser.uid,
+              email: widget.authUser.email,
+              displayName: widget.authUser.displayName,
+            );
+      } catch (_) {}
     });
   }
 
@@ -60,639 +50,329 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     super.dispose();
   }
 
-  String _greetingName() {
+  String _userName() {
     final displayName = widget.authUser.displayName?.trim();
-    if (displayName != null && displayName.isNotEmpty) {
-      return displayName.split(' ').first;
-    }
-
+    if (displayName != null && displayName.isNotEmpty) return displayName.split(' ').first;
     final email = widget.authUser.email.trim();
-    if (email.isNotEmpty) {
-      return email.split('@').first;
-    }
-
+    if (email.isNotEmpty) return email.split('@').first;
     return 'Writer';
   }
 
   String _timeLabel(DateTime updatedAt) {
     final difference = DateTime.now().difference(updatedAt);
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    }
-    if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    }
-    if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    }
-    if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    }
-
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    if (difference.inDays < 7) return '${difference.inDays}d ago';
     return '${updatedAt.month}/${updatedAt.day}/${updatedAt.year}';
   }
 
   Future<void> _openEditor({Note? note}) async {
     if (note != null && note.isLocked) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => LockScreen(
-            noteId: note.id,
-            pinHash: note.pinHash,
-            pinSalt: note.pinSalt,
-            child: NoteEditorView(
-              authUser: widget.authUser,
-              note: note,
-            ),
-          ),
-        ),
-      );
+      await Navigator.of(context).push(MaterialPageRoute(builder: (context) => LockScreen(noteId: note.id, pinHash: note.pinHash, pinSalt: note.pinSalt, child: NoteEditorView(authUser: widget.authUser, note: note))));
     } else {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => NoteEditorView(
-            authUser: widget.authUser,
-            note: note,
-          ),
-        ),
-      );
+      await Navigator.of(context).push(MaterialPageRoute(builder: (context) => NoteEditorView(authUser: widget.authUser, note: note)));
     }
   }
 
   Future<void> _togglePin(Note note) async {
-    await ref.read(notesServiceProvider).togglePin(uid: widget.authUser.uid, note: note);
+    try {
+      await ref.read(notesServiceProvider).togglePin(uid: widget.authUser.uid, note: note);
+    } catch (_) {}
   }
 
-  Future<void> _deleteNote(Note note) async {
+  Future<void> _archive(Note note) async {
+    try {
+      await ref.read(notesServiceProvider).setArchived(uid: widget.authUser.uid, note: note, archived: true);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not archive note')));
+      return;
+    }
+    if (!mounted) return;
+    showArchiveToast(context, () async {
+      try {
+        await ref.read(notesServiceProvider).setArchived(uid: widget.authUser.uid, note: note, archived: false);
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _bulkArchive() async {
+    final notes = _selectedNotes();
+    try {
+      await ref.read(notesServiceProvider).archiveMany(uid: widget.authUser.uid, notes: notes);
+    } catch (_) {}
+    setState(() { _selected.clear(); _selectMode = false; });
+  }
+
+  Future<void> _bulkDelete() async {
+    final notes = _selectedNotes();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete note?'),
-        content: Text('Delete "${note.displayTitle}" permanently?'),
+        title: Text('Delete ${notes.length} note${notes.length == 1 ? '' : 's'}?'),
+        content: const Text('This removes them permanently.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
         ],
       ),
     );
-
-    if (confirmed == true) {
-      await ref.read(notesServiceProvider).deleteNote(uid: widget.authUser.uid, noteId: note.id);
-    }
+    if (confirmed != true) return;
+    try {
+      await ref.read(notesServiceProvider).deleteMany(uid: widget.authUser.uid, notes: notes);
+    } catch (_) {}
+    if (mounted) setState(() { _selected.clear(); _selectMode = false; });
   }
 
-  Future<void> _showContextSwitcher(List<Note> notes) async {
-    final tagCounts = <String, int>{};
-    for (final note in notes) {
-      for (final tag in (note.tags ?? const [])) {
-        tagCounts[tag] = (tagCounts[tag] ?? 0) + 1;
-      }
-    }
-    final sortedTags = tagCounts.keys.toList()..sort();
-
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF141B2D), Color(0xFF0B0F1A)],
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.filter_list_rounded, color: Colors.white70),
-                const SizedBox(width: 12),
-                Text(
-                  'Context switcher',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              selected: _activeTag == null,
-              selectedTileColor: const Color(0xFF1A2340),
-              leading: const Icon(Icons.sticky_note_2_outlined),
-              title: const Text('All Notes'),
-              trailing: Text(
-                '${notes.length}',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: Colors.white54,
-                    ),
-              ),
-              onTap: () => Navigator.of(context).pop(''),
-            ),
-            if (sortedTags.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: sortedTags.length,
-                  itemBuilder: (context, index) {
-                    final tag = sortedTags[index];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      selected: _activeTag == tag,
-                      selectedTileColor: const Color(0xFF1A2340),
-                      leading: const Icon(Icons.sell_outlined),
-                      title: Text(tag),
-                      trailing: Text(
-                        '${tagCounts[tag]}',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: Colors.white54,
-                            ),
-                      ),
-                      onTap: () => Navigator.of(context).pop(tag),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-
-    if (result != null && mounted) {
-      setState(() => _activeTag = result.isEmpty ? null : result);
-    }
+  Future<void> _bulkPin() async {
+    final notes = _selectedNotes();
+    final target = !notes.every((n) => n.isPinned);
+    try {
+      await ref.read(notesServiceProvider).setPinnedMany(uid: widget.authUser.uid, notes: notes, pinned: target);
+    } catch (_) {}
+    if (mounted) setState(() { _selected.clear(); _selectMode = false; });
   }
 
-  Widget _buildLinkPreview(Note note, List<Note> allNotes) {
-    final text = note.previewText;
-    final matches = _linkRegex.allMatches(text).toList();
-    if (matches.isEmpty) {
-      return Text(
-        text,
-        maxLines: 4,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.white70,
-              height: 1.45,
-            ),
-      );
-    }
+  List<Note> _selectedNotes() {
+    final all = _mergedNotes();
+    return all.where((n) => _selected.contains(n.id)).toList();
+  }
 
-    final existingTitles = allNotes.map((n) => n.title?.trim()).whereType<String>().toSet();
-    final spans = <TextSpan>[];
-    int lastEnd = 0;
+  List<Note> _mergedNotes() {
+    final own = ref.read(notesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
+    final shared = ref.read(sharedNotesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
+    return [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)];
+  }
 
-    for (final match in matches) {
-      if (match.start > lastEnd) {
-        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
-      }
-      final title = match.group(1)!.trim();
-      final exists = existingTitles.contains(title);
-      spans.add(
-        TextSpan(
-          text: title,
-          style: TextStyle(
-            color: exists ? const Color(0xFF8AA7FF) : Colors.white38,
-            decoration: exists ? TextDecoration.underline : TextDecoration.lineThrough,
-            decorationColor: exists ? const Color(0xFF8AA7FF) : Colors.white38,
-            fontSize: Theme.of(context).textTheme.bodyMedium?.fontSize,
-            fontWeight: FontWeight.w500,
-          ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () {
-              final target = allNotes.where((n) => n.title?.trim() == title).firstOrNull;
-              if (target != null) {
-                _openEditor(note: target);
-              }
-            },
-        ),
-      );
-      lastEnd = match.end;
+  List<Note> _visible(List<Note> notes) {
+    var list = notes.where((n) => !n.isArchived).toList();
+    if (_query.trim().isNotEmpty) {
+      final q = _query.toLowerCase();
+      list = list.where((n) =>
+        n.title?.toLowerCase().contains(q) == true ||
+        n.content?.toLowerCase().contains(q) == true ||
+        (n.tags ?? const <String>[]).any((t) => t.toLowerCase().contains(q))).toList();
     }
-    if (lastEnd < text.length) {
-      spans.add(TextSpan(text: text.substring(lastEnd)));
+    if (_activeTag != null) {
+      list = list.where((n) => (n.tags ?? const <String>[]).contains(_activeTag)).toList();
     }
-
-    return Text.rich(
-      TextSpan(children: spans),
-      maxLines: 4,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Colors.white70,
-            height: 1.45,
-          ),
-    );
+    if (_filter == 'Pinned') {
+      list = list.where((n) => n.isPinned).toList();
+    } else if (_filter == 'Recent') {
+      final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+      list = list.where((n) => n.updatedAt.isAfter(cutoff)).toList();
+    }
+    final comparator = noteComparator(_sort);
+    list.sort(comparator);
+    return list;
   }
 
   @override
   Widget build(BuildContext context) {
-    final userName = _greetingName();
+    final own = ref.watch(notesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
+    final shared = ref.watch(sharedNotesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
+    final notes = [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)];
+    final visible = _visible(notes);
+    final pinned = visible.where((n) => n.isPinned).toList();
+    final rest = visible.where((n) => !n.isPinned).toList();
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0B0F1A),
-              Color(0xFF10182A),
-              Color(0xFF0C1220),
-            ],
-            stops: [0.0, 0.48, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: ref.watch(notesProvider(widget.authUser.uid)).when(
-            data: (ownNotes) {
-              final sharedNotes = ref
-                  .watch(sharedNotesProvider(widget.authUser.uid))
-                  .valueOrNull;
-              final notes = [
-                ...ownNotes,
-                if (sharedNotes != null)
-                  ...sharedNotes.where((note) =>
-                      note.sharedBy != widget.authUser.uid),
-              ];
-              final filteredNotes = notes.where((note) {
-                if (_activeTag != null &&
-                    !(note.tags ?? const []).contains(_activeTag)) {
-                  return false;
-                }
-
-                if (_query.isEmpty) {
-                  return true;
-                }
-
-                final haystack = '${note.title ?? ''} ${note.content ?? ''}'.toLowerCase();
-                return haystack.contains(_query.toLowerCase());
-              }).toList();
-
-              return CustomScrollView(
-                slivers: [
-                  SliverAppBar(
-                    floating: true,
-                    snap: true,
-                    backgroundColor: Colors.transparent,
-                    titleSpacing: 20,
-                    title: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: ListHeader(
+                      userName: _userName(),
+                      noteCount: notes.where((n) => !n.isArchived).length,
+                      onOpenAccount: _openAccount,
+                      onToggleSelect: () => setState(() { _selectMode = !_selectMode; _selected.clear(); }),
+                      selectMode: _selectMode,
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: NoteSearchField(controller: _searchController, onChanged: (v) => setState(() => _query = v.trim())),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Note Log',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.4,
-                              ),
-                        ),
-                        Text(
-                          'Dark workspace for your thoughts',
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                color: Colors.white54,
-                              ),
-                        ),
+                        FilterChips(active: _filter, pinnedCount: notes.where((n) => n.isPinned && !n.isArchived).length, onChanged: (v) => setState(() => _filter = v)),
+                        SortMenu(sort: _sort, onChanged: (v) => setState(() => _sort = v)),
                       ],
                     ),
-                    actions: [
-                      IconButton(
-                        tooltip: 'Filter by tag',
-                        onPressed: () => _showContextSwitcher(notes),
-                        icon: _activeTag != null
-                            ? Badge(
-                                isLabelVisible: true,
-                                label: const Text(''),
-                                child: const Icon(Icons.filter_list_rounded),
-                              )
-                            : const Icon(Icons.filter_list_rounded),
-                      ),
-                      const ThemeToggleButton(),
-                      ref.watch(dueCountProvider(widget.authUser.uid)).when(
-                        data: (count) => Badge(
-                          isLabelVisible: count > 0,
-                          label: Text('$count'),
-                          child: IconButton(
-                            tooltip: 'Study',
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => ReviewView(
-                                  authUser: widget.authUser,
-                                ),
-                              ),
-                            ),
-                            icon: const Icon(Icons.school_rounded),
-                          ),
-                        ),
-                        loading: () => IconButton(
-                          tooltip: 'Study',
-                          onPressed: null,
-                          icon: const Icon(Icons.school_rounded),
-                        ),
-                        error: (_, _) => IconButton(
-                          tooltip: 'Study',
-                          onPressed: null,
-                          icon: const Icon(Icons.school_rounded),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Sign out',
-                        onPressed: () => ref.read(authServiceProvider).logOut(),
-                        icon: const Icon(Icons.logout_rounded),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
                   ),
+                ),
+                if (_activeTag != null)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                    sliver: SliverToBoxAdapter(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF17233B), Color(0xFF141B2D)],
-                          ),
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(color: const Color(0xFF27314A)),
-                        ),
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Hello, $userName',
-                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Capture ideas, draft notes, and keep them organized in one calm workspace.',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.white70,
-                                  ),
-                            ),
-                            const SizedBox(height: 18),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: [
-                                InfoChip(
-                                  icon: Icons.sticky_note_2_outlined,
-                                  label: '${notes.length} notes',
-                                ),
-                                InfoChip(
-                                  icon: Icons.push_pin_outlined,
-                                  label: '${notes.where((note) => note.isPinned).length} pinned',
-                                ),
-                                InfoChip(
-                                  icon: Icons.palette_outlined,
-                                  label: '${_palette.length} themes',
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                    sliver: SliverToBoxAdapter(child: _FocusBar(tag: _activeTag!, onClear: () => setState(() => _activeTag = null))),
                   ),
+                if (_selectMode)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                    sliver: SliverToBoxAdapter(child: _SelectionBar(count: _selected.length, onPin: _bulkPin, onArchive: _bulkArchive, onDelete: _bulkDelete)),
+                  ),
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                if (visible.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: EmptyState(query: _query, activeTag: _activeTag, onCreate: () => _openEditor()),
+                  )
+                else ...[
+                  if (pinned.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      sliver: SliverToBoxAdapter(child: _SectionHeader(label: 'Pinned', count: pinned.length, pinned: true)),
+                    ),
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: SliverToBoxAdapter(
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: (value) {
-                          setState(() => _query = value.trim());
-                        },
-                        decoration: InputDecoration(
-                          hintText: 'Search notes',
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          suffixIcon: _query.isEmpty
-                              ? null
-                              : IconButton(
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() => _query = '');
-                                  },
-                                  icon: const Icon(Icons.clear_rounded),
-                                ),
-                        ),
-                      ),
+                    sliver: SliverList.separated(
+                      itemCount: pinned.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) => _buildCard(pinned[index], notes),
                     ),
                   ),
-                  if (_activeTag != null)
+                  if (rest.isNotEmpty)
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                      sliver: SliverToBoxAdapter(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A2340),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFF27314A)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.sell_outlined,
-                                  color: Colors.white70, size: 18),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  'Focus: $_activeTag',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelLarge
-                                      ?.copyWith(fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Clear filter',
-                                visualDensity: VisualDensity.compact,
-                                onPressed: () =>
-                                    setState(() => _activeTag = null),
-                                icon: const Icon(Icons.close, size: 18),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                      sliver: SliverToBoxAdapter(child: _SectionHeader(label: 'All notes', count: rest.length, pinned: false)),
                     ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                  if (filteredNotes.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: EmptyNotesState(
-                        query: _query,
-                        activeTag: _activeTag,
-                        onCreate: () => _openEditor(),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
-                      sliver: SliverList.separated(
-                        itemCount: filteredNotes.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final note = filteredNotes[index];
-                          final color = _palette[note.colorIndex % _palette.length];
-
-                          return GestureDetector(
-                            onTap: () => _openEditor(note: note),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF141B2D),
-                                borderRadius: BorderRadius.circular(28),
-                                border: Border.all(
-                                  color: note.isPinned ? color.withValues(alpha: 0.6) : const Color(0xFF27314A),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: color.withValues(alpha: 0.08),
-                                    blurRadius: 30,
-                                    offset: const Offset(0, 14),
-                                  ),
-                                ],
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(18),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          width: 14,
-                                          height: 14,
-                                          decoration: BoxDecoration(
-                                            color: color,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            note.displayTitle,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                                  fontWeight: FontWeight.w800,
-                                                ),
-                                          ),
-                                        ),
-                                        PopupMenuButton<String>(
-                                          onSelected: (value) {
-                                            switch (value) {
-                                              case 'pin':
-                                                _togglePin(note);
-                                                break;
-                                              case 'delete':
-                                                _deleteNote(note);
-                                                break;
-                                            }
-                                          },
-                                          itemBuilder: (context) => [
-                                            PopupMenuItem(
-                                              value: 'pin',
-                                              child: Text(note.isPinned ? 'Unpin' : 'Pin'),
-                                            ),
-                                            const PopupMenuItem(
-                                              value: 'delete',
-                                              child: Text('Delete'),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 14),
-                                    _buildLinkPreview(note, notes),
-                                    const SizedBox(height: 16),
-                                    Row(
-                                      children: [
-                                        if (note.isPinned)
-                                          TagChip(
-                                            color: color,
-                                            label: 'Pinned',
-                                            icon: Icons.push_pin,
-                                          ),
-                                        if (note.isLocked)
-                                          TagChip(
-                                            color: color,
-                                            label: 'Locked',
-                                            icon: Icons.lock,
-                                          ),
-                                        if (note.selfDestructAt != null)
-                                          TagChip(
-                                            color: color,
-                                            label: 'Timer',
-                                            icon: Icons.timer_outlined,
-                                          ),
-                                        if (note.selfDestructOnRead)
-                                          TagChip(
-                                            color: color,
-                                            label: 'Read-once',
-                                            icon: Icons.visibility_off_outlined,
-                                          ),
-                                        if ((note.collaborators ?? []).isNotEmpty)
-                                          TagChip(
-                                            color: const Color(0xFF8AA7FF),
-                                            label: 'Shared',
-                                            icon: Icons.group_outlined,
-                                          ),
-                                        const Spacer(),
-                                        Text(
-                                          _timeLabel(note.updatedAt),
-                                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                                color: Colors.white54,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                    sliver: SliverList.separated(
+                      itemCount: rest.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) => _buildCard(rest[index], notes),
                     ),
+                  ),
                 ],
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => const Center(child: Text('Unable to load notes.')),
-          ),
+              ],
+            ),
+            if (!_selectMode) HomeFab(onPressed: () => _openEditor()),
+          ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New note'),
-      ),
     );
+  }
+
+  Widget _buildCard(Note note, List<Note> allNotes) {
+    return NoteCard(
+      note: note,
+      selectMode: _selectMode,
+      selected: _selected.contains(note.id),
+      onSelect: () => setState(() {
+        if (_selected.contains(note.id)) { _selected.remove(note.id); } else { _selected.add(note.id); }
+      }),
+      onPin: () => _togglePin(note),
+      onArchive: () => _archive(note),
+      onOpen: () => _openEditor(note: note),
+      onTagTap: (tag) => setState(() => _activeTag = tag),
+      relativeTime: _timeLabel(note.updatedAt),
+      preview: buildNotePreview(context, note, allNotes, (n) => _openEditor(note: n)),
+    );
+  }
+
+  void _openAccount() {
+    showModalBottomSheet(context: context, isScrollControlled: true, builder: (context) => const AccountSheet());
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool pinned;
+  const _SectionHeader({required this.label, required this.count, required this.pinned});
+
+  @override
+  Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    return Row(children: [
+      if (pinned) Icon(Icons.push_pin, size: 12, color: notely.violet),
+      if (pinned) const SizedBox(width: 7),
+      Text(label.toUpperCase(), style: TextStyle(fontFamily: 'Geist', fontSize: 11.5, fontWeight: FontWeight.w600, letterSpacing: 0.6, color: notely.text3)),
+      const SizedBox(width: 6),
+      Text('$count', style: TextStyle(fontSize: 11.5, color: notely.text4)),
+      const SizedBox(width: 4),
+      Expanded(child: Container(height: 1, color: notely.border)),
+    ]);
+  }
+}
+
+class _FocusBar extends StatelessWidget {
+  final String tag;
+  final VoidCallback onClear;
+  const _FocusBar({required this.tag, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(color: notely.violetSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: notely.violetSoft2)),
+      child: Row(children: [
+        Icon(Icons.sell_outlined, size: 16, color: notely.violetInk),
+        const SizedBox(width: 8),
+        Expanded(child: Text('Focus: $tag', style: TextStyle(fontWeight: FontWeight.w700, color: notely.violetInk))),
+        InkWell(onTap: onClear, customBorder: const CircleBorder(), child: Icon(Icons.close, size: 16, color: notely.violetInk)),
+      ]),
+    );
+  }
+}
+
+class _SelectionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onPin;
+  final VoidCallback onArchive;
+  final VoidCallback onDelete;
+  const _SelectionBar({required this.count, required this.onPin, required this.onArchive, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: notely.violetSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: notely.violetSoft2)),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text('$count selected', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: notely.violetInk)),
+        Row(children: [
+          _SmallAction(icon: Icons.push_pin_outlined, label: 'Pin', onTap: onPin),
+          _SmallAction(icon: Icons.archive_outlined, label: 'Archive', onTap: onArchive),
+          _SmallAction(icon: Icons.delete_outline, label: 'Delete', onTap: onDelete, danger: true),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _SmallAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+  const _SmallAction({required this.icon, required this.label, required this.onTap, this.danger = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(8), child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(children: [
+        Icon(icon, size: 15, color: danger ? const Color(0xFFB91C1C) : notely.violetInk),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: danger ? const Color(0xFFB91C1C) : notely.violetInk)),
+      ]),
+    ));
   }
 }

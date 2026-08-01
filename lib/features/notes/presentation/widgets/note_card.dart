@@ -14,6 +14,7 @@ class NoteCard extends StatefulWidget {
   final VoidCallback onOpen;
   final ValueChanged<String> onTagTap;
   final String relativeTime;
+  final Widget? preview;
 
   const NoteCard({
     super.key,
@@ -26,6 +27,7 @@ class NoteCard extends StatefulWidget {
     required this.onOpen,
     required this.onTagTap,
     required this.relativeTime,
+    this.preview,
   });
 
   @override
@@ -159,12 +161,13 @@ class _NoteCardState extends State<NoteCard> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    note.previewText,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontFamily: 'Geist', fontSize: 13.25, height: 1.45, letterSpacing: -0.15, color: notely.text3),
-                  ),
+                  widget.preview ??
+                      Text(
+                        note.previewText,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: 'Geist', fontSize: 13.25, height: 1.45, letterSpacing: -0.15, color: notely.text3),
+                      ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
