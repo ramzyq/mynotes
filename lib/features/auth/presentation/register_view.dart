@@ -89,6 +89,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
       await ref.read(authServiceProvider).createUser(
         email: email,
         password: password,
+        displayName: firstName,
       );
       if (!mounted) return;
       // Navigate to email verification screen

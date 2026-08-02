@@ -228,7 +228,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                 if (visible.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
-                    child: EmptyState(query: _query, activeTag: _activeTag, onCreate: () => _openEditor()),
+                    child: EmptyState(query: _query, activeTag: _activeTag),
                   )
                 else ...[
                   if (pinned.isNotEmpty)

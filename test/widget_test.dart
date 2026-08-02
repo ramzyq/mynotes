@@ -37,7 +37,7 @@ class _FakeAuthProvider implements AuthProvider {
   AuthUser? get currentUser => null;
 
   @override
-  Future<AuthUser> createUser({required String email, required String password}) {
+  Future<AuthUser> createUser({required String email, required String password, required String displayName}) {
     throw UnimplementedError();
   }
 

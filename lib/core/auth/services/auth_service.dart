@@ -13,8 +13,8 @@ class AuthService implements AuthProvider {
   Stream<AuthUser?> get authStateChanges => provider.authStateChanges;
 
   @override
-  Future<AuthUser> createUser({required String email, required String password}) {
-    return provider.createUser(email: email, password: password);
+  Future<AuthUser> createUser({required String email, required String password, required String displayName}) {
+    return provider.createUser(email: email, password: password, displayName: displayName);
   }
 
   @override

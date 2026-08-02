@@ -13,6 +13,7 @@ abstract class AuthProvider {
   Future<AuthUser> createUser({
     required String email,
     required String password,
+    required String displayName,
   });
 
   Future<AuthUser> signInWithGoogle();

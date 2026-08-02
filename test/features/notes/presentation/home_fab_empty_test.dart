@@ -12,13 +12,14 @@ void main() {
     expect(find.text('New note'), findsOneWidget);
   });
 
-  testWidgets('EmptyState shows create button for no query', (tester) async {
-    await tester.pumpWidget(_wrap(EmptyState(query: '', activeTag: null, onCreate: () {})));
-    expect(find.text('Start writing'), findsOneWidget);
+  testWidgets('EmptyState shows subtitle for no query', (tester) async {
+    await tester.pumpWidget(_wrap(const EmptyState(query: '', activeTag: null)));
+    expect(find.text('A blank page awaits.'), findsOneWidget);
+    expect(find.text('Start writing'), findsNothing);
   });
 
-  testWidgets('EmptyState search variant hides create button', (tester) async {
-    await tester.pumpWidget(_wrap(EmptyState(query: 'xyz', activeTag: null, onCreate: () {})));
-    expect(find.text('Start writing'), findsNothing);
+  testWidgets('EmptyState search variant shows no-match copy', (tester) async {
+    await tester.pumpWidget(_wrap(const EmptyState(query: 'xyz', activeTag: null)));
+    expect(find.text('No notes match "xyz"'), findsOneWidget);
   });
 }
