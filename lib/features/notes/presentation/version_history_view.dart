@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class VersionHistoryView extends ConsumerStatefulWidget {
@@ -78,6 +79,7 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
 
   @override
   Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Version history'),
@@ -95,10 +97,10 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
           }
           final versions = snapshot.data ?? [];
           if (versions.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
                 'No versions yet',
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(color: notely.text3),
               ),
             );
           }
@@ -124,12 +126,11 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
                   child: Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor:
-                            Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                        backgroundColor: notely.violet.withValues(alpha: 0.2),
                         child: Text(
                           '$versionNumber',
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
+                            color: notely.violet,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -144,7 +145,7 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
-                                  ?.copyWith(color: Colors.white54),
+                                  ?.copyWith(color: notely.text3),
                             ),
                             if (previewText.isNotEmpty) ...[
                               const SizedBox(height: 4),
@@ -153,7 +154,7 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
-                                    ?.copyWith(color: Colors.white70),
+                                    ?.copyWith(color: notely.text2),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),

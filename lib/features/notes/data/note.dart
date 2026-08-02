@@ -16,6 +16,7 @@ class Note {
   final int encryptionVersion;
   final int colorIndex;
   final bool isPinned;
+  final bool isArchived;
   final bool isLocked;
   final String? pinHash;
   final String? pinSalt;
@@ -48,6 +49,7 @@ class Note {
     this.encryptionVersion = 0,
     required this.colorIndex,
     required this.isPinned,
+    this.isArchived = false,
     this.isLocked = false,
     this.pinHash,
     this.pinSalt,
@@ -82,6 +84,7 @@ class Note {
         content: (data['content'] as String? ?? '').trim(),
         colorIndex: (data['colorIndex'] as int?) ?? 0,
         isPinned: (data['isPinned'] as bool?) ?? false,
+        isArchived: (data['isArchived'] as bool?) ?? false,
         isLocked: (data['isLocked'] as bool?) ?? false,
         pinHash: data['pinHash'] as String?,
         pinSalt: data['pinSalt'] as String?,
@@ -128,6 +131,7 @@ class Note {
         encryptionVersion: encryptionVersion,
         colorIndex: (data['colorIndex'] as int?) ?? 0,
         isPinned: (data['isPinned'] as bool?) ?? false,
+        isArchived: (data['isArchived'] as bool?) ?? false,
         isLocked: (data['isLocked'] as bool?) ?? false,
         pinHash: data['pinHash'] as String?,
         pinSalt: data['pinSalt'] as String?,
@@ -179,6 +183,7 @@ class Note {
     int? encryptionVersion,
     int? colorIndex,
     bool? isPinned,
+    bool? isArchived,
     bool? isLocked,
     String? pinHash,
     String? pinSalt,
@@ -211,6 +216,7 @@ class Note {
       encryptionVersion: encryptionVersion ?? this.encryptionVersion,
       colorIndex: colorIndex ?? this.colorIndex,
       isPinned: isPinned ?? this.isPinned,
+      isArchived: isArchived ?? this.isArchived,
       isLocked: isLocked ?? this.isLocked,
       pinHash: pinHash ?? this.pinHash,
       pinSalt: pinSalt ?? this.pinSalt,
@@ -245,6 +251,7 @@ class Note {
       'encryptionVersion': encryptionVersion,
       'colorIndex': colorIndex,
       'isPinned': isPinned,
+      'isArchived': isArchived,
       'isLocked': isLocked,
       'pinHash': pinHash,
       'pinSalt': pinSalt,

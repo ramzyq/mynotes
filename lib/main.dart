@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -10,5 +11,5 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   AppErrorHandler().init();
-  runApp(const MyApp());
+  runApp(const ProviderScope(child: MyApp()));
 }

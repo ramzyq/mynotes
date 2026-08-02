@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/features/auth/presentation/register_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
+import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_wordmark.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
-import 'package:mynotes/features/settings/presentation/widgets/theme_toggle_button.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 
 class LoginView extends ConsumerStatefulWidget {
@@ -137,11 +138,11 @@ class _LoginViewState extends ConsumerState<LoginView> {
 
   @override
   Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Login'),
         elevation: 0,
-        actions: const [ThemeToggleButton()],
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -151,18 +152,13 @@ class _LoginViewState extends ConsumerState<LoginView> {
             children: [
               const SizedBox(height: 40),
               Center(
-                child: Text(
-                  'Note Log',
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
+                child: const NotelyWordmark(size: 28),
               ),
               const SizedBox(height: 10),
-              const Center(
+              Center(
                 child: Text(
-                  'Dark notes workspace for ideas and drafts',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                  'Your private notes workspace',
+                  style: TextStyle(fontSize: 16, color: notely.text3),
                 ),
               ),
               const SizedBox(height: 50),
@@ -176,7 +172,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
                   hintText: 'Email',
                   prefixIcon: const Icon(Icons.email_outlined),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -203,7 +199,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
                     },
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -217,7 +213,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
                 child: _isLoading
@@ -232,21 +228,21 @@ class _LoginViewState extends ConsumerState<LoginView> {
               Row(
                 children: [
                   Expanded(
-                    child: Divider(color: Colors.white, thickness: 1),
+                    child: Divider(color: notely.border, thickness: 1),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       'or continue with',
                       style: TextStyle(
-                        color: Colors.grey[500],
+                        color: notely.text3,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
                   Expanded(
-                    child: Divider(color: Colors.grey[300], thickness: 1),
+                    child: Divider(color: notely.border, thickness: 1),
                   ),
                 ],
               ),

@@ -275,6 +275,55 @@ class NotesService {
     });
   }
 
+  Future<void> setArchived({
+    required String uid,
+    required Note note,
+    required bool archived,
+  }) async {
+    await _notesCollection(uid).doc(note.id).update({
+      'isArchived': archived,
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
+  }
+
+  Future<void> archiveMany({
+    required String uid,
+    required List<Note> notes,
+  }) async {
+    final batch = firestore.batch();
+    for (final note in notes) {
+      batch.update(_notesCollection(uid).doc(note.id), {
+        'isArchived': true,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+    }
+    await batch.commit();
+  }
+
+  Future<void> deleteMany({
+    required String uid,
+    required List<Note> notes,
+  }) async {
+    for (final note in notes) {
+      await deleteNote(uid: uid, noteId: note.id);
+    }
+  }
+
+  Future<void> setPinnedMany({
+    required String uid,
+    required List<Note> notes,
+    required bool pinned,
+  }) async {
+    final batch = firestore.batch();
+    for (final note in notes) {
+      batch.update(_notesCollection(uid).doc(note.id), {
+        'isPinned': pinned,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+    }
+    await batch.commit();
+  }
+
   Future<List<Note>> getBacklinks(String uid, String noteId) async {
     final snapshot = await _notesCollection(uid)
         .where('links', arrayContains: noteId)

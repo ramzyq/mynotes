@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 import 'package:mynotes/features/study/providers/study_providers.dart';
@@ -54,6 +55,7 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
   @override
   Widget build(BuildContext context) {
     final dueCards = ref.watch(dueCardsProvider(widget.authUser.uid));
+    final notely = NotelyTheme.of(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Study')),
@@ -61,20 +63,20 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
         data: (cards) {
           _cards = cards;
           if (cards.isEmpty) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle_outline, size: 80, color: Colors.white38),
-                  SizedBox(height: 24),
-                  Text(
+                  Icon(Icons.check_circle_outline, size: 80, color: notely.text4),
+                  const SizedBox(height: 24),
+                  const Text(
                     'All caught up!',
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     'No cards due for review.',
-                    style: TextStyle(color: Colors.white60),
+                    style: TextStyle(color: notely.text3),
                   ),
                 ],
               ),
@@ -93,13 +95,14 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
                 Text(
                   '${_currentIndex + 1} of ${cards.length} cards',
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Colors.white54,
+                        color: notely.text3,
                       ),
                 ),
                 const SizedBox(height: 8),
                 LinearProgressIndicator(
                   value: (_currentIndex + 1) / cards.length,
-                  backgroundColor: const Color(0xFF27314A),
+                  backgroundColor: notely.surface2,
+                  valueColor: AlwaysStoppedAnimation<Color>(notely.violet),
                 ),
                 const SizedBox(height: 24),
                 Expanded(
@@ -108,9 +111,9 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
                     child: Container(
                       width: double.infinity,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF141B2D),
+                        color: notely.surface,
                         borderRadius: BorderRadius.circular(28),
-                        border: Border.all(color: const Color(0xFF27314A)),
+                        border: Border.all(color: notely.border),
                       ),
                       padding: const EdgeInsets.all(24),
                       child: SingleChildScrollView(
@@ -120,7 +123,7 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
                             Text(
                               'Question',
                               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                    color: const Color(0xFF8AA7FF),
+                                    color: notely.violet,
                                     fontWeight: FontWeight.w600,
                                   ),
                             ),
@@ -133,12 +136,12 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
                             ),
                             if (_showAnswer && answer.isNotEmpty) ...[
                               const SizedBox(height: 24),
-                              const Divider(color: Color(0xFF27314A)),
+                              Divider(color: notely.border),
                               const SizedBox(height: 12),
                               Text(
                                 'Answer',
                                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                      color: const Color(0xFF86E7C8),
+                                      color: notely.success,
                                       fontWeight: FontWeight.w600,
                                     ),
                               ),
@@ -146,7 +149,7 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
                               Text(
                                 answer,
                                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      color: Colors.white70,
+                                      color: notely.text2,
                                       height: 1.5,
                                     ),
                               ),
@@ -158,7 +161,7 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
                                   child: Text(
                                     'Tap to reveal answer',
                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          color: Colors.white38,
+                                          color: notely.text4,
                                         ),
                                   ),
                                 ),
@@ -237,11 +240,14 @@ class _RatingButton extends StatelessWidget {
           foregroundColor: color,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(14),
             side: BorderSide(color: color.withValues(alpha: 0.4)),
           ),
         ),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        child: Text(
+          label,
+          style: const TextStyle(fontFamily: 'Geist', fontWeight: FontWeight.w700),
+        ),
       ),
     );
   }

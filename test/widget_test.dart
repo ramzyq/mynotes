@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/auth/services/auth_provider.dart';
@@ -10,6 +11,8 @@ import 'package:mynotes/features/auth/providers/auth_providers.dart';
 
 void main() {
   testWidgets('shows the login screen in the dark theme', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -21,8 +24,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Note Log'), findsOneWidget);
-    expect(find.text('Dark notes workspace for ideas and drafts'), findsOneWidget);
+    expect(find.text('Notely'), findsOneWidget);
     expect(find.byType(Scaffold), findsWidgets);
   });
 }

@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Notely — Notes List</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  html, body, #root { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  * { box-sizing: border-box; }
+  button { font-family: inherit; }
+  input { font-family: inherit; }
+  input::placeholder { color: currentColor; opacity: 0.45; }
+
+  /* hide scrollbars on horizontal lists */
+  ::-webkit-scrollbar { display: none; }
+
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes sheetUp {
+    from { transform: translateY(40px); opacity: 0 }
+    to   { transform: translateY(0);    opacity: 1 }
+  }
+  @keyframes toastIn {
+    from { transform: translate(-50%, 12px); opacity: 0 }
+    to   { transform: translate(-50%, 0);    opacity: 1 }
+  }
+
+  .device-wrap {
+    transform-origin: top left;
+  }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/icons.jsx"></script>
+<script type="text/babel" src="src/theme.jsx"></script>
+<script type="text/babel" src="src/variant-editorial.jsx"></script>
+<script type="text/babel" src="src/variant-warm-index.jsx"></script>
+<script type="text/babel" src="src/variant-canvas.jsx"></script>
+<script type="text/babel" src="src/sheets.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const TWEAKS_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "variant": "editorial",
+  "primaryHue": 257,
+  "density": "cozy",
+  "radius": 18,
+  "tagStyle": "pill",
+  "fabStyle": "pillLabel",
+  "dark": false
+}/*EDITMODE-END*/;
+
+// ─────────────────────────────────────────
+// Phone — mounts one variant inside iOS frame
+// ─────────────────────────────────────────
+function NotelyPhone({ tweaks, frame = true, label, initialDark }) {
+  const [dark, setDark] = React.useState(initialDark ?? tweaks.dark);
+  const [accountOpen, setAccountOpen] = React.useState(false);
+  const [composeOpen, setComposeOpen] = React.useState(false);
+  const [selectedNote, setSelectedNote] = React.useState(null);
+
+  // override brand hue based on tweak
+  const theme = React.useMemo(() => {
+    const t = makeTheme(dark);
+    if (tweaks.primaryHue !== 265) {
+      // rotate brand around chosen hue, keep chroma ~0.15 L ~0.72
+      const h = tweaks.primaryHue;
+      t.violet = `oklch(0.76 0.16 ${h})`;
+      t.violetDeep = `oklch(0.54 0.21 ${h})`;
+      t.violetInk = dark ? `oklch(0.85 0.14 ${h})` : `oklch(0.36 0.18 ${h})`;
+      t.violetSoft = dark ? `oklch(0.35 0.18 ${h} / 0.18)` : `oklch(0.76 0.16 ${h} / 0.13)`;
+      t.violetSoft2 = dark ? `oklch(0.35 0.18 ${h} / 0.26)` : `oklch(0.76 0.16 ${h} / 0.22)`;
+    }
+    return t;
+  }, [dark, tweaks.primaryHue]);
+
+  const props = {
+    theme, tweaks,
+    onOpenAccount: () => setAccountOpen(true),
+    onOpenNote: (n) => setSelectedNote(n),
+    onOpenCompose: () => setComposeOpen(true),
+  };
+
+  let content;
+  if (tweaks.variant === 'warmIndex') content = <VariantWarmIndex {...props}/>;
+  else if (tweaks.variant === 'canvas') content = <VariantCanvas {...props}/>;
+  else content = <VariantEditorial {...props}/>;
+
+  const inner = (
+    <div style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
+      {content}
+      <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)}
+                    theme={theme} onToggleDark={() => setDark(d => !d)}/>
+      <ComposeSheet open={composeOpen} onClose={() => setComposeOpen(false)} theme={theme}/>
+    </div>
+  );
+
+  if (!frame) return inner;
+
+  return (
+    <IOSDevice dark={dark}>
+      {inner}
+    </IOSDevice>
+  );
+}
+
+// ─────────────────────────────────────────
+// Canvas layout — all 3 variants side-by-side
+// ─────────────────────────────────────────
+function App() {
+  const [tweakMode, setTweakMode] = React.useState(false);
+  const [tweaks, setTweaks] = React.useState(() => {
+    try { return { ...TWEAKS_DEFAULTS, ...JSON.parse(localStorage.getItem('notely.tweaks') || '{}') }; }
+    catch { return TWEAKS_DEFAULTS; }
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('notely.tweaks', JSON.stringify(tweaks));
+  }, [tweaks]);
+
+  // Tweak host protocol
+  React.useEffect(() => {
+    const h = (e) => {
+      if (e.data?.type === '__activate_edit_mode') setTweakMode(true);
+      if (e.data?.type === '__deactivate_edit_mode') setTweakMode(false);
+    };
+    window.addEventListener('message', h);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', h);
+  }, []);
+
+  const setTweak = (k, v) => {
+    setTweaks(t => {
+      const next = { ...t, [k]: v };
+      window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [k]: v } }, '*');
+      return next;
+    });
+  };
+
+  return (
+    <>
+      <DesignCanvas>
+        {/* ────── Hero section: the main editorial design ────── */}
+        <DCSection title="Notely — Notes List"
+                   subtitle="Hi-fi, fully interactive. Purple amethyst primary, editorial serif display, tonal tag pills. Tap to pin/unpin, swipe a card left to reveal archive, tap the avatar for the account sheet.">
+          <DCArtboard label="A · Editorial — LIVE interactive" width={402} height={874}>
+            <NotelyPhone tweaks={{ ...tweaks, variant: 'editorial' }} initialDark={false}/>
+          </DCArtboard>
+
+          <DCArtboard label="Editorial · Dark mode" width={402} height={874}>
+            <NotelyPhone tweaks={{ ...tweaks, variant: 'editorial' }} initialDark={true}/>
+          </DCArtboard>
+
+          <DCPostIt top={40} left={-30} rotate={-4} width={200}>
+            Tap any pin icon. Swipe a card left. Tap the avatar →
+          </DCPostIt>
+        </DCSection>
+
+        {/* ────── Variant B ────── */}
+        <DCSection title="Variant B — Warm Index"
+                   subtitle="Denser layout with colored accent bars, a pinned carousel up top, and a floating composer bar as the FAB. Leans toward info-density and familiarity.">
+          <DCArtboard label="B · Warm Index — LIVE" width={402} height={874}>
+            <NotelyPhone tweaks={{ ...tweaks, variant: 'warmIndex' }} initialDark={false}/>
+          </DCArtboard>
+          <DCArtboard label="B · Dark" width={402} height={874}>
+            <NotelyPhone tweaks={{ ...tweaks, variant: 'warmIndex' }} initialDark={true}/>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ────── Variant C ────── */}
+        <DCSection title="Variant C — Canvas"
+                   subtitle="Masonry grid of cover cards with colored tag headers. Horizontal tag filter. FAB is a corner-docked violet orb with a soft aura. Feels like a shelf of little papers.">
+          <DCArtboard label="C · Canvas — LIVE" width={402} height={874}>
+            <NotelyPhone tweaks={{ ...tweaks, variant: 'canvas' }} initialDark={false}/>
+          </DCArtboard>
+          <DCArtboard label="C · Dark" width={402} height={874}>
+            <NotelyPhone tweaks={{ ...tweaks, variant: 'canvas' }} initialDark={true}/>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ────── System notes ────── */}
+        <DCSection title="System notes"
+                   subtitle="Color, type, and tag tokens. Purple amethyst (#A78BFA) primary, deepened to #7C5CF5 for pressed states.">
+          <DCArtboard label="Tokens & components" width={540} height={560}>
+            <SystemSheet/>
+          </DCArtboard>
+          <DCArtboard label="Account sheet + Compose" width={402} height={500}>
+            <SheetDemos/>
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      {tweakMode && (
+        <TweaksPanel tweaks={tweaks} setTweak={setTweak}/>
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────
+// System sheet
+// ─────────────────────────────────────────
+function SystemSheet() {
+  const theme = makeTheme(false);
+  return (
+    <div style={{
+      background: '#fff', height: '100%', padding: 28,
+      fontFamily: FONT_STACK, color: '#1B1427', overflow: 'auto',
+    }}>
+      <div style={{
+        fontFamily: FONT_DISPLAY, fontSize: 28, letterSpacing: -0.7,
+      }}>Notely<span style={{color: '#A78BFA', fontStyle: 'italic'}}>.</span> system</div>
+
+      <div style={{ marginTop: 18, fontSize: 11, letterSpacing: 0.6, color: '#888', textTransform: 'uppercase', fontWeight: 600 }}>Brand</div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        {[
+          ['#C4A7FF','violet/300'],
+          ['#A78BFA','violet/400 (primary)'],
+          ['#7C5CF5','violet/600'],
+          ['#4C1D95','violet/ink'],
+          ['#1B1427','ink'],
+          ['#FAF8F5','bg'],
+        ].map(([c,l]) => (
+          <div key={c} style={{ flex: 1 }}>
+            <div style={{ height: 52, borderRadius: 8, background: c, border: '1px solid rgba(0,0,0,0.05)' }}/>
+            <div style={{ fontSize: 10.5, color: '#666', marginTop: 4 }}>{l}</div>
+            <div style={{ fontSize: 10, fontFamily: FONT_MONO, color: '#999' }}>{c}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 20, fontSize: 11, letterSpacing: 0.6, color: '#888', textTransform: 'uppercase', fontWeight: 600 }}>Tag taxonomy</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+        {Object.keys(window.NOTELY_TAGS).map(t => <TagPill key={t} name={t} theme={theme}/>)}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
+        {Object.keys(window.NOTELY_TAGS).map(t => <TagPill key={t} name={t} theme={theme} style="dot"/>)}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+        {Object.keys(window.NOTELY_TAGS).map(t => <TagPill key={t} name={t} theme={theme} outlined/>)}
+      </div>
+
+      <div style={{ marginTop: 20, fontSize: 11, letterSpacing: 0.6, color: '#888', textTransform: 'uppercase', fontWeight: 600 }}>Type pairing</div>
+      <div style={{ marginTop: 6 }}>
+        <div style={{ fontFamily: FONT_DISPLAY, fontSize: 34, letterSpacing: -0.9, lineHeight: 1.05 }}>
+          Instrument Serif · 34/36
+        </div>
+        <div style={{ fontSize: 10, color: '#888', fontFamily: FONT_MONO }}>Display: titles, empty states</div>
+        <div style={{ fontSize: 18, fontWeight: 600, letterSpacing: -0.3, marginTop: 10 }}>Geist 600 · 18</div>
+        <div style={{ fontSize: 14, letterSpacing: -0.2, marginTop: 4 }}>Geist 400 · 14 — body copy, previews</div>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 11, marginTop: 4 }}>JetBrains Mono · 11 — metadata, shortcuts</div>
+      </div>
+
+      <div style={{ marginTop: 20, fontSize: 11, letterSpacing: 0.6, color: '#888', textTransform: 'uppercase', fontWeight: 600 }}>FAB options</div>
+      <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center' }}>
+        <div style={{
+          background: 'linear-gradient(135deg,#A78BFA,#7C5CF5)', color: '#fff',
+          borderRadius: 999, padding: '10px 18px', display: 'inline-flex', alignItems: 'center',
+          gap: 6, fontSize: 13, fontWeight: 600,
+          boxShadow: '0 8px 20px rgba(124,92,245,0.32)',
+        }}>
+          <IconPlus size={14} strokeWidth={2.6}/> New note
+        </div>
+        <div style={{
+          width: 44, height: 44, borderRadius: 22, color: '#fff',
+          background: 'radial-gradient(circle at 30% 25%, #D7C6FF, #7C5CF5 75%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 0 0 5px rgba(167,139,250,0.12), 0 10px 20px rgba(124,92,245,0.4)',
+        }}><IconPlus size={20} strokeWidth={2.4}/></div>
+        <div style={{
+          background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(14px)',
+          border: '1px solid rgba(28,20,40,0.08)', borderRadius: 16, padding: 5,
+          display: 'flex', gap: 5,
+        }}>
+          <div style={{
+            padding: '8px 12px', borderRadius: 12, background: 'linear-gradient(135deg,#A78BFA,#7C5CF5)',
+            color: '#fff', fontSize: 12.5, fontWeight: 600, display: 'inline-flex', gap: 5,
+          }}><IconPlus size={14} strokeWidth={2.6}/>New</div>
+          <div style={{
+            width: 30, height: 30, borderRadius: 10, background: 'rgba(28,20,40,0.04)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#444',
+          }}><IconMic size={14}/></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SheetDemos() {
+  const theme = makeTheme(false);
+  return (
+    <div style={{ height: '100%', background: theme.surface2, padding: 22, position: 'relative',
+      fontFamily: FONT_STACK, overflow: 'hidden' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase',
+                    color: theme.text3, marginBottom: 12 }}>Sheets</div>
+      <div style={{ position: 'relative', borderRadius: 16, overflow: 'hidden',
+                    background: theme.surface, border: `1px solid ${theme.border}`,
+                    height: 420 }}>
+        <AccountSheet open={true} onClose={() => {}} theme={theme} onToggleDark={() => {}}/>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+// Tweaks panel
+// ─────────────────────────────────────────
+function TweaksPanel({ tweaks, setTweak }) {
+  const theme = makeTheme(false);
+  return (
+    <div style={{
+      position: 'fixed', bottom: 16, right: 16, zIndex: 1000,
+      width: 280, background: '#fff', border: '1px solid rgba(0,0,0,0.08)',
+      borderRadius: 16, padding: 14,
+      boxShadow: '0 20px 50px rgba(20,10,40,0.18), 0 4px 12px rgba(20,10,40,0.08)',
+      fontFamily: FONT_STACK,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 10,
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Tweaks</div>
+        <div style={{
+          fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+          background: 'rgba(167,139,250,0.14)', color: '#5B21B6',
+          letterSpacing: 0.4, textTransform: 'uppercase',
+        }}>live</div>
+      </div>
+
+      <TweakGroup label="Primary hue">
+        <input type="range" min="240" max="320" step="1"
+               value={tweaks.primaryHue}
+               onChange={(e) => setTweak('primaryHue', +e.target.value)}
+               style={{ width: '100%' }}/>
+        <div style={{ fontSize: 10.5, color: '#888', fontFamily: FONT_MONO }}>oklch(0.76 0.16 {tweaks.primaryHue})</div>
+      </TweakGroup>
+
+      <TweakGroup label="Density">
+        <ChipGroup value={tweaks.density} onChange={(v) => setTweak('density', v)}
+                   options={[['compact','Compact'],['cozy','Cozy'],['airy','Airy']]}/>
+      </TweakGroup>
+
+      <TweakGroup label="Radius">
+        <input type="range" min="6" max="26" step="1"
+               value={tweaks.radius} onChange={(e) => setTweak('radius', +e.target.value)}
+               style={{ width: '100%' }}/>
+        <div style={{ fontSize: 10.5, color: '#888' }}>{tweaks.radius}px</div>
+      </TweakGroup>
+
+      <TweakGroup label="Tag style">
+        <ChipGroup value={tweaks.tagStyle} onChange={(v) => setTweak('tagStyle', v)}
+                   options={[['pill','Pill'],['dot','Dot'],['outlined','Outlined']]}/>
+      </TweakGroup>
+
+      <TweakGroup label="FAB style (variant A)">
+        <ChipGroup value={tweaks.fabStyle} onChange={(v) => setTweak('fabStyle', v)}
+                   options={[['pillLabel','Pill'],['bottomBar','Bar'],['orb','Orb']]}/>
+      </TweakGroup>
+    </div>
+  );
+}
+
+function TweakGroup({ label, children }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 500, color: '#555', marginBottom: 5,
+                    letterSpacing: 0.1, textTransform: 'uppercase' }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function ChipGroup({ value, onChange, options }) {
+  return (
+    <div style={{ display: 'flex', gap: 4, background: '#F3F0EB', borderRadius: 8, padding: 3 }}>
+      {options.map(([v, l]) => {
+        const active = value === v;
+        return (
+          <button key={v} onClick={() => onChange(v)} style={{
+            all: 'unset', cursor: 'pointer', flex: 1, textAlign: 'center',
+            padding: '5px 8px', borderRadius: 6,
+            fontSize: 11.5, fontWeight: 500,
+            background: active ? '#fff' : 'transparent',
+            color: active ? '#1B1427' : '#666',
+            boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+          }}>{l}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
