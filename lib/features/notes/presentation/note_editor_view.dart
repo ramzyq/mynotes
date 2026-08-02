@@ -553,108 +553,14 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
     allTags.addAll(_tags);
 
-    final controller = TextEditingController();
-    final selected = List<String>.of(_tags);
-
     final result = await showModalBottomSheet<List<String>>(
       context: context,
-      builder: (context) {
-        final notely = NotelyTheme.of(context);
-        return NotelySheet(
-          child: StatefulBuilder(
-            builder: (context, setDialogState) {
-              void addNewTag() {
-                final tag = controller.text.trim();
-                if (tag.isEmpty) return;
-                setDialogState(() {
-                  if (!selected.contains(tag)) selected.add(tag);
-                  allTags.add(tag);
-                  controller.clear();
-                });
-              }
-
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Tags',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: controller,
-                          onSubmitted: (_) => addNewTag(),
-                          decoration: const InputDecoration(
-                            hintText: 'New tag name',
-                            prefixIcon: Icon(Icons.add),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: addNewTag,
-                        icon: const Icon(Icons.add_circle_outline),
-                        tooltip: 'Add tag',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  if (allTags.isEmpty)
-                    Text(
-                      'No tags yet. Create one above.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: notely.text3),
-                    )
-                  else
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: allTags.map((tag) {
-                        return FilterChip(
-                          label: Text(tag),
-                          selected: selected.contains(tag),
-                          onSelected: (isSelected) {
-                            setDialogState(() {
-                              if (isSelected) {
-                                if (!selected.contains(tag)) selected.add(tag);
-                              } else {
-                                selected.remove(tag);
-                              }
-                            });
-                          },
-                        );
-                      }).toList(),
-                    ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () => Navigator.of(context).pop(selected),
-                      child: const Text('Save'),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
+      isScrollControlled: true,
+      builder: (context) => _TagsSheet(
+        allTags: allTags,
+        initialSelected: List<String>.of(_tags),
+      ),
     );
-
-    controller.dispose();
 
     if (result != null && mounted) {
       setState(() => _tags = result);
@@ -710,7 +616,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       ),
     );
 
-    emailController.dispose();
     if (result == true && mounted) {
       setState(() {});
     }
@@ -1409,6 +1314,125 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     if (difference.inMinutes < 60) return '${difference.inMinutes}m';
     if (difference.inHours < 24) return '${difference.inHours}h';
     return '${time.month}/${time.day}/${time.year}';
+  }
+}
+
+class _TagsSheet extends StatefulWidget {
+  final Set<String> allTags;
+  final List<String> initialSelected;
+
+  const _TagsSheet({
+    required this.allTags,
+    required this.initialSelected,
+  });
+
+  @override
+  State<_TagsSheet> createState() => _TagsSheetState();
+}
+
+class _TagsSheetState extends State<_TagsSheet> {
+  late final TextEditingController _controller = TextEditingController();
+  late final Set<String> _allTags = Set<String>.of(widget.allTags);
+  late final List<String> _selected = List<String>.of(widget.initialSelected);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _addNewTag() {
+    final tag = _controller.text.trim();
+    if (tag.isEmpty) return;
+    setState(() {
+      if (!_selected.contains(tag)) _selected.add(tag);
+      _allTags.add(tag);
+      _controller.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    return NotelySheet(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Tags',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    onSubmitted: (_) => _addNewTag(),
+                    decoration: const InputDecoration(
+                      hintText: 'New tag name',
+                      prefixIcon: Icon(Icons.add),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _addNewTag,
+                  icon: const Icon(Icons.add_circle_outline),
+                  tooltip: 'Add tag',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_allTags.isEmpty)
+              Text(
+                'No tags yet. Create one above.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: notely.text3),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _allTags.map((tag) {
+                  return FilterChip(
+                    label: Text(tag),
+                    selected: _selected.contains(tag),
+                    onSelected: (isSelected) {
+                      setState(() {
+                        if (isSelected) {
+                          if (!_selected.contains(tag)) _selected.add(tag);
+                        } else {
+                          _selected.remove(tag);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(_selected),
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
