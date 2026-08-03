@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
@@ -425,9 +426,15 @@ class NotesService {
       final encryptedKeyStr = note.encryptedKeys![uid];
       if (encryptedKeyStr != null) {
         try {
+          final ownerDoc = await firestore
+              .collection('users')
+              .doc(ownerUid)
+              .get();
+          final ownerPublicKeyB64 = ownerDoc.data()?['publicKey'] as String?;
+          if (ownerPublicKeyB64 == null) return note;
           final noteKey = await keyManager.unwrapCollaboratorNoteKey(
             encryptedKeyStr: encryptedKeyStr,
-            ownerUid: ownerUid,
+            ownerPublicKey: base64Decode(ownerPublicKeyB64),
           );
           return note.decryptNote(noteKey, crypto);
         } catch (_) {

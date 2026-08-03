@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/key_manager.dart';
@@ -74,12 +75,21 @@ class ShareService {
         (data['encryptionVersion'] as int?) ?? note.encryptionVersion;
     final storedWrappedKey = data['wrappedKey'] ?? note.wrappedKey;
 
+    final recipientDoc = await firestore
+        .collection('users')
+        .doc(collaboratorUid)
+        .get();
+    final recipientPublicKeyB64 = recipientDoc.data()?['publicKey'] as String?;
+    if (recipientPublicKeyB64 == null) {
+      throw Exception('Recipient has not set up sharing yet; ask them to open the app once.');
+    }
+
     if (storedEncryptionVersion >= 1 && storedWrappedKey != null) {
       final noteKey = await keyManager
           .unwrapNoteKey((storedWrappedKey as Map).cast<String, String>());
       final encryptedKey = await keyManager.wrapNoteKeyForCollaborator(
         noteKey: noteKey,
-        collaboratorUid: collaboratorUid,
+        recipientPublicKey: base64Decode(recipientPublicKeyB64),
       );
       currentEncryptedKeys[collaboratorUid] = encryptedKey;
     }
