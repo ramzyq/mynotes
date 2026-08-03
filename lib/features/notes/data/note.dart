@@ -310,11 +310,15 @@ class Note {
   }
 
   static EncryptedPayload _parsePayload(Uint8List combined) {
-    final ciphertextLen = combined.length - 24;
+    final nonceLength = 12;
+    final macLength = 16;
     return EncryptedPayload(
-      ciphertext: combined.sublist(0, ciphertextLen),
-      nonce: combined.sublist(ciphertextLen, ciphertextLen + 12),
-      mac: combined.sublist(ciphertextLen + 12),
+      ciphertext: combined.sublist(0, combined.length - nonceLength - macLength),
+      nonce: combined.sublist(
+        combined.length - nonceLength - macLength,
+        combined.length - macLength,
+      ),
+      mac: combined.sublist(combined.length - macLength),
     );
   }
 

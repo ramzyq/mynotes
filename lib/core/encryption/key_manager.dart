@@ -48,10 +48,23 @@ class KeyManager {
     return _cachedMasterKey;
   }
 
+  /// Load an existing Master Key, or generate and persist one on first use.
+  Future<SecretKey> ensureMasterKey() async {
+    final existing = await loadMasterKey();
+    if (existing != null) return existing;
+
+    final bytes = Uint8List.fromList(
+      List.generate(32, (_) => dart_math.Random.secure().nextInt(256)),
+    );
+    final masterKey = SecretKey(bytes);
+    await _storage.write(key: _masterKeyKey, value: base64Encode(bytes));
+    _cachedMasterKey = masterKey;
+    return masterKey;
+  }
+
   /// Generate a new random Note Key and wrap it with the Master Key.
   Future<Map<String, String>> createNoteKey(String noteId) async {
-    final masterKey = await loadMasterKey();
-    if (masterKey == null) throw Exception('Master Key not initialized');
+    final masterKey = await ensureMasterKey();
 
     // Generate random Note Key
     final noteKey = SecretKey(Uint8List.fromList(
@@ -72,22 +85,30 @@ class KeyManager {
 
   /// Unwrap a Note Key using the Master Key.
   Future<SecretKey> unwrapNoteKey(Map<String, String> wrappedKeyData) async {
-    final masterKey = await loadMasterKey();
-    if (masterKey == null) throw Exception('Master Key not initialized');
+    final masterKey = await ensureMasterKey();
 
     // Find latest version
     final wrappedKeyStr = wrappedKeyData['$_keyVersion'];
     if (wrappedKeyStr == null) throw Exception('No key version $_keyVersion');
 
     final combined = base64Decode(wrappedKeyStr);
-    final payload = EncryptedPayload(
-      ciphertext: combined.sublist(0, combined.length - 24),
-      nonce: combined.sublist(combined.length - 24, combined.length - 12),
-      mac: combined.sublist(combined.length - 12),
-    );
+    final payload = _splitPayload(combined);
 
     final noteKeyStr = await _crypto.decrypt(key: masterKey, payload: payload);
     return SecretKey(base64Decode(noteKeyStr));
+  }
+
+  static EncryptedPayload _splitPayload(Uint8List combined) {
+    final nonceLength = 12;
+    final macLength = 16;
+    return EncryptedPayload(
+      ciphertext: combined.sublist(0, combined.length - nonceLength - macLength),
+      nonce: combined.sublist(
+        combined.length - nonceLength - macLength,
+        combined.length - macLength,
+      ),
+      mac: combined.sublist(combined.length - macLength),
+    );
   }
 
   /// Clear Master Key from memory (on app background).
@@ -122,19 +143,14 @@ class KeyManager {
   }) async {
     final sharingKey = await deriveSharingKey(ownerUid);
     final combined = base64Decode(encryptedKeyStr);
-    final payload = EncryptedPayload(
-      ciphertext: combined.sublist(0, combined.length - 24),
-      nonce: combined.sublist(combined.length - 24, combined.length - 12),
-      mac: combined.sublist(combined.length - 12),
-    );
+    final payload = _splitPayload(combined);
     final noteKeyStr = await _crypto.decrypt(key: sharingKey, payload: payload);
     return SecretKey(base64Decode(noteKeyStr));
   }
 
   /// Derive a deterministic key for sharing with a specific collaborator.
   Future<SecretKey> deriveSharingKey(String collaboratorUid) async {
-    final masterKey = await loadMasterKey();
-    if (masterKey == null) throw Exception('Master Key not initialized');
+    final masterKey = await ensureMasterKey();
     final masterBytes = await masterKey.extractBytes();
     final combined = [...masterBytes, ...utf8.encode(collaboratorUid)];
     final hash = await _sha256.hash(combined);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/auth/presentation/register_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
@@ -102,6 +103,8 @@ class _LoginViewState extends ConsumerState<LoginView> {
         password: password,
       );
       if (!mounted) return;
+      await _ensureMasterKey(password);
+      if (!mounted) return;
       // If email is not verified, navigate to verification screen
       if (!user.isEmailVerified) {
         Navigator.of(context).push(
@@ -134,6 +137,19 @@ class _LoginViewState extends ConsumerState<LoginView> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// Derive and persist the Master Key from the password on first login.
+  /// Failures are ignored: KeyManager lazily ensures a key on first use.
+  Future<void> _ensureMasterKey(String password) async {
+    try {
+      final keyManager = ref.read(keyManagerProvider);
+      if (!await keyManager.hasMasterKey()) {
+        await keyManager.initializeMasterKey(password);
+      }
+    } catch (_) {
+      // Non-critical: KeyManager.ensureMasterKey() covers this path.
     }
   }
 

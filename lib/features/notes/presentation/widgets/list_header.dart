@@ -78,7 +78,7 @@ class ListHeader extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              '$noteCount notes · synced to Firestore',
+              '$noteCount notes · synced',
               style: TextStyle(fontSize: 13, color: notely.text3, letterSpacing: -0.1),
             ),
           ],

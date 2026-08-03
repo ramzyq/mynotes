@@ -9,7 +9,7 @@ Widget _wrap(Widget child) => MaterialApp(theme: buildNotelyTheme(Brightness.lig
 void main() {
   testWidgets('HomeFab renders label', (tester) async {
     await tester.pumpWidget(_wrap(const HomeFab(onPressed: null)));
-    expect(find.text('New note'), findsOneWidget);
+    expect(find.text('Start writing'), findsOneWidget);
   });
 
   testWidgets('EmptyState shows subtitle for no query', (tester) async {
