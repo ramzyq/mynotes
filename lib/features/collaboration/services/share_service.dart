@@ -23,9 +23,11 @@ class ShareService {
     required String email,
     String? displayName,
   }) async {
+    final publicKey = await keyManager.getMyPublicKey();
     await firestore.collection('users').doc(uid).set({
       'email': email.toLowerCase(),
       'displayName': displayName ?? '',
+      'publicKey': base64Encode(publicKey),
     }, SetOptions(merge: true));
   }
 
