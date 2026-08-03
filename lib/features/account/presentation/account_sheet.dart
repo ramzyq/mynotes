@@ -79,6 +79,7 @@ class AccountSheet extends ConsumerWidget {
             ]),
           ),
           const SizedBox(height: 14),
+          _JoinRequestsSection(uid: _uid(ref)),
           _SheetRow(
             icon: Icons.brightness_6_outlined,
             label: 'Appearance',
@@ -199,6 +200,87 @@ class _SheetRow extends StatelessWidget {
           Icon(Icons.chevron_right, size: 14, color: notely.text4),
         ]),
       ),
+    );
+  }
+}
+
+class _JoinRequestsSection extends ConsumerWidget {
+  final String uid;
+  const _JoinRequestsSection({required this.uid});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notely = NotelyTheme.of(context);
+    final requests = ref.watch(ownerJoinRequestsProvider(uid)).valueOrNull ?? const [];
+    if (requests.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            'Join requests',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: notely.text3,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ),
+        ...requests.map(
+          (request) => Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: notely.surface2,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${request.recipientName.isEmpty ? request.recipientEmail : request.recipientName} wants to join',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '"${request.noteTitle}"',
+                  style: TextStyle(fontSize: 12, color: notely.text3),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () async {
+                        await ref.read(shareServiceProvider).approveJoinRequest(
+                              ownerUid: uid,
+                              token: request.token,
+                              recipientUid: request.recipientUid,
+                            );
+                      },
+                      child: const Text('Approve'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        await ref.read(shareServiceProvider).denyJoinRequest(
+                              token: request.token,
+                              recipientUid: request.recipientUid,
+                            );
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                      ),
+                      child: const Text('Deny'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+      ],
     );
   }
 }
