@@ -70,4 +70,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Archive'), findsOneWidget);
   });
+
+  testWidgets('shows location pin and place name when present', (tester) async {
+    await tester.pumpWidget(_wrap(NoteCard(
+      note: _note().copyWith(latitude: 30.0, longitude: 31.2, placeName: 'Downtown Cairo'),
+      selectMode: false,
+      selected: false,
+      onSelect: () {},
+      onPin: () {},
+      onArchive: () {},
+      onOpen: () {},
+      onTagTap: (_) {},
+      relativeTime: '1 h',
+    )));
+    expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
+    expect(find.text('Downtown Cairo'), findsOneWidget);
+  });
+
+  testWidgets('shows location pin only when coords exist without a name', (tester) async {
+    await tester.pumpWidget(_wrap(NoteCard(
+      note: _note().copyWith(latitude: 30.0, longitude: 31.2),
+      selectMode: false,
+      selected: false,
+      onSelect: () {},
+      onPin: () {},
+      onArchive: () {},
+      onOpen: () {},
+      onTagTap: (_) {},
+      relativeTime: '1 h',
+    )));
+    expect(find.byIcon(Icons.location_on_outlined), findsOneWidget);
+  });
+
+  testWidgets('hides location row when note has no coords', (tester) async {
+    await tester.pumpWidget(_wrap(NoteCard(
+      note: _note(),
+      selectMode: false,
+      selected: false,
+      onSelect: () {},
+      onPin: () {},
+      onArchive: () {},
+      onOpen: () {},
+      onTagTap: (_) {},
+      relativeTime: '1 h',
+    )));
+    expect(find.byIcon(Icons.location_on_outlined), findsNothing);
+  });
 }

@@ -73,6 +73,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _audioAttachments = note?.audioAttachments ?? [];
     _latitude = note?.latitude;
     _longitude = note?.longitude;
+    _placeName = note?.placeName;
     _collaborators = note?.collaborators ?? [];
     _tags = note?.tags ?? [];
 
@@ -370,6 +371,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           audioAttachments: _audioAttachments,
           latitude: _latitude,
           longitude: _longitude,
+          placeName: _placeName,
           tags: _tags,
           selfDestructAt: _selfDestructAt,
           selfDestructOnRead: _selfDestructOnRead,
@@ -392,6 +394,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             audioAttachments: _audioAttachments,
             latitude: _latitude,
             longitude: _longitude,
+            placeName: _placeName,
             tags: _tags,
           ),
         );

@@ -27,6 +27,7 @@ class Note {
   final List<String> audioAttachments;
   final double? latitude;
   final double? longitude;
+  final String? placeName;
   final List<String>? links;
   final bool isStudyMaterial;
   final DateTime? studyDueAt;
@@ -60,6 +61,7 @@ class Note {
     this.audioAttachments = const [],
     this.latitude,
     this.longitude,
+    this.placeName,
     this.links,
     this.isStudyMaterial = false,
     this.studyDueAt,
@@ -95,6 +97,7 @@ class Note {
             const [],
         latitude: (data['latitude'] as num?)?.toDouble(),
         longitude: (data['longitude'] as num?)?.toDouble(),
+        placeName: data['placeName'] as String?,
         links: (data['links'] as List<dynamic>?)?.cast<String>(),
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
@@ -142,6 +145,7 @@ class Note {
             const [],
         latitude: (data['latitude'] as num?)?.toDouble(),
         longitude: (data['longitude'] as num?)?.toDouble(),
+        placeName: data['placeName'] as String?,
         links: (data['links'] as List<dynamic>?)?.cast<String>(),
         createdAt: _timestampToDateTime(data['createdAt']) ?? DateTime.now(),
         updatedAt: _timestampToDateTime(data['updatedAt']) ?? DateTime.now(),
@@ -194,6 +198,7 @@ class Note {
     List<String>? audioAttachments,
     Object? latitude = _ignore,
     Object? longitude = _ignore,
+    Object? placeName = _ignore,
     Object? links = _ignore,
     bool? isStudyMaterial,
     Object? studyDueAt = _ignore,
@@ -227,6 +232,7 @@ class Note {
       audioAttachments: audioAttachments ?? this.audioAttachments,
       latitude: latitude == _ignore ? this.latitude : latitude as double?,
       longitude: longitude == _ignore ? this.longitude : longitude as double?,
+      placeName: placeName == _ignore ? this.placeName : placeName as String?,
       links: links == _ignore ? this.links : links as List<String>?,
       isStudyMaterial: isStudyMaterial ?? this.isStudyMaterial,
       studyDueAt: studyDueAt == _ignore ? this.studyDueAt : studyDueAt as DateTime?,
@@ -258,6 +264,7 @@ class Note {
       'audioAttachments': audioAttachments,
       'latitude': latitude,
       'longitude': longitude,
+      'placeName': placeName,
       'links': links,
       'isStudyMaterial': isStudyMaterial,
       'studyDueAt': studyDueAt != null ? Timestamp.fromDate(studyDueAt as DateTime) : null,
