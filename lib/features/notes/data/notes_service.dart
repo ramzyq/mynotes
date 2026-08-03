@@ -4,6 +4,7 @@ import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/key_manager.dart';
 import 'package:mynotes/features/notes/data/comment.dart';
 import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/moderation/models/content_report.dart';
 
 class NotesService {
   final FirebaseFirestore firestore;
@@ -269,7 +270,9 @@ class NotesService {
     final snapshot = await _notesCollection(uid)
         .where('selfDestructAt', isLessThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
         .get();
-    debugPrint('DELETE_EXPIRED: uid=$uid found=${snapshot.docs.length}');
+    if (kDebugMode) {
+      debugPrint('DELETE_EXPIRED: uid=$uid found=${snapshot.docs.length}');
+    }
     for (final doc in snapshot.docs) {
       await doc.reference.delete();
     }
@@ -483,5 +486,24 @@ class NotesService {
       throw Exception('Only the author can delete this comment');
     }
     await doc.delete();
+  }
+
+  Future<void> reportComment({
+    required String noteOwnerId,
+    required String noteId,
+    required String commentId,
+    required String commentAuthorUid,
+    required String reporterUid,
+    required String reason,
+  }) async {
+    final doc = firestore.collection('reports').doc();
+    await doc.set(ContentReport.create(
+      targetOwnerUid: noteOwnerId,
+      noteId: noteId,
+      commentId: commentId,
+      commentAuthorUid: commentAuthorUid,
+      reporterUid: reporterUid,
+      reason: reason,
+    ).toMap());
   }
 }

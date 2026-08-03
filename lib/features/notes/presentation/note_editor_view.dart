@@ -14,6 +14,7 @@ import 'package:mynotes/core/theme/widgets/tag_pill.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
 
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
+import 'package:mynotes/features/notes/data/comment.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/presentation/version_history_view.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
@@ -671,6 +672,62 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     } catch (_) {}
   }
 
+  static const List<String> _reportReasons = [
+    'Spam or misleading',
+    'Harassment',
+    'Hate speech',
+    'Inappropriate content',
+    'Something else',
+  ];
+
+  Future<void> _reportComment(Comment comment) async {
+    final note = widget.note;
+    if (note == null) return;
+
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Report comment'),
+        children: [
+          for (final option in _reportReasons)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(option),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(option),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (reason == null || !mounted) return;
+
+    try {
+      await ref.read(notesServiceProvider).reportComment(
+            noteOwnerId: note.sharedBy ?? widget.authUser.uid,
+            noteId: note.id,
+            commentId: comment.id,
+            commentAuthorUid: comment.authorUid,
+            reporterUid: widget.authUser.uid,
+            reason: reason,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Report submitted. Thank you for helping keep Notely safe.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not submit the report. Please try again.'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final note = widget.note;
@@ -1320,6 +1377,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                                   color: notely.text4,
                                                 ),
                                           ),
+                                          if (comment.authorUid != widget.authUser.uid)
+                                            IconButton(
+                                              icon: Icon(Icons.flag_outlined, size: 16, color: notely.text4),
+                                              visualDensity: VisualDensity.compact,
+                                              tooltip: 'Report comment',
+                                              onPressed: () => _reportComment(comment),
+                                            ),
                                           if (comment.authorUid == widget.authUser.uid)
                                             IconButton(
                                               icon: Icon(Icons.delete_outline, size: 16, color: notely.text4),
