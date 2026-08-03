@@ -61,6 +61,7 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   shared_preferences: ^2.3.0
   liquid_glass_widgets: ^0.29.0
+  app_links: ^7.0.0
 
 dev_dependencies:
   flutter_test:
