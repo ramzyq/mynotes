@@ -45,7 +45,17 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Mynotes uses the camera to scan and extract text from documents and photos.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Mynotes uses the microphone to record voice notes and transcribe them to text.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Mynotes uses your photo library to select images and extract text from them.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Mynotes uses Face ID to unlock notes you have locked.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Mynotes uses your location to tag notes with place names.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Mynotes uses speech recognition to transcribe your voice notes into text.</string>
 </dict>
 </plist>
