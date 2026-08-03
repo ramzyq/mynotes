@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
+import 'package:mynotes/features/collaboration/models/join_request.dart';
 import 'package:mynotes/features/collaboration/services/share_service.dart';
 import 'package:mynotes/features/notes/data/comment.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -21,6 +22,11 @@ final shareServiceProvider = Provider<ShareService>((ref) {
     keyManager: ref.watch(keyManagerProvider),
     crypto: ref.watch(cryptoServiceProvider),
   );
+});
+
+final ownerJoinRequestsProvider =
+    StreamProvider.family<List<JoinRequest>, String>((ref, ownerUid) {
+  return ref.watch(shareServiceProvider).watchOwnerJoinRequests(ownerUid);
 });
 
 final notesProvider = StreamProvider.family<List<Note>, String>((ref, uid) {

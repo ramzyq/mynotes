@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:mynotes/core/config/app_config.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/key_manager.dart';
+import 'package:mynotes/features/collaboration/models/join_request.dart';
 import 'package:mynotes/features/collaboration/models/share_link.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/data/notes_service.dart';
@@ -284,5 +285,110 @@ class ShareService {
     }
 
     return JoinResult(plan.status, noteTitle: noteTitle);
+  }
+
+  Stream<List<JoinRequest>> watchOwnerJoinRequests(String ownerUid) {
+    return firestore
+        .collectionGroup('requests')
+        .where('ownerUid', isEqualTo: ownerUid)
+        .where('status', whereIn: ['pending', 'approved'])
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => JoinRequest.fromDoc(doc))
+            .toList());
+  }
+
+  Future<void> approveJoinRequest({
+    required String ownerUid,
+    required String token,
+    required String recipientUid,
+  }) async {
+    await firestore
+        .collection('shareLinks')
+        .doc(token)
+        .collection('requests')
+        .doc(recipientUid)
+        .update({'status': 'approved'});
+    await completeShareForRequest(
+      ownerUid: ownerUid,
+      token: token,
+      recipientUid: recipientUid,
+    );
+  }
+
+  Future<void> denyJoinRequest({
+    required String token,
+    required String recipientUid,
+  }) async {
+    await firestore
+        .collection('shareLinks')
+        .doc(token)
+        .collection('requests')
+        .doc(recipientUid)
+        .delete();
+  }
+
+  Future<void> completeShareForRequest({
+    required String ownerUid,
+    required String token,
+    required String recipientUid,
+  }) async {
+    final linkRef = firestore.collection('shareLinks').doc(token);
+    final requestRef = linkRef.collection('requests').doc(recipientUid);
+
+    final linkDoc = await linkRef.get();
+    if (!linkDoc.exists) {
+      await requestRef.delete();
+      return;
+    }
+
+    final requestDoc = await requestRef.get();
+    if (!requestDoc.exists) return;
+    if (requestDoc.data()?['status'] == 'shared') return;
+    final requestData = requestDoc.data()!;
+
+    final recipientPublicKeyB64 =
+        requestData['recipientPublicKey'] as String?;
+    if (recipientPublicKeyB64 == null) return;
+
+    final noteId = requestData['noteId'] as String?;
+    if (noteId == null) return;
+
+    final noteRef = firestore
+        .collection('users')
+        .doc(ownerUid)
+        .collection('notes')
+        .doc(noteId);
+    final noteDoc = await noteRef.get();
+    final data = noteDoc.data();
+    if (data == null) return;
+
+    final storedEncryptionVersion = (data['encryptionVersion'] as int?) ?? 0;
+    final storedWrappedKey = data['wrappedKey'];
+
+    final collaborators = List<String>.from(data['collaborators'] ?? []);
+    final encryptedKeys = Map<String, String>.from(data['encryptedKeys'] ?? {});
+
+    if (storedEncryptionVersion >= 1 && storedWrappedKey != null) {
+      final noteKey = await keyManager
+          .unwrapNoteKey((storedWrappedKey as Map).cast<String, String>());
+      encryptedKeys[recipientUid] = await keyManager
+          .wrapNoteKeyForCollaborator(
+            noteKey: noteKey,
+            recipientPublicKey: base64Decode(recipientPublicKeyB64),
+          );
+    }
+
+    if (!collaborators.contains(recipientUid)) {
+      collaborators.add(recipientUid);
+    }
+
+    await noteRef.update({
+      'collaborators': collaborators,
+      'encryptedKeys': encryptedKeys,
+      'sharedBy': ownerUid,
+      'sharedAt': Timestamp.fromDate(DateTime.now()),
+    });
+    await requestRef.update({'status': 'shared'});
   }
 }
