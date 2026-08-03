@@ -33,11 +33,11 @@ class ListHeader extends StatelessWidget {
             const NotelyWordmark(size: 17),
             Row(
               children: [
-                GlassIconButton(
+                IconButton(
                   icon: Icon(selectMode ? Icons.close : Icons.check),
                   onPressed: onToggleSelect,
-                  size: 34,
-                  iconSize: 18,
+                  iconSize: 20,
+                  visualDensity: VisualDensity.compact,
                 ),
                 const SizedBox(width: 8),
                 InkWell(

@@ -44,11 +44,11 @@ class _LockScreenState extends ConsumerState<LockScreen> {
       child: Scaffold(
         appBar: GlassAppBar(
           centerTitle: false,
-          leading: GlassIconButton(
+          leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.of(context).pop(),
-            size: 34,
-            iconSize: 17,
+            iconSize: 20,
+            visualDensity: VisualDensity.compact,
           ),
           title: Text(
             'Locked Note',

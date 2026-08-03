@@ -4,6 +4,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
+import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/features/account/presentation/account_sheet.dart';
 import 'package:mynotes/features/lock/presentation/lock_screen.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -109,13 +110,13 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   Future<void> _bulkDelete() async {
     final notes = _selectedNotes();
-    final confirmed = await GlassDialog.show<bool>(
+    final confirmed = await showNotelyDialog<bool>(
       context: context,
       title: 'Delete ${notes.length} note${notes.length == 1 ? '' : 's'}?',
       message: 'This removes them permanently.',
       actions: [
-        GlassDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(false)),
-        GlassDialogAction(label: 'Delete', isDestructive: true, onPressed: () => Navigator.of(context).pop(true)),
+        NotelyDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(false)),
+        NotelyDialogAction(label: 'Delete', isDestructive: true, onPressed: () => Navigator.of(context).pop(true)),
       ],
     );
     if (confirmed != true) return;
@@ -289,9 +290,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   }
 
   void _openAccount() {
-    GlassModalSheet.show<void>(
+    showModalBottomSheet<void>(
       context: context,
-      showDragIndicator: false,
+      isScrollControlled: true,
       builder: (context) => const Material(type: MaterialType.transparency, child: AccountSheet()),
     );
   }

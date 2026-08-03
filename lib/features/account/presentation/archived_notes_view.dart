@@ -4,6 +4,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
+import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
@@ -26,11 +27,11 @@ class ArchivedNotesView extends ConsumerWidget {
       child: Scaffold(
         appBar: GlassAppBar(
           centerTitle: false,
-          leading: GlassIconButton(
+          leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.of(context).pop(),
-            size: 34,
-            iconSize: 17,
+            iconSize: 20,
+            visualDensity: VisualDensity.compact,
           ),
           title: Text(
             'Archive',
@@ -63,16 +64,16 @@ class ArchivedNotesView extends ConsumerWidget {
                           ]),
                         ),
                       ),
-                      GlassIconButton(
+                      IconButton(
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () async {
-                          final confirmed = await GlassDialog.show<bool>(
+                          final confirmed = await showNotelyDialog<bool>(
                             context: context,
                             title: 'Delete forever?',
                             message: 'This cannot be undone.',
                             actions: [
-                              GlassDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(false)),
-                              GlassDialogAction(label: 'Delete', isDestructive: true, onPressed: () => Navigator.of(context).pop(true)),
+                              NotelyDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(false)),
+                              NotelyDialogAction(label: 'Delete', isDestructive: true, onPressed: () => Navigator.of(context).pop(true)),
                             ],
                           );
                           if (confirmed == true) {
@@ -81,8 +82,8 @@ class ArchivedNotesView extends ConsumerWidget {
                             } catch (_) {}
                           }
                         },
-                        size: 36,
-                        iconSize: 18,
+                        iconSize: 20,
+                        visualDensity: VisualDensity.compact,
                       ),
                     ]),
                   );

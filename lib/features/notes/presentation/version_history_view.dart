@@ -5,6 +5,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
+import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class VersionHistoryView extends ConsumerStatefulWidget {
@@ -38,16 +39,16 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
   }
 
   Future<void> _restoreVersion(String versionId) async {
-    final confirmed = await GlassDialog.show<bool>(
+    final confirmed = await showNotelyDialog<bool>(
       context: context,
       title: 'Restore version?',
       message: 'This will replace the current note content with this version.',
       actions: [
-        GlassDialogAction(
+        NotelyDialogAction(
           label: 'Cancel',
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        GlassDialogAction(
+        NotelyDialogAction(
           label: 'Restore',
           isPrimary: true,
           onPressed: () => Navigator.of(context).pop(true),
@@ -85,11 +86,11 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
       child: Scaffold(
         appBar: GlassAppBar(
           centerTitle: false,
-          leading: GlassIconButton(
+          leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.of(context).pop(),
-            size: 34,
-            iconSize: 17,
+            iconSize: 20,
+            visualDensity: VisualDensity.compact,
           ),
           title: Text(
             'Version history',

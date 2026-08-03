@@ -8,6 +8,7 @@ import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/note_palette.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
+import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
 import 'package:mynotes/core/theme/widgets/tag_pill.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
@@ -169,9 +170,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   Future<void> _showOcrSheet() async {
     final controller = _contentController;
-    final result = await GlassModalSheet.show<String>(
+    final result = await showModalBottomSheet<String>(
       context: context,
-      showDragIndicator: false,
+      isScrollControlled: true,
       builder: (context) {
         final notely = NotelyTheme.of(context);
         return Material(
@@ -418,16 +419,16 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       return;
     }
 
-    final confirmed = await GlassDialog.show<bool>(
+    final confirmed = await showNotelyDialog<bool>(
       context: context,
       title: 'Delete note?',
       message: 'This removes the note permanently.',
       actions: [
-        GlassDialogAction(
+        NotelyDialogAction(
           label: 'Cancel',
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        GlassDialogAction(
+        NotelyDialogAction(
           label: 'Delete',
           isDestructive: true,
           onPressed: () => Navigator.of(context).pop(true),
@@ -474,26 +475,23 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         // No biometrics - prompt for PIN
         if (!mounted) return;
         final pinController = TextEditingController();
-        final pin = await GlassDialog.show<String>(
+        final pin = await showNotelyDialog<String>(
           context: context,
           title: 'Set a PIN',
-          content: Material(
-            type: MaterialType.transparency,
-            child: TextField(
-              controller: pinController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                hintText: 'Enter PIN',
-                border: OutlineInputBorder(),
-              ),
+          content: TextField(
+            controller: pinController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              hintText: 'Enter PIN',
+              border: OutlineInputBorder(),
             ),
           ),
           actions: [
-            GlassDialogAction(
+            NotelyDialogAction(
               label: 'Cancel',
               onPressed: () => Navigator.of(context).pop(null),
             ),
-            GlassDialogAction(
+            NotelyDialogAction(
               label: 'Set PIN',
               isPrimary: true,
               onPressed: () => Navigator.of(context).pop(pinController.text),
@@ -533,9 +531,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     DateTime? pickedDate = _selfDestructAt;
     bool onRead = _selfDestructOnRead;
 
-    final result = await GlassModalSheet.show<Map<String, dynamic>>(
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
-      showDragIndicator: false,
+      isScrollControlled: true,
       builder: (context) => Material(
         type: MaterialType.transparency,
         child: _SelfDestructSheet(
@@ -562,10 +560,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
     allTags.addAll(_tags);
 
-    final result = await GlassModalSheet.show<List<String>>(
+    final result = await showModalBottomSheet<List<String>>(
       context: context,
-      showDragIndicator: false,
-      halfSize: 0.65,
+      isScrollControlled: true,
       builder: (context) => Material(
         type: MaterialType.transparency,
         child: _TagsSheet(
@@ -592,9 +589,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     final emailController = TextEditingController();
     final messenger = ScaffoldMessenger.of(context);
 
-    final result = await GlassModalSheet.show<bool>(
+    final result = await showModalBottomSheet<bool>(
       context: context,
-      showDragIndicator: false,
+      isScrollControlled: true,
       builder: (context) => Material(
         type: MaterialType.transparency,
         child: _ShareSheet(
@@ -683,11 +680,11 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       child: Scaffold(
         appBar: GlassAppBar(
           centerTitle: false,
-          leading: GlassIconButton(
+          leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.of(context).pop(),
-            size: 34,
-            iconSize: 17,
+            iconSize: 20,
+            visualDensity: VisualDensity.compact,
           ),
           title: Text(
             note == null ? 'New note' : 'Edit note',
@@ -700,25 +697,25 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  GlassIconButton(
+                  IconButton(
                     icon: const Icon(Icons.document_scanner),
                     onPressed: _isSaving || _isDeleting ? null : _showOcrSheet,
-                    size: 34,
-                    iconSize: 17,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
                   ),
                   const SizedBox(width: 6),
-                  GlassIconButton(
+                  IconButton(
                     icon: Icon(_isRecording ? Icons.mic : Icons.mic_none),
                     onPressed: _isSaving || _isDeleting
                         ? null
                         : _isRecording
                             ? _stopVoiceRecording
                             : _startVoiceRecording,
-                    size: 34,
-                    iconSize: 17,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
                   ),
                   const SizedBox(width: 6),
-                  GlassIconButton(
+                  IconButton(
                     icon: _isCapturingLocation
                         ? const SizedBox(
                             height: 18,
@@ -728,37 +725,37 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         : Icon(_latitude != null ? Icons.location_on : Icons.location_on_outlined),
                     onPressed:
                         _isSaving || _isDeleting || _isCapturingLocation ? null : _captureLocation,
-                    size: 34,
-                    iconSize: 17,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
                   ),
                   if (note != null) ...[
                     const SizedBox(width: 6),
-                    GlassIconButton(
+                    IconButton(
                       icon: Icon(note.isLocked ? Icons.lock : Icons.lock_open),
                       onPressed: _isSaving || _isDeleting ? null : _toggleLock,
-                      size: 34,
-                      iconSize: 17,
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                     ),
                     const SizedBox(width: 6),
-                    GlassIconButton(
+                    IconButton(
                       icon: Icon(
                         _selfDestructAt != null || _selfDestructOnRead
                             ? Icons.timer
                             : Icons.timer_outlined,
                       ),
                       onPressed: _isSaving || _isDeleting ? null : _showSelfDestructSheet,
-                      size: 34,
-                      iconSize: 17,
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                     ),
                     const SizedBox(width: 6),
-                    GlassIconButton(
+                    IconButton(
                       icon: const Icon(Icons.share_outlined),
                       onPressed: _isSaving || _isDeleting ? null : _showShareSheet,
-                      size: 34,
-                      iconSize: 17,
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                     ),
                     const SizedBox(width: 6),
-                    GlassIconButton(
+                    IconButton(
                       icon: const Icon(Icons.history),
                       onPressed: _isSaving || _isDeleting
                           ? null
@@ -772,11 +769,11 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                 ),
                               );
                             },
-                      size: 34,
-                      iconSize: 17,
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                     ),
                     const SizedBox(width: 6),
-                    GlassIconButton(
+                    IconButton(
                       onPressed: _isSaving || _isDeleting ? null : _deleteNote,
                       icon: _isDeleting
                           ? const SizedBox(
@@ -785,8 +782,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.delete_outline),
-                      size: 34,
-                      iconSize: 17,
+                      iconSize: 20,
+                      visualDensity: VisualDensity.compact,
                     ),
                   ],
                 ],
