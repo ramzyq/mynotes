@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/account/presentation/account_sheet.dart';
 import 'package:mynotes/features/lock/presentation/lock_screen.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -107,16 +109,14 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   Future<void> _bulkDelete() async {
     final notes = _selectedNotes();
-    final confirmed = await showDialog<bool>(
+    final confirmed = await GlassDialog.show<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${notes.length} note${notes.length == 1 ? '' : 's'}?'),
-        content: const Text('This removes them permanently.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
-        ],
-      ),
+      title: 'Delete ${notes.length} note${notes.length == 1 ? '' : 's'}?',
+      message: 'This removes them permanently.',
+      actions: [
+        GlassDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(false)),
+        GlassDialogAction(label: 'Delete', isDestructive: true, onPressed: () => Navigator.of(context).pop(true)),
+      ],
     );
     if (confirmed != true) return;
     try {
@@ -177,10 +177,13 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     final pinned = visible.where((n) => n.isPinned).toList();
     final rest = visible.where((n) => !n.isPinned).toList();
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
+    return GlassPage(
+      background: const NotelyBackground(),
+      statusBarStyle: GlassStatusBarStyle.auto,
+      child: Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: Stack(
           children: [
             CustomScrollView(
               slivers: [
@@ -228,7 +231,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                 if (visible.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
-                    child: EmptyState(query: _query, activeTag: _activeTag, onCreate: () => _openEditor()),
+                    child: EmptyState(query: _query, activeTag: _activeTag),
                   )
                 else ...[
                   if (pinned.isNotEmpty)
@@ -263,6 +266,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
             if (!_selectMode) HomeFab(onPressed: () => _openEditor()),
           ],
         ),
+        ),
       ),
     );
   }
@@ -285,7 +289,11 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   }
 
   void _openAccount() {
-    showModalBottomSheet(context: context, isScrollControlled: true, builder: (context) => const AccountSheet());
+    GlassModalSheet.show<void>(
+      context: context,
+      showDragIndicator: false,
+      builder: (context) => const Material(type: MaterialType.transparency, child: AccountSheet()),
+    );
   }
 }
 

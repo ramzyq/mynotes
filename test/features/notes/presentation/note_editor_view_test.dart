@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
@@ -38,7 +39,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final tagField = find.descendant(
-      of: find.byType(BottomSheet),
+      of: find.byType(GlassModalSheet),
       matching: find.byType(TextField),
     );
     expect(tagField, findsOneWidget);
@@ -46,7 +47,7 @@ void main() {
     await tester.enterText(tagField, 'Work');
     await tester.pump();
     final addButton = find.descendant(
-      of: find.byType(BottomSheet),
+      of: find.byType(GlassModalSheet),
       matching: find.byIcon(Icons.add_circle_outline),
     );
     await tester.tap(addButton);

@@ -4,9 +4,8 @@ import 'package:mynotes/core/theme/notely_tokens.dart';
 class EmptyState extends StatelessWidget {
   final String query;
   final String? activeTag;
-  final VoidCallback onCreate;
 
-  const EmptyState({super.key, required this.query, required this.activeTag, required this.onCreate});
+  const EmptyState({super.key, required this.query, required this.activeTag});
 
   @override
   Widget build(BuildContext context) {
@@ -28,15 +27,6 @@ class EmptyState extends StatelessWidget {
             Text(title, style: TextStyle(fontFamily: 'Instrument Serif', fontSize: 24, letterSpacing: -0.5, color: notely.text)),
             const SizedBox(height: 8),
             Text(subtitle, textAlign: TextAlign.center, style: TextStyle(fontSize: 13.5, color: notely.text3, height: 1.4)),
-            if (!hasQuery) ...[
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: onCreate,
-                icon: const Icon(Icons.add),
-                label: const Text('Start writing'),
-                style: FilledButton.styleFrom(backgroundColor: notely.violet, foregroundColor: Colors.white),
-              ),
-            ],
           ],
         ),
       ),

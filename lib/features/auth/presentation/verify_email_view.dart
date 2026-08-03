@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 
 class VerifyEmailView extends ConsumerStatefulWidget {
@@ -130,80 +132,104 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
     final email = ref.read(authServiceProvider).currentUser?.email ?? 'your email';
     final notely = NotelyTheme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Verify Email'),
-        automaticallyImplyLeading: false,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Icon(Icons.mark_email_unread_outlined, size: 80, color: Colors.green),
-            const SizedBox(height: 24),
-            Text(
-              'Verify your email',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+    return GlassPage(
+      background: const NotelyBackground(),
+      statusBarStyle: GlassStatusBarStyle.auto,
+      child: Scaffold(
+        appBar: GlassAppBar(
+          title: Text(
+            'Verify Email',
+            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
+          ),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.mark_email_unread_outlined, size: 80, color: Colors.green),
+              const SizedBox(height: 24),
+              Text(
+                'Verify your email',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'We\'ve sent a verification email to\n$email',
+                style: TextStyle(fontSize: 16, color: notely.text3),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Click the link in the email to verify your account, then tap the button below.',
+                style: TextStyle(fontSize: 14, color: notely.text3),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: GlassButton.custom(
+                  onTap: _isChecking ? () {} : () => _checkEmailVerified(),
+                  enabled: !_isChecking,
+                  height: 54,
+                  style: GlassButtonStyle.prominent,
+                  glowColor: notely.violet,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _isChecking
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.check_circle_outline, size: 18),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'I\'ve verified my email',
+                        style: TextStyle(fontFamily: 'Geist', fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
+                    ],
                   ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'We\'ve sent a verification email to\n$email',
-              style: TextStyle(fontSize: 16, color: notely.text3),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Click the link in the email to verify your account, then tap the button below.',
-              style: TextStyle(fontSize: 14, color: notely.text3),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: _isChecking ? null : () => _checkEmailVerified(),
-              icon: _isChecking
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.check_circle_outline),
-              label: const Text('I\'ve verified my email'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _isSending ? null : _sendVerificationEmail,
-              icon: _isSending
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.email_outlined),
-              label: const Text('Resend verification email'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: GlassButton.custom(
+                  onTap: _isSending ? () {} : _sendVerificationEmail,
+                  enabled: !_isSending,
+                  height: 54,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _isSending
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.email_outlined, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Resend verification email',
+                        style: TextStyle(fontFamily: 'Geist', fontSize: 14.5, fontWeight: FontWeight.w600, color: notely.text),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            TextButton(
-              onPressed: _signOut,
-              child: const Text('Sign out and go back'),
-            ),
-          ],
+              const SizedBox(height: 24),
+              TextButton(
+                onPressed: _signOut,
+                child: const Text('Sign out and go back'),
+              ),
+            ],
+          ),
         ),
       ),
     );

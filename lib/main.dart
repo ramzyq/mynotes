@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -10,6 +11,14 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await LiquidGlassWidgets.initialize();
   AppErrorHandler().init();
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(
+    ProviderScope(
+      child: LiquidGlassWidgets.wrap(
+        child: const MyApp(),
+        theme: notelyGlassTheme,
+      ),
+    ),
+  );
 }

@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class VersionHistoryView extends ConsumerStatefulWidget {
@@ -36,24 +38,21 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
   }
 
   Future<void> _restoreVersion(String versionId) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await GlassDialog.show<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Restore version?'),
-        content: const Text(
-          'This will replace the current note content with this version.',
+      title: 'Restore version?',
+      message: 'This will replace the current note content with this version.',
+      actions: [
+        GlassDialogAction(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(context).pop(false),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Restore'),
-          ),
-        ],
-      ),
+        GlassDialogAction(
+          label: 'Restore',
+          isPrimary: true,
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+      ],
     );
 
     if (confirmed != true) return;
@@ -80,10 +79,23 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Version history'),
-      ),
+    return GlassPage(
+      background: const NotelyBackground(),
+      statusBarStyle: GlassStatusBarStyle.auto,
+      child: Scaffold(
+        appBar: GlassAppBar(
+          centerTitle: false,
+          leading: GlassIconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+            size: 34,
+            iconSize: 17,
+          ),
+          title: Text(
+            'Version history',
+            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
+          ),
+        ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _versionsFuture,
         builder: (context, snapshot) {
@@ -175,6 +187,7 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
             },
           );
         },
+      ),
       ),
     );
   }

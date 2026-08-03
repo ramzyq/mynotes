@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 import 'package:mynotes/features/study/providers/study_providers.dart';
@@ -57,9 +59,24 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
     final dueCards = ref.watch(dueCardsProvider(widget.authUser.uid));
     final notely = NotelyTheme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Study')),
-      body: dueCards.when(
+    return GlassPage(
+      background: const NotelyBackground(),
+      statusBarStyle: GlassStatusBarStyle.auto,
+      child: Scaffold(
+        appBar: GlassAppBar(
+          centerTitle: false,
+          leading: GlassIconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+            size: 34,
+            iconSize: 17,
+          ),
+          title: Text(
+            'Study',
+            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
+          ),
+        ),
+        body: dueCards.when(
         data: (cards) {
           _cards = cards;
           if (cards.isEmpty) {
@@ -212,6 +229,7 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
+      ),
       ),
     );
   }

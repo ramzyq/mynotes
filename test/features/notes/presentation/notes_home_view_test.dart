@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,7 +58,7 @@ void main() {
   testWidgets('search filters the list', (tester) async {
     await tester.pumpWidget(_wrap(notesService));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Beta');
+    await tester.enterText(find.byType(CupertinoTextField), 'Beta');
     await tester.pumpAndSettle();
     expect(find.widgetWithText(NoteCard, 'Alpha'), findsNothing);
     expect(find.widgetWithText(NoteCard, 'Beta'), findsOneWidget);

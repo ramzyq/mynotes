@@ -1,6 +1,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
@@ -20,8 +23,6 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
   late final TextEditingController _password;
   late final TextEditingController _confirmPassword;
   bool _isLoading = false;
-  bool _showPassword = false;
-  bool _showConfirmPassword = false;
 
   @override
   void initState() {
@@ -89,6 +90,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
       await ref.read(authServiceProvider).createUser(
         email: email,
         password: password,
+        displayName: firstName,
       );
       if (!mounted) return;
       // Navigate to email verification screen
@@ -126,141 +128,92 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create account'),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 30),
-              TextField(
-                controller: _firstName,
-                enableSuggestions: false,
-                autocorrect: false,
-                keyboardType: TextInputType.name,
-                enabled: !_isLoading,
-                decoration: InputDecoration(
-                  hintText: 'First Name',
+    final notely = NotelyTheme.of(context);
+    return GlassPage(
+      background: const NotelyBackground(),
+      statusBarStyle: GlassStatusBarStyle.auto,
+      child: Scaffold(
+        appBar: GlassAppBar(
+          centerTitle: false,
+          leading: GlassIconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+            size: 34,
+            iconSize: 17,
+          ),
+          title: Text(
+            'Create account',
+            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
+          ),
+        ),
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 30),
+                GlassTextField(
+                  controller: _firstName,
+                  placeholder: 'First Name',
                   prefixIcon: const Icon(Icons.person_outline),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
-                  ),
+                  keyboardType: TextInputType.name,
+                  enabled: !_isLoading,
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _email,
-                enableSuggestions: false,
-                autocorrect: false,
-                keyboardType: TextInputType.emailAddress,
-                enabled: !_isLoading,
-                decoration: InputDecoration(
-                  hintText: 'Email',
+                const SizedBox(height: 16),
+                GlassTextField(
+                  controller: _email,
+                  placeholder: 'Email',
                   prefixIcon: const Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
+                  keyboardType: TextInputType.emailAddress,
+                  enabled: !_isLoading,
+                ),
+                const SizedBox(height: 16),
+                GlassPasswordField(
+                  controller: _password,
+                  placeholder: 'Password',
+                  enabled: !_isLoading,
+                ),
+                const SizedBox(height: 16),
+                GlassPasswordField(
+                  controller: _confirmPassword,
+                  placeholder: 'Confirm Password',
+                  enabled: !_isLoading,
+                ),
+                const SizedBox(height: 30),
+                SizedBox(
+                  width: double.infinity,
+                  child: GlassButton.custom(
+                    onTap: _isLoading ? () {} : _handleRegister,
+                    enabled: !_isLoading,
+                    height: 54,
+                    glowColor: notely.violet,
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Sign Up',
+                            style: TextStyle(fontFamily: 'Geist', fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                          ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _password,
-                obscureText: !_showPassword,
-                enableSuggestions: false,
-                autocorrect: false,
-                enabled: !_isLoading,
-                decoration: InputDecoration(
-                  hintText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _showPassword ? Icons.visibility : Icons.visibility_off,
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Already have an account? '),
+                    TextButton(
+                      onPressed:
+                          _isLoading ? null : () => Navigator.of(context).pop(),
+                      child: const Text('Log in'),
                     ),
-                    onPressed: () {
-                      setState(() => _showPassword = !_showPassword);
-                    },
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
-                  ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _confirmPassword,
-                obscureText: !_showConfirmPassword,
-                enableSuggestions: false,
-                autocorrect: false,
-                enabled: !_isLoading,
-                decoration: InputDecoration(
-                  hintText: 'Confirm Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _showConfirmPassword
-                          ? Icons.visibility
-                          : Icons.visibility_off,
-                    ),
-                    onPressed: () {
-                      setState(
-                          () => _showConfirmPassword = !_showConfirmPassword);
-                    },
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleRegister,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Sign Up'),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Already have an account? '),
-                  TextButton(
-                    onPressed:
-                        _isLoading ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Log in'),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
