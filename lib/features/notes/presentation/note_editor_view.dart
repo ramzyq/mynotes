@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -12,6 +14,7 @@ import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
 import 'package:mynotes/core/theme/widgets/tag_pill.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
+import 'package:mynotes/features/collaboration/models/share_link.dart';
 
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/notes/data/comment.dart';
@@ -229,12 +232,12 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                       borderRadius: BorderRadius.circular(18),
                     ),
                   ),
-                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        );
+      ),
+    );
       },
     );
 
@@ -628,6 +631,17 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             _collaborators =
                 _collaborators.where((uid) => uid != collaboratorUid).toList();
           });
+        },
+        onCreateLink: (mode) {
+          final shareService = ref.read(shareServiceProvider);
+          return shareService.createShareLink(
+            uid: widget.authUser.uid,
+            note: note,
+            mode: mode,
+          );
+        },
+        onRevokeLink: (token) {
+          return ref.read(shareServiceProvider).revokeShareLink(token: token);
         },
       ),
       ),
@@ -1737,12 +1751,16 @@ class _ShareSheet extends ConsumerStatefulWidget {
   final TextEditingController emailController;
   final Future<String> Function(String email) onAddCollaborator;
   final Future<void> Function(String collaboratorUid) onRemoveCollaborator;
+  final Future<ShareLink> Function(String mode) onCreateLink;
+  final Future<void> Function(String token) onRevokeLink;
 
   const _ShareSheet({
     required this.collaborators,
     required this.emailController,
     required this.onAddCollaborator,
     required this.onRemoveCollaborator,
+    required this.onCreateLink,
+    required this.onRevokeLink,
   });
 
   @override
@@ -1754,6 +1772,10 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
   bool _isAdding = false;
   String? _error;
   final Map<String, String> _emails = {};
+  String _linkMode = 'approval';
+  ShareLink? _link;
+  bool _isGenerating = false;
+  bool _isRevoking = false;
 
   @override
   void initState() {
@@ -1827,6 +1849,61 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _isAdding = false);
+    }
+  }
+
+  Future<void> _generateLink() async {
+    setState(() {
+      _isGenerating = true;
+      _error = null;
+    });
+    try {
+      final link = await widget.onCreateLink(_linkMode);
+      if (!mounted) return;
+      setState(() => _link = link);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
+    }
+  }
+
+  Future<void> _copyLink() async {
+    final link = _link;
+    if (link == null) return;
+    await Clipboard.setData(ClipboardData(text: link.url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Link copied to clipboard')),
+    );
+  }
+
+  Future<void> _shareLink() async {
+    final link = _link;
+    if (link == null) return;
+    await SharePlus.instance.share(ShareParams(text: link.url));
+  }
+
+  Future<void> _revokeLink() async {
+    final link = _link;
+    if (link == null) return;
+    setState(() {
+      _isRevoking = true;
+      _error = null;
+    });
+    try {
+      await widget.onRevokeLink(link.token);
+      if (!mounted) return;
+      setState(() => _link = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Link revoked')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _isRevoking = false);
     }
   }
 
@@ -1950,6 +2027,98 @@ class _ShareSheetState extends ConsumerState<_ShareSheet> {
                 ),
               ),
             ),
+          const SizedBox(height: 20),
+          const Divider(height: 1),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Icon(Icons.link, color: notely.text2, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Share via link',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Anyone with the link can request access. You approve before they see the note.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: notely.text3,
+                ),
+          ),
+          const SizedBox(height: 12),
+          if (_link == null) ...[
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'approval',
+                  label: Text('Require approval'),
+                ),
+                ButtonSegment(value: 'open', label: Text('Auto-approve')),
+              ],
+              selected: {_linkMode},
+              onSelectionChanged: (selection) {
+                setState(() => _linkMode = selection.first);
+              },
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _isGenerating ? null : _generateLink,
+                icon: _isGenerating
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add_link_rounded),
+                label: const Text('Create share link'),
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: notely.surface2,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _link!.url,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: notely.text2,
+                            fontFamily: 'JetBrains Mono',
+                          ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Copy',
+                    onPressed: _copyLink,
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                  ),
+                  IconButton(
+                    tooltip: 'Share',
+                    onPressed: _shareLink,
+                    icon: const Icon(Icons.ios_share, size: 18),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _isRevoking ? null : _revokeLink,
+              icon: const Icon(Icons.link_off_rounded, size: 16),
+              label: const Text('Revoke link'),
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            ),
+          ],
         ],
       ),
     );
