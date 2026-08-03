@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/providers/theme_mode_provider.dart';
@@ -8,6 +7,7 @@ import 'package:mynotes/features/auth/presentation/login_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/features/notes/presentation/notes_home_view.dart';
+import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 export 'package:mynotes/core/theme/notely_theme.dart';
 
@@ -57,9 +57,7 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _cleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (ref.read(authStateProvider).valueOrNull != null) {
-        _deleteExpiredNotes();
-      }
+      _cleanupExpiredNotes();
     });
   }
 
@@ -73,26 +71,14 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _deleteExpiredNotes();
+      _cleanupExpiredNotes();
     }
   }
 
-  Future<void> _deleteExpiredNotes() async {
-    try {
-      final now = DateTime.now();
-      final snapshots = await FirebaseFirestore.instance
-          .collectionGroup('notes')
-          .where(
-            'selfDestructAt',
-            isGreaterThan: Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(0)),
-          )
-          .where('selfDestructAt', isLessThanOrEqualTo: Timestamp.fromDate(now))
-          .get();
-
-      for (final doc in snapshots.docs) {
-        await doc.reference.delete();
-      }
-    } catch (_) {}
+  void _cleanupExpiredNotes() {
+    final user = ref.read(authStateProvider).valueOrNull;
+    if (user == null) return;
+    ref.read(notesServiceProvider).deleteExpiredNotes(user.uid);
   }
 
   @override

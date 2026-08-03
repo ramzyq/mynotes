@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/key_manager.dart';
 import 'package:mynotes/features/notes/data/comment.dart';
@@ -262,6 +263,16 @@ class NotesService {
   }) async {
     await deleteNoteVersions(uid, noteId);
     await _notesCollection(uid).doc(noteId).delete();
+  }
+
+  Future<void> deleteExpiredNotes(String uid) async {
+    final snapshot = await _notesCollection(uid)
+        .where('selfDestructAt', isLessThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
+        .get();
+    debugPrint('DELETE_EXPIRED: uid=$uid found=${snapshot.docs.length}');
+    for (final doc in snapshot.docs) {
+      await doc.reference.delete();
+    }
   }
 
   Future<void> updateStudyProgress({
