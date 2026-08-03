@@ -1,7 +1,19 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
+import 'package:mynotes/core/encryption/key_manager.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('createNoteKey does not require a pre-initialized master key', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final keyManager = KeyManager();
+    final wrapped = await keyManager.createNoteKey('note-1');
+    final noteKey = await keyManager.unwrapNoteKey(wrapped);
+    final bytes = await noteKey.extractBytes();
+    expect(bytes.length, equals(32));
+  });
   test('derives 256-bit key from password', () async {
     final salt = CryptoService().generateSalt();
     final key = await CryptoService().deriveKey(password: 'test-password', salt: salt);

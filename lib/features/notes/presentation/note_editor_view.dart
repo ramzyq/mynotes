@@ -403,6 +403,12 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         }
         Navigator.of(context).pop(true);
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save note: $e')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);

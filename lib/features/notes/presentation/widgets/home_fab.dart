@@ -16,7 +16,7 @@ class HomeFab extends StatelessWidget {
         child: GlassButton.custom(
           onTap: onPressed ?? () {},
           enabled: onPressed != null,
-          width: 176,
+          width: 224,
           height: 54,
           glowColor: const Color(0xFF7C5CF5),
           glowRadius: 1.4,
@@ -31,8 +31,8 @@ class HomeFab extends StatelessWidget {
               ),
               const SizedBox(width: 9),
               const Text(
-                'New note',
-                style: TextStyle(color: Colors.white, fontFamily: 'Geist', fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: -0.25),
+                'Start writing',
+                style: TextStyle(color: Colors.white, fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: -0.25),
               ),
             ],
           ),
