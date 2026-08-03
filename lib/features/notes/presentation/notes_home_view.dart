@@ -15,6 +15,7 @@ import 'package:mynotes/features/notes/presentation/widgets/home_fab.dart';
 import 'package:mynotes/features/notes/presentation/widgets/list_header.dart';
 import 'package:mynotes/features/notes/presentation/widgets/note_card.dart';
 import 'package:mynotes/features/notes/presentation/widgets/note_preview.dart';
+import 'package:mynotes/features/notes/presentation/widgets/pinned_note_card.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class NotesHomeView extends ConsumerStatefulWidget {
@@ -240,14 +241,40 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                       sliver: SliverToBoxAdapter(child: _SectionHeader(label: 'Pinned', count: pinned.length, pinned: true)),
                     ),
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    sliver: SliverList.separated(
-                      itemCount: pinned.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) => _buildCard(pinned[index], notes),
+                  if (pinned.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.only(top: 14),
+                      sliver: SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: 210,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            itemCount: pinned.length,
+                            separatorBuilder: (context, index) => const SizedBox(width: 16),
+                            itemBuilder: (context, index) {
+                              final note = pinned[index];
+                              return PinnedNoteCard(
+                                note: note,
+                                relativeTime: _timeLabel(note.updatedAt),
+                                selectMode: _selectMode,
+                                selected: _selected.contains(note.id),
+                                onOpen: () => _openEditor(note: note),
+                                onSelect: () => setState(() {
+                                  if (_selected.contains(note.id)) {
+                                    _selected.remove(note.id);
+                                  } else {
+                                    _selected.add(note.id);
+                                  }
+                                }),
+                                onUnpin: () => _togglePin(note),
+                                onArchive: () => _archive(note),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
                   if (rest.isNotEmpty)
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
@@ -308,7 +335,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
     return Row(children: [
-      if (pinned) Icon(Icons.push_pin, size: 12, color: notely.violet),
+      if (pinned) Icon(Icons.push_pin, size: 14, color: notely.text2),
       if (pinned) const SizedBox(width: 7),
       Text(label.toUpperCase(), style: TextStyle(fontFamily: 'Geist', fontSize: 11.5, fontWeight: FontWeight.w600, letterSpacing: 0.6, color: notely.text3)),
       const SizedBox(width: 6),
