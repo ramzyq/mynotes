@@ -190,6 +190,9 @@ class NotesService {
     List<String> audioAttachments = const [],
     double? latitude,
     double? longitude,
+    List<String> tags = const [],
+    DateTime? selfDestructAt,
+    bool selfDestructOnRead = false,
   }) async {
     final now = DateTime.now();
     final document = _notesCollection(uid).doc();
@@ -210,6 +213,9 @@ class NotesService {
       audioAttachments: audioAttachments,
       latitude: latitude,
       longitude: longitude,
+      tags: tags,
+      selfDestructAt: selfDestructAt,
+      selfDestructOnRead: selfDestructOnRead,
       createdAt: now,
       updatedAt: now,
       links: links,
@@ -238,7 +244,14 @@ class NotesService {
     final links = note.content != null ? await _resolveLinks(uid, note.content!) : existing.links;
     final updatedPlain = note.copyWith(updatedAt: DateTime.now(), links: links);
     final encrypted = await updatedPlain.encryptNote(noteKey, crypto);
-    await docRef.update(encrypted.copyWith(wrappedKey: existing.wrappedKey).toMap());
+    final data = encrypted.copyWith(wrappedKey: existing.wrappedKey).toMap();
+    if (note.selfDestructAt == null) {
+      data['selfDestructAt'] = FieldValue.delete();
+    }
+    if (!note.selfDestructOnRead) {
+      data['selfDestructOnRead'] = FieldValue.delete();
+    }
+    await docRef.update(data);
   }
 
   Future<void> deleteNote({

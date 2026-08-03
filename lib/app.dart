@@ -72,6 +72,10 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
     final now = DateTime.now();
     final snapshots = await FirebaseFirestore.instance
         .collectionGroup('notes')
+        .where(
+          'selfDestructAt',
+          isGreaterThan: Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(0)),
+        )
         .where('selfDestructAt', isLessThanOrEqualTo: Timestamp.fromDate(now))
         .get();
 

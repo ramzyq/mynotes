@@ -359,7 +359,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     setState(() => _isSaving = true);
     try {
       if (widget.note == null) {
-        var note = await ref.read(notesServiceProvider).createNote(
+        final note = await ref.read(notesServiceProvider).createNote(
           uid: widget.authUser.uid,
           title: title.isEmpty && content.isEmpty ? 'Untitled note' : title,
           content: content,
@@ -369,14 +369,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           audioAttachments: _audioAttachments,
           latitude: _latitude,
           longitude: _longitude,
+          tags: _tags,
+          selfDestructAt: _selfDestructAt,
+          selfDestructOnRead: _selfDestructOnRead,
         );
-        if (_tags.isNotEmpty) {
-          note = note.copyWith(tags: _tags);
-          await ref.read(notesServiceProvider).updateNote(
-            uid: widget.authUser.uid,
-            note: note,
-          );
-        }
         if (!mounted) {
           return;
         }
@@ -534,9 +530,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   }
 
   Future<void> _showSelfDestructSheet() async {
-    final note = widget.note;
-    if (note == null) return;
-
     DateTime? pickedDate = _selfDestructAt;
     bool onRead = _selfDestructOnRead;
 
@@ -994,6 +987,44 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     children: _tags.map((tag) {
                       return TagPill(name: tag, style: TagPillStyle.outlined);
                     }).toList(),
+                  ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Text(
+                      'Self-destruct',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: _isSaving ? null : _showSelfDestructSheet,
+                      icon: const Icon(Icons.timer_outlined, size: 18),
+                      label: Text(
+                        _selfDestructAt != null || _selfDestructOnRead
+                            ? 'Change'
+                            : 'Set',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_selfDestructAt != null || _selfDestructOnRead)
+                  Text(
+                    _selfDestructAt != null
+                        ? 'Deletes on ${_selfDestructAt!.month}/${_selfDestructAt!.day}/${_selfDestructAt!.year} ${_selfDestructAt!.hour.toString().padLeft(2, '0')}:${_selfDestructAt!.minute.toString().padLeft(2, '0')}'
+                        : 'Deletes after first read',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.redAccent,
+                        ),
+                  )
+                else
+                  Text(
+                    'Set a date and time for this note to be deleted automatically.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: notely.text3,
+                        ),
                   ),
                 if (_audioAttachments.isNotEmpty) ...[
                   const SizedBox(height: 24),

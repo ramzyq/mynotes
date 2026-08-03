@@ -242,7 +242,7 @@ class Note {
   }
 
   Map<String, dynamic> toMap() {
-    return {
+    final map = <String, dynamic>{
       'title': title ?? '',
       'content': content ?? '',
       'encryptedTitle': encryptedTitle,
@@ -255,8 +255,6 @@ class Note {
       'isLocked': isLocked,
       'pinHash': pinHash,
       'pinSalt': pinSalt,
-      'selfDestructAt': selfDestructAt != null ? Timestamp.fromDate(selfDestructAt as DateTime) : null,
-      'selfDestructOnRead': selfDestructOnRead,
       'audioAttachments': audioAttachments,
       'latitude': latitude,
       'longitude': longitude,
@@ -274,6 +272,13 @@ class Note {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
+    if (selfDestructAt != null) {
+      map['selfDestructAt'] = Timestamp.fromDate(selfDestructAt as DateTime);
+    }
+    if (selfDestructOnRead) {
+      map['selfDestructOnRead'] = true;
+    }
+    return map;
   }
 
   Future<Note> encryptNote(SecretKey noteKey, CryptoService crypto) async {

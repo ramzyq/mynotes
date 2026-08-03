@@ -20,6 +20,13 @@ class HomeFab extends StatelessWidget {
           height: 54,
           shape: const LiquidRoundedSuperellipse(borderRadius: 22),
           style: GlassButtonStyle.prominent,
+          useOwnLayer: true,
+          settings: const LiquidGlassSettings(
+            glassColor: Color(0xFF7C5CF5),
+            backerColor: Color(0xFF7C5CF5),
+            thickness: 60,
+            blur: 5,
+          ),
           glowColor: const Color(0xFF7C5CF5),
           glowRadius: 1.4,
           child: Row(
