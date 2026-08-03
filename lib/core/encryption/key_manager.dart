@@ -4,12 +4,12 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
-
-final _sha256 = Sha256();
+import 'package:mynotes/core/encryption/sharing_keys.dart';
 
 class KeyManager {
   final CryptoService _crypto = CryptoService();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final SharingKeys _sharing = SharingKeys();
   static const _masterKeyKey = 'master_key';
   static const _saltKey = 'key_salt';
   static const _keyVersion = 1;
@@ -121,39 +121,52 @@ class KeyManager {
     return await _storage.read(key: _masterKeyKey) != null;
   }
 
-  /// Encrypt a note key for sharing with a collaborator.
+  /// Encrypt a note key so only the owner of [recipientPublicKey] can unwrap it.
   Future<String> wrapNoteKeyForCollaborator({
     required SecretKey noteKey,
-    required String collaboratorUid,
+    required List<int> recipientPublicKey,
   }) async {
-    final sharingKey = await deriveSharingKey(collaboratorUid);
+    final sharedSecret = await _ecdhSharedSecret(recipientPublicKey);
     final noteKeyBytes = await noteKey.extractBytes();
     final encrypted = await _crypto.encrypt(
-      key: sharingKey,
+      key: sharedSecret,
       plaintext: base64Encode(noteKeyBytes),
     );
     final combined = encrypted.ciphertext + encrypted.nonce + encrypted.mac;
     return base64Encode(combined);
   }
 
-  /// Unwrap a note key that was shared by another user.
+  /// Decrypt a note key that was wrapped for us by the owner of [ownerPublicKey].
   Future<SecretKey> unwrapCollaboratorNoteKey({
     required String encryptedKeyStr,
-    required String ownerUid,
+    required List<int> ownerPublicKey,
   }) async {
-    final sharingKey = await deriveSharingKey(ownerUid);
+    final sharedSecret = await _ecdhSharedSecret(ownerPublicKey);
     final combined = base64Decode(encryptedKeyStr);
     final payload = _splitPayload(combined);
-    final noteKeyStr = await _crypto.decrypt(key: sharingKey, payload: payload);
+    final noteKeyStr = await _crypto.decrypt(key: sharedSecret, payload: payload);
     return SecretKey(base64Decode(noteKeyStr));
   }
 
-  /// Derive a deterministic key for sharing with a specific collaborator.
-  Future<SecretKey> deriveSharingKey(String collaboratorUid) async {
+  /// Deterministic X25519 keypair derived from this device's master key.
+  Future<SimpleKeyPair> _loadMyKeyPair() async {
     final masterKey = await ensureMasterKey();
     final masterBytes = await masterKey.extractBytes();
-    final combined = [...masterBytes, ...utf8.encode(collaboratorUid)];
-    final hash = await _sha256.hash(combined);
-    return SecretKey(hash.bytes);
+    return _sharing.keyPairFromMasterKey(masterBytes);
+  }
+
+  Future<SecretKey> _ecdhSharedSecret(List<int> remotePublicKey) async {
+    return _sharing.sharedSecret(
+      myKeyPair: await _loadMyKeyPair(),
+      remotePublicKey: remotePublicKey,
+    );
+  }
+
+  /// This user's X25519 public key (32 bytes), derived deterministically
+  /// from the master key.
+  Future<Uint8List> getMyPublicKey() async {
+    final keyPair = await _loadMyKeyPair();
+    final publicKey = await keyPair.extractPublicKey();
+    return Uint8List.fromList(publicKey.bytes);
   }
 }

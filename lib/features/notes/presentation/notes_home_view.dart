@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:app_links/app_links.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mynotes/core/analytics/analytics_consent_store.dart';
+import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
@@ -16,6 +21,8 @@ import 'package:mynotes/features/notes/presentation/widgets/list_header.dart';
 import 'package:mynotes/features/notes/presentation/widgets/note_card.dart';
 import 'package:mynotes/features/notes/presentation/widgets/note_preview.dart';
 import 'package:mynotes/features/notes/presentation/widgets/pinned_note_card.dart';
+import 'package:mynotes/features/collaboration/models/join_request.dart';
+import 'package:mynotes/features/collaboration/services/share_service.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class NotesHomeView extends ConsumerStatefulWidget {
@@ -34,6 +41,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   bool _selectMode = false;
   final Set<String> _selected = {};
 
+  StreamSubscription<Uri>? _uriSub;
+  StreamSubscription<List<JoinRequest>>? _requestSub;
+
   @override
   void initState() {
     super.initState();
@@ -44,12 +54,70 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
               email: widget.authUser.email,
               displayName: widget.authUser.displayName,
             );
+        await ref.read(joinLinkProcessorProvider).processPending();
       } catch (_) {}
+      _maybeAskAnalyticsConsent();
+      _watchOwnerRequests();
+      _listenForLinks();
     });
+  }
+
+  void _listenForLinks() {
+    _uriSub = AppLinks().uriLinkStream.listen((uri) {
+      ref.read(joinLinkProcessorProvider).handleUri(uri);
+    });
+  }
+
+  void _watchOwnerRequests() {
+    _requestSub =
+        ref.read(shareServiceProvider).watchOwnerJoinRequests(widget.authUser.uid).listen((requests) async {
+      for (final request in requests.where((r) => r.status == 'approved')) {
+        try {
+          await ref.read(shareServiceProvider).completeShareForRequest(
+                ownerUid: widget.authUser.uid,
+                token: request.token,
+                recipientUid: request.recipientUid,
+              );
+        } catch (_) {}
+      }
+    });
+  }
+
+  /// One-time analytics consent prompt shown on first authenticated launch.
+  Future<void> _maybeAskAnalyticsConsent() async {
+    final status = await AnalyticsConsentStore.read();
+    if (status != null || !mounted) return;
+    final granted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Help improve Notely'),
+        content: const Text(
+          "We'd like to collect anonymous usage data to understand how "
+          'Notely is used and make it better. This never includes your notes '
+          "or anything you type. You can change this anytime in Settings.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Allow'),
+          ),
+        ],
+      ),
+    );
+    if (granted == null || !mounted) return;
+    await ref.read(consentCoordinatorProvider).recordDecision(granted);
+    ref.invalidate(consentStatusProvider);
   }
 
   @override
   void dispose() {
+    _uriSub?.cancel();
+    _requestSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -69,6 +137,18 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     if (difference.inHours < 24) return '${difference.inHours}h ago';
     if (difference.inDays < 7) return '${difference.inDays}d ago';
     return '${updatedAt.month}/${updatedAt.day}/${updatedAt.year}';
+  }
+
+  String _joinMessage(JoinResult result) {
+    final title = result.noteTitle ?? '';
+    return switch (result.status) {
+      JoinStatus.notFound => 'This link is invalid or has expired.',
+      JoinStatus.ownerLink => 'You opened your own share link.',
+      JoinStatus.alreadyShared => 'This note is already shared with you.',
+      JoinStatus.pending => 'Request sent. Waiting for the owner to approve your request to join "$title".',
+      JoinStatus.approved => 'Almost there — the owner will share "$title" with you shortly.',
+      JoinStatus.shared => '"$title" is now shared with you.',
+    };
   }
 
   Future<void> _openEditor({Note? note}) async {
@@ -172,6 +252,25 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<JoinResult?>(joinResultProvider, (previous, next) {
+      if (next == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(joinResultProvider.notifier).state = null;
+      });
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Share link'),
+          content: Text(_joinMessage(next)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    });
     final own = ref.watch(notesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
     final shared = ref.watch(sharedNotesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
     final notes = [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)];

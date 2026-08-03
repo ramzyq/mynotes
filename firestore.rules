@@ -46,5 +46,48 @@ service cloud.firestore {
       allow read, write: if request.auth != null
         && request.auth.uid == noteOwnerId;
     }
+
+    // Moderation reports: reporters and note owners can read; only creation
+    // is allowed (resolution is handled by support, not self-serve).
+    match /reports/{reportId} {
+      allow create: if request.auth != null
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.status == 'open';
+      allow read: if request.auth != null
+        && (request.auth.uid == resource.data.reporterUid
+            || request.auth.uid == resource.data.targetOwnerUid);
+      allow update, delete: if false;
+    }
+
+    // Share links: anyone authenticated who has the (unguessable) token path
+    // may read; only the owner writes.
+    match /shareLinks/{token} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid;
+
+      match /requests/{recipientUid} {
+        allow read: if request.auth != null
+          && (request.auth.uid == resource.data.ownerUid
+              || request.auth.uid == recipientUid);
+        allow create: if request.auth != null
+          && request.auth.uid == recipientUid
+          && request.resource.data.ownerUid == get(/databases/$(database)/documents/shareLinks/$(token)).data.ownerUid
+          && request.resource.data.status in ['pending', 'approved'];
+        allow update: if request.auth != null
+          && (request.auth.uid == resource.data.ownerUid
+              || request.auth.uid == recipientUid);
+        allow delete: if request.auth != null
+          && request.auth.uid == resource.data.ownerUid;
+      }
+    }
+
+    // Collection group: owner watches join requests across their links
+    match /{path=**}/requests/{recipientUid} {
+      allow read: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid;
+    }
   }
 }

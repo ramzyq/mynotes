@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
+import 'package:mynotes/features/auth/providers/auth_providers.dart';
+import 'package:mynotes/features/collaboration/models/join_request.dart';
+import 'package:mynotes/features/collaboration/services/join_link_processor.dart';
 import 'package:mynotes/features/collaboration/services/share_service.dart';
 import 'package:mynotes/features/notes/data/comment.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -23,6 +26,11 @@ final shareServiceProvider = Provider<ShareService>((ref) {
   );
 });
 
+final ownerJoinRequestsProvider =
+    StreamProvider.family<List<JoinRequest>, String>((ref, ownerUid) {
+  return ref.watch(shareServiceProvider).watchOwnerJoinRequests(ownerUid);
+});
+
 final notesProvider = StreamProvider.family<List<Note>, String>((ref, uid) {
   final notesService = ref.watch(notesServiceProvider);
   return notesService.watchNotes(uid);
@@ -40,3 +48,14 @@ final commentsProvider =
     return notesService.watchComments(params.noteOwnerId, params.noteId);
   },
 );
+
+final joinResultProvider = StateProvider<JoinResult?>((ref) => null);
+
+final joinLinkProcessorProvider = Provider<JoinLinkProcessor>((ref) {
+  return JoinLinkProcessor(
+    shareService: ref.watch(shareServiceProvider),
+    keyManager: ref.watch(keyManagerProvider),
+    currentUser: () => ref.read(currentUserProvider),
+    onResult: (result) => ref.read(joinResultProvider.notifier).state = result,
+  );
+});

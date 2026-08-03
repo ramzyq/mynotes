@@ -41,4 +41,57 @@ void main() {
     final bytes2 = await key2.extractBytes();
     expect(bytes1, isNot(equals(bytes2)));
   });
+
+  test('getMyPublicKey is deterministic for the same master key', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final keyManager = KeyManager();
+    final first = await keyManager.getMyPublicKey();
+    final second = await keyManager.getMyPublicKey();
+    expect(second, equals(first));
+  });
+
+  test('wrap and unwrap with own public key round-trips the note key', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final keyManager = KeyManager();
+    final wrapped = await keyManager.createNoteKey('note-1');
+    final noteKey = await keyManager.unwrapNoteKey(wrapped);
+
+    final ownPublicKey = await keyManager.getMyPublicKey();
+    final encryptedKey = await keyManager.wrapNoteKeyForCollaborator(
+      noteKey: noteKey,
+      recipientPublicKey: ownPublicKey,
+    );
+    final recovered = await keyManager.unwrapCollaboratorNoteKey(
+      encryptedKeyStr: encryptedKey,
+      ownerPublicKey: ownPublicKey,
+    );
+
+    final original = await noteKey.extractBytes();
+    final result = await recovered.extractBytes();
+    expect(result, equals(original));
+  });
+
+  test('unwrapping with a different user public key fails', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final owner = KeyManager();
+    final wrapped = await owner.createNoteKey('note-1');
+    final noteKey = await owner.unwrapNoteKey(wrapped);
+
+    FlutterSecureStorage.setMockInitialValues({});
+    final stranger = KeyManager();
+    final strangerPublicKey = await stranger.getMyPublicKey();
+
+    final encryptedKey = await owner.wrapNoteKeyForCollaborator(
+      noteKey: noteKey,
+      recipientPublicKey: strangerPublicKey,
+    );
+
+    expect(
+      () => stranger.unwrapCollaboratorNoteKey(
+        encryptedKeyStr: encryptedKey,
+        ownerPublicKey: strangerPublicKey,
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
 }
