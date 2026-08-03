@@ -161,25 +161,6 @@ class _NoteCardState extends State<NoteCard> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  if (note.latitude != null && note.longitude != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.location_on_outlined, size: 12, color: notely.text4),
-                        if (note.placeName != null) ...[
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              note.placeName!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontFamily: 'Geist', fontSize: 11.5, color: notely.text3),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
                   widget.preview ??
                       Text(
                         note.previewText,
@@ -190,6 +171,21 @@ class _NoteCardState extends State<NoteCard> {
                   const SizedBox(height: 10),
                   Row(
                     children: [
+                      if (note.latitude != null && note.longitude != null) ...[
+                        Icon(Icons.location_on_outlined, size: 12, color: notely.text4),
+                        if (note.placeName != null) ...[
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              note.placeName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontFamily: 'Geist', fontSize: 11.5, color: notely.text3),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(width: 8),
+                      ],
                       Expanded(
                         child: Wrap(
                           spacing: 5,

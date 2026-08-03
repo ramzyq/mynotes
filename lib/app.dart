@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,14 +50,22 @@ class AuthenticationWrapper extends ConsumerStatefulWidget {
 
 class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
     with WidgetsBindingObserver {
+  Timer? _cleanupTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _cleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (ref.read(authStateProvider).valueOrNull != null) {
+        _deleteExpiredNotes();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _cleanupTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -69,19 +78,21 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
   }
 
   Future<void> _deleteExpiredNotes() async {
-    final now = DateTime.now();
-    final snapshots = await FirebaseFirestore.instance
-        .collectionGroup('notes')
-        .where(
-          'selfDestructAt',
-          isGreaterThan: Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(0)),
-        )
-        .where('selfDestructAt', isLessThanOrEqualTo: Timestamp.fromDate(now))
-        .get();
+    try {
+      final now = DateTime.now();
+      final snapshots = await FirebaseFirestore.instance
+          .collectionGroup('notes')
+          .where(
+            'selfDestructAt',
+            isGreaterThan: Timestamp.fromDate(DateTime.fromMillisecondsSinceEpoch(0)),
+          )
+          .where('selfDestructAt', isLessThanOrEqualTo: Timestamp.fromDate(now))
+          .get();
 
-    for (final doc in snapshots.docs) {
-      await doc.reference.delete();
-    }
+      for (final doc in snapshots.docs) {
+        await doc.reference.delete();
+      }
+    } catch (_) {}
   }
 
   @override
