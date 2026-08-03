@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mynotes/core/analytics/analytics_consent_store.dart';
+import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
@@ -45,7 +47,39 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
               displayName: widget.authUser.displayName,
             );
       } catch (_) {}
+      _maybeAskAnalyticsConsent();
     });
+  }
+
+  /// One-time analytics consent prompt shown on first authenticated launch.
+  Future<void> _maybeAskAnalyticsConsent() async {
+    final status = await AnalyticsConsentStore.read();
+    if (status != null || !mounted) return;
+    final granted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Help improve Notely'),
+        content: const Text(
+          "We'd like to collect anonymous usage data to understand how "
+          'Notely is used and make it better. This never includes your notes '
+          "or anything you type. You can change this anytime in Settings.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Allow'),
+          ),
+        ],
+      ),
+    );
+    if (granted == null || !mounted) return;
+    await ref.read(consentCoordinatorProvider).recordDecision(granted);
+    ref.invalidate(consentStatusProvider);
   }
 
   @override

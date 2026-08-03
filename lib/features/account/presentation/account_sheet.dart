@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/providers/theme_mode_provider.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
@@ -21,7 +22,14 @@ class AccountSheet extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final due = ref.watch(dueCountProvider(_uid(ref))).valueOrNull ?? 0;
     final archivedCount = ref.watch(notesProvider(_uid(ref))).valueOrNull?.where((n) => n.isArchived).length ?? 0;
+    final consent = ref.watch(consentStatusProvider).valueOrNull;
     final user = authUser ?? _currentUser(ref);
+
+    String consentDetail() => switch (consent) {
+          null => 'Not asked',
+          true => 'Analytics on',
+          false => 'Analytics off',
+        };
 
     String appearanceLabel() => switch (themeMode) {
           ThemeMode.light => 'Light',
@@ -93,6 +101,12 @@ class AccountSheet extends ConsumerWidget {
             onTap: () => _push(context, (c) => const ArchivedNotesView()),
           ),
           _SheetRow(
+            icon: Icons.privacy_tip_outlined,
+            label: 'Analytics & privacy',
+            detail: consentDetail(),
+            onTap: () => _showConsentDialog(context, ref),
+          ),
+          _SheetRow(
             icon: Icons.logout_rounded,
             label: 'Sign out',
             danger: true,
@@ -125,6 +139,34 @@ class AccountSheet extends ConsumerWidget {
     Navigator.of(context).pop();
     Navigator.of(context).push(MaterialPageRoute(builder: builder));
   }
+}
+
+Future<void> _showConsentDialog(BuildContext context, WidgetRef ref) async {
+  final current = ref.read(consentStatusProvider).valueOrNull;
+  final granting = current == true;
+  final decision = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(granting ? 'Turn off analytics?' : 'Allow analytics?'),
+      content: const Text(
+        'Allow anonymous usage data to help improve Notely? '
+        'This never includes your notes or anything you type.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(!granting),
+          child: Text(granting ? 'Keep on' : 'No thanks'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(granting),
+          child: Text(granting ? 'Turn off' : 'Allow'),
+        ),
+      ],
+    ),
+  );
+  if (decision == null) return;
+  await ref.read(consentCoordinatorProvider).recordDecision(decision);
+  ref.invalidate(consentStatusProvider);
 }
 
 class _SheetRow extends StatelessWidget {
