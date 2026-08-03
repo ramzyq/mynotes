@@ -1,6 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/notely_typography.dart';
+
+const notelyGlassTheme = GlassThemeData(
+  light: GlassThemeVariant(
+    settings: GlassThemeSettings(blur: 8, thickness: 30),
+    quality: GlassQuality.standard,
+    glowColors: GlassGlowColors(
+      primary: Color(0xFFA78BFA),
+      glowBlurRadius: 10,
+      glowOpacity: 0.6,
+    ),
+  ),
+  dark: GlassThemeVariant(
+    settings: GlassThemeSettings(blur: 10, thickness: 34),
+    quality: GlassQuality.standard,
+    glowColors: GlassGlowColors(
+      primary: Color(0xFFA78BFA),
+      glowBlurRadius: 12,
+      glowOpacity: 0.75,
+    ),
+  ),
+);
 
 ThemeData buildNotelyTheme(Brightness brightness) {
   final notely = brightness == Brightness.dark ? NotelyTheme.dark : NotelyTheme.light;

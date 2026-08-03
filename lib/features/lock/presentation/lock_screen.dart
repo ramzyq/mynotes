@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/lock/services/lock_service.dart';
 
@@ -36,46 +38,73 @@ class _LockScreenState extends ConsumerState<LockScreen> {
       return widget.child;
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Locked Note')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.lock_outline, size: 64, color: notely.violet),
-            const SizedBox(height: 24),
-            Text(
-              'This note is locked',
-              style: TextStyle(
-                fontFamily: 'Instrument Serif',
-                fontSize: 28,
-                color: notely.text,
-              ),
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _canAttempt() ? _authenticate : null,
-              icon: const Icon(Icons.fingerprint),
-              label: const Text('Unlock with biometrics'),
-              style: FilledButton.styleFrom(
-                backgroundColor: notely.violet,
-                foregroundColor: Colors.white,
-              ),
-            ),
-            if (widget.pinHash != null) ...[
-              const SizedBox(height: 16),
-              TextField(
-                obscureText: true,
-                decoration: const InputDecoration(
-                  hintText: 'Enter PIN',
-                  border: OutlineInputBorder(),
+    return GlassPage(
+      background: const NotelyBackground(),
+      statusBarStyle: GlassStatusBarStyle.auto,
+      child: Scaffold(
+        appBar: GlassAppBar(
+          centerTitle: false,
+          leading: GlassIconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+            size: 34,
+            iconSize: 17,
+          ),
+          title: Text(
+            'Locked Note',
+            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Icon(Icons.lock_outline, size: 64, color: notely.violet),
+                const SizedBox(height: 24),
+                Text(
+                  'This note is locked',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Instrument Serif',
+                    fontSize: 28,
+                    color: notely.text,
+                  ),
                 ),
-                onSubmitted: _verifyPin,
-              ),
-            ],
-            if (_cooldownUntil != null)
-              Text('Too many attempts. Try again later.'),
-          ],
+                const SizedBox(height: 24),
+                Center(
+                  child: GlassButton.custom(
+                    onTap: _canAttempt() ? _authenticate : () {},
+                    enabled: _canAttempt(),
+                    height: 54,
+                    glowColor: notely.violet,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.fingerprint, size: 18, color: Colors.white),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Unlock with biometrics',
+                          style: TextStyle(fontFamily: 'Geist', fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (widget.pinHash != null) ...[
+                  const SizedBox(height: 16),
+                  GlassPasswordField(
+                    placeholder: 'Enter PIN',
+                    onSubmitted: _verifyPin,
+                  ),
+                ],
+                if (_cooldownUntil != null)
+                  const Text('Too many attempts. Try again later.'),
+              ],
+            ),
+          ),
         ),
       ),
     );
