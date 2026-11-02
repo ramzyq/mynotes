@@ -44,7 +44,6 @@ Notely is designed with privacy as a default, not an afterthought.
 - **Framework:** Flutter (Dart)
 - **State management:** Riverpod
 - **Backend:** Firebase (Firestore, Auth, Storage, Analytics)
-- **Local database:** Drift (SQLite) — present but not currently used by any feature
 - **Encryption:** `cryptography` (AES-256-GCM, PBKDF2, HKDF, X25519)
 - **Key storage:** `flutter_secure_storage`
 - **Biometrics:** `local_auth`
@@ -68,9 +67,6 @@ cd mynotes
 
 # Install dependencies
 flutter pub get
-
-# Generate drift database code
-dart run build_runner build --delete-conflicting-outputs
 
 # Run on your device/emulator
 flutter run
@@ -101,7 +97,6 @@ lib/
 ├── core/
 │   ├── auth/models/              # AuthUser model
 │   ├── auth/services/            # AuthService, FirebaseAuthProvider
-│   ├── db/                       # Drift database (currently unused)
 │   ├── encryption/               # CryptoService, KeyManager, KeyBackupService, key setup gate
 │   ├── error/                    # Error handling
 │   └── providers/                # Global Riverpod providers
