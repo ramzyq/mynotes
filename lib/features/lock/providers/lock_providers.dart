@@ -5,6 +5,6 @@ final lockServiceProvider = Provider<LockService>((ref) {
   return LockService();
 });
 
-final unlockedNotesProvider = StateProvider<Set<String>>((ref) {
-  return {};
+final lockAttemptStoreProvider = Provider<LockAttemptStore>((ref) {
+  return LockAttemptStore();
 });

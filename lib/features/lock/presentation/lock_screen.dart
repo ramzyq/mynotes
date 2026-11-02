@@ -1,23 +1,29 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
-import 'package:mynotes/features/lock/services/lock_service.dart';
+import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
+/// Gate in front of a locked note.
+///
+/// PIN-locked notes are encrypted under the PIN, so the PIN is what decrypts
+/// them; the unlocked note is passed to [builder]. Biometric-locked notes are
+/// a device privacy screen and are shown once the biometric prompt passes.
 class LockScreen extends ConsumerStatefulWidget {
-  final String noteId;
-  final String? pinHash;
-  final String? pinSalt;
-  final Widget child;
+  final String uid;
+  final Note note;
+  final Widget Function(Note unlocked) builder;
 
   const LockScreen({
     super.key,
-    required this.noteId,
-    this.pinHash,
-    this.pinSalt,
-    required this.child,
+    required this.uid,
+    required this.note,
+    required this.builder,
   });
 
   @override
@@ -25,18 +31,82 @@ class LockScreen extends ConsumerStatefulWidget {
 }
 
 class _LockScreenState extends ConsumerState<LockScreen> {
-  bool _isLocked = true;
-  int _failedAttempts = 0;
-  DateTime? _cooldownUntil;
+  Note? _unlocked;
+  Duration _cooldown = Duration.zero;
+  Timer? _ticker;
+  bool _busy = false;
+  String? _error;
+
+  bool get _usesPin => widget.note.hasPinLock;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshCooldown();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshCooldown() async {
+    final remaining = await ref.read(lockAttemptStoreProvider).remainingCooldown(widget.note.id);
+    if (!mounted) return;
+    setState(() => _cooldown = remaining);
+    _ticker?.cancel();
+    if (remaining > Duration.zero) {
+      _ticker = Timer(remaining, _refreshCooldown);
+    }
+  }
+
+  Future<void> _authenticate() async {
+    final success = await ref.read(lockServiceProvider).authenticateWithBiometrics();
+    if (success && mounted) setState(() => _unlocked = widget.note);
+  }
+
+  Future<void> _verifyPin(String pin) async {
+    if (_busy || _cooldown > Duration.zero || pin.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final attempts = ref.read(lockAttemptStoreProvider);
+    try {
+      final unlocked = await ref
+          .read(notesServiceProvider)
+          .unlockWithPin(uid: widget.uid, note: widget.note, pin: pin);
+      if (!mounted) return;
+      if (unlocked != null) {
+        await attempts.recordSuccess(widget.note.id);
+        if (mounted) setState(() => _unlocked = unlocked);
+        return;
+      }
+      final cooldown = await attempts.recordFailure(widget.note.id);
+      if (!mounted) return;
+      setState(() => _error = cooldown > Duration.zero ? null : 'Wrong PIN.');
+      await _refreshCooldown();
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (mounted) setState(() => _error = "Couldn't unlock this note.");
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _formatCooldown(Duration d) {
+    if (d.inMinutes >= 1) return '${d.inMinutes} min ${d.inSeconds % 60} s';
+    return '${d.inSeconds} s';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final notely = NotelyTheme.of(context);
-    final unlockedNotes = ref.watch(unlockedNotesProvider);
+    final unlocked = _unlocked;
+    if (unlocked != null) return widget.builder(unlocked);
 
-    if (!_isLocked || unlockedNotes.contains(widget.noteId)) {
-      return widget.child;
-    }
+    final notely = NotelyTheme.of(context);
+    final coolingDown = _cooldown > Duration.zero;
 
     return GlassPage(
       background: const NotelyBackground(),
@@ -67,83 +137,48 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                 Text(
                   'This note is locked',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Instrument Serif',
-                    fontSize: 28,
-                    color: notely.text,
-                  ),
+                  style: TextStyle(fontFamily: 'Instrument Serif', fontSize: 28, color: notely.text),
                 ),
                 const SizedBox(height: 24),
-                Center(
-                  child: GlassButton.custom(
-                    onTap: _canAttempt() ? _authenticate : () {},
-                    enabled: _canAttempt(),
-                    height: 54,
-                    glowColor: notely.violet,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.fingerprint, size: 18, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Unlock with biometrics',
-                          style: TextStyle(fontFamily: 'Geist', fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (widget.pinHash != null) ...[
-                  const SizedBox(height: 16),
+                if (_usesPin)
                   GlassPasswordField(
                     placeholder: 'Enter PIN',
                     onSubmitted: _verifyPin,
+                  )
+                else
+                  Center(
+                    child: GlassButton.custom(
+                      onTap: _authenticate,
+                      height: 54,
+                      glowColor: notely.violet,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.fingerprint, size: 18, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text(
+                            'Unlock with biometrics',
+                            style: TextStyle(fontFamily: 'Geist', fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ],
-                if (_cooldownUntil != null)
-                  const Text('Too many attempts. Try again later.'),
+                const SizedBox(height: 12),
+                if (_busy) const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                if (_error != null)
+                  Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
+                if (coolingDown)
+                  Text(
+                    'Too many attempts. Try again in ${_formatCooldown(_cooldown)}.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: notely.text3),
+                  ),
               ],
             ),
           ),
         ),
       ),
     );
-  }
-
-  bool _canAttempt() {
-    if (_cooldownUntil == null) return true;
-    if (DateTime.now().isAfter(_cooldownUntil!)) {
-      _cooldownUntil = null;
-      _failedAttempts = 0;
-      return true;
-    }
-    return false;
-  }
-
-  Future<void> _authenticate() async {
-    final lockService = ref.read(lockServiceProvider);
-    final success = await lockService.authenticateWithBiometrics();
-    if (success) {
-      setState(() => _isLocked = false);
-      ref.read(unlockedNotesProvider.notifier).update((set) => {...set, widget.noteId});
-    }
-  }
-
-  Future<void> _verifyPin(String pin) async {
-    if (widget.pinHash == null || widget.pinSalt == null) return;
-    final lockService = ref.read(lockServiceProvider);
-    final valid = await lockService.verifyPin(
-      pin,
-      PinHash(hash: widget.pinHash!, salt: widget.pinSalt!),
-    );
-    if (valid) {
-      setState(() => _isLocked = false);
-      ref.read(unlockedNotesProvider.notifier).update((set) => {...set, widget.noteId});
-    } else {
-      _failedAttempts++;
-      if (_failedAttempts >= 3) {
-        setState(() => _cooldownUntil = DateTime.now().add(const Duration(seconds: 30)));
-      }
-    }
   }
 }
