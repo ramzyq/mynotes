@@ -6,14 +6,16 @@ import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
+import 'package:mynotes/features/lock/services/biometric_unlock_service.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 /// Gate in front of a locked note.
 ///
-/// PIN-locked notes are encrypted under the PIN, so the PIN is what decrypts
-/// them; the unlocked note is passed to [builder]. Biometric-locked notes are
-/// a device privacy screen and are shown once the biometric prompt passes.
+/// PIN-locked notes are encrypted under the PIN, so the PIN (or, if turned on
+/// for this device, biometrics releasing the PIN-derived key) is what
+/// decrypts them; the unlocked note is passed to [builder]. Older
+/// biometric-only locks are a device privacy screen.
 class LockScreen extends ConsumerStatefulWidget {
   final String uid;
   final Note note;
@@ -39,10 +41,49 @@ class _LockScreenState extends ConsumerState<LockScreen> {
 
   bool get _usesPin => widget.note.hasPinLock;
 
+  /// Biometric unlock is set up for this PIN-locked note on this device.
+  bool _biometricEnabled = false;
+
   @override
   void initState() {
     super.initState();
     _refreshCooldown();
+    _checkBiometric();
+  }
+
+  Future<void> _checkBiometric() async {
+    if (!_usesPin || widget.note.pinWrappedKey == null) return;
+    final service = ref.read(biometricUnlockServiceProvider);
+    final enabled = await service.isEnabled(widget.uid, widget.note.id);
+    if (!mounted || !enabled) return;
+    setState(() => _biometricEnabled = true);
+    await _unlockWithBiometrics();
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await ref.read(biometricUnlockServiceProvider).unlock(widget.uid, widget.note);
+      if (!mounted) return;
+      switch (result) {
+        case BiometricUnlocked(:final note):
+          await ref.read(lockAttemptStoreProvider).recordSuccess(widget.note.id);
+          if (mounted) setState(() => _unlocked = note);
+        case BiometricCancelled():
+          break;
+        case BiometricNoLongerAvailable():
+          setState(() {
+            _biometricEnabled = false;
+            _error = 'Biometric unlock was reset on this device. Use your PIN.';
+          });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -140,12 +181,20 @@ class _LockScreenState extends ConsumerState<LockScreen> {
                   style: TextStyle(fontFamily: 'Instrument Serif', fontSize: 28, color: notely.text),
                 ),
                 const SizedBox(height: 24),
-                if (_usesPin)
+                if (_usesPin) ...[
                   GlassPasswordField(
                     placeholder: 'Enter PIN',
                     onSubmitted: _verifyPin,
-                  )
-                else
+                  ),
+                  if (_biometricEnabled) ...[
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _busy ? null : _unlockWithBiometrics,
+                      icon: const Icon(Icons.fingerprint),
+                      label: const Text('Unlock with biometrics'),
+                    ),
+                  ],
+                ] else
                   Center(
                     child: GlassButton.custom(
                       onTap: _authenticate,

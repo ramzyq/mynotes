@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_links/app_links.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -284,6 +285,15 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   @override
   Widget build(BuildContext context) {
+    // Forget biometric unlock entries for notes deleted or no longer PIN-locked.
+    ref.listen<AsyncValue<List<Note>>>(notesProvider(widget.authUser.uid), (previous, next) {
+      final notes = next.valueOrNull;
+      if (notes == null) return;
+      ref
+          .read(biometricUnlockServiceProvider)
+          .prune(widget.authUser.uid, notes)
+          .catchError(AppErrorHandler().handle);
+    });
     ref.listen<JoinResult?>(joinResultProvider, (previous, next) {
       if (next == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {

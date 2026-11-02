@@ -518,59 +518,120 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     return pin;
   }
 
+  /// Ask for a PIN, encrypt the note under it, and offer biometric unlock.
+  Future<void> _lockWithPin() async {
+    final note = _note;
+    if (note == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final pin = await _askForPin();
+    if (pin == null || !mounted) return;
+    if (pin.length < 4) {
+      messenger.showSnackBar(const SnackBar(content: Text('Use a PIN of at least 4 digits.')));
+      return;
+    }
+    final uid = widget.authUser.uid;
+    final biometrics = ref.read(biometricUnlockServiceProvider);
+    // A new PIN means a new PIN-derived key; any old biometric entry is stale.
+    await biometrics.disable(uid, note.id);
+    await ref.read(notesServiceProvider).lockWithPin(uid: uid, note: note, pin: pin);
+    if (!mounted) return;
+    // Mark as PIN-locked locally; the real wrapped key is on the server and
+    // the unlocked key stays cached until the editor closes.
+    setState(() => _note = note.copyWith(isLocked: true, pinWrappedKey: 'pending', pinHash: null));
+
+    if (!await biometrics.isSupported() || !mounted) return;
+    final useBiometrics = await showNotelyDialog<bool>(
+      context: context,
+      title: 'Unlock with biometrics?',
+      message: 'Open this note with Face ID, Touch ID, or your fingerprint on '
+          'this device. Your PIN keeps working and is needed on other devices.',
+      actions: [
+        NotelyDialogAction(label: 'Not now', onPressed: () => Navigator.of(context).pop(false)),
+        NotelyDialogAction(label: 'Turn on', isPrimary: true, onPressed: () => Navigator.of(context).pop(true)),
+      ],
+    );
+    if (useBiometrics == true) await _setBiometric(true);
+  }
+
+  Future<void> _setBiometric(bool enabled) async {
+    final note = _note;
+    if (note == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final biometrics = ref.read(biometricUnlockServiceProvider);
+    if (!enabled) {
+      await biometrics.disable(widget.authUser.uid, note.id);
+      messenger.showSnackBar(const SnackBar(content: Text('Biometric unlock turned off on this device.')));
+      return;
+    }
+    final ok = await biometrics.enable(widget.authUser.uid, note.id);
+    messenger.showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'Biometric unlock turned on for this device.'
+          : "Couldn't turn on biometric unlock. Your PIN still works."),
+    ));
+  }
+
   Future<void> _toggleLock() async {
     final note = _note;
     if (note == null || !_isOwner) return;
     final service = ref.read(notesServiceProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final uid = widget.authUser.uid;
 
     try {
-      if (note.isLocked) {
-        await service.removeLock(uid: widget.authUser.uid, note: note);
-        if (!mounted) return;
-        setState(() => _note = note.copyWith(
-              isLocked: false,
-              pinWrappedKey: null,
-              pinHash: null,
-              pinSalt: null,
-            ));
+      if (!note.isLocked) {
+        await _lockWithPin();
         return;
       }
 
-      final canBio = await ref.read(lockServiceProvider).canUseBiometrics();
+      final biometrics = ref.read(biometricUnlockServiceProvider);
+      final pinLocked = note.hasPinLock;
+      final supported = pinLocked && await biometrics.isSupported();
+      final enabled = supported && await biometrics.isEnabled(uid, note.id);
       if (!mounted) return;
-      final method = canBio
-          ? await showNotelyDialog<String>(
-              context: context,
-              title: 'Lock note',
-              message: 'A PIN encrypts the note so it cannot be opened without '
-                  'the PIN. Biometrics only hide it on this device.',
-              actions: [
-                NotelyDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(null)),
-                NotelyDialogAction(label: 'Biometrics', onPressed: () => Navigator.of(context).pop('bio')),
-                NotelyDialogAction(label: 'PIN', isPrimary: true, onPressed: () => Navigator.of(context).pop('pin')),
-              ],
-            )
-          : 'pin';
-      if (method == null || !mounted) return;
 
-      if (method == 'bio') {
-        await service.lockWithBiometrics(uid: widget.authUser.uid, note: note);
-        if (!mounted) return;
-        setState(() => _note = note.copyWith(isLocked: true));
-        return;
-      }
+      final choice = await showNotelyDialog<String>(
+        context: context,
+        title: 'Locked note',
+        message: pinLocked
+            ? 'This note is encrypted with your PIN.'
+            : 'This note is only hidden on this device. Set a PIN to encrypt it.',
+        actions: [
+          NotelyDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(null)),
+          NotelyDialogAction(label: 'Remove lock', isDestructive: true, onPressed: () => Navigator.of(context).pop('remove')),
+          if (!pinLocked)
+            NotelyDialogAction(label: 'Set PIN', isPrimary: true, onPressed: () => Navigator.of(context).pop('pin')),
+          if (supported)
+            NotelyDialogAction(
+              label: enabled ? 'Turn off biometrics' : 'Use biometrics',
+              isPrimary: true,
+              onPressed: () => Navigator.of(context).pop(enabled ? 'bio-off' : 'bio-on'),
+            ),
+        ],
+      );
+      if (choice == null || !mounted) return;
 
-      final pin = await _askForPin();
-      if (pin == null || !mounted) return;
-      if (pin.length < 4) {
-        messenger.showSnackBar(const SnackBar(content: Text('Use a PIN of at least 4 digits.')));
-        return;
+      switch (choice) {
+        case 'remove':
+          await service.removeLock(uid: uid, note: note);
+          await biometrics.disable(uid, note.id);
+          if (!mounted) return;
+          setState(() => _note = note.copyWith(
+                isLocked: false,
+                pinWrappedKey: null,
+                pinHash: null,
+                pinSalt: null,
+              ));
+        case 'pin':
+          await service.removeLock(uid: uid, note: note);
+          if (!mounted) return;
+          setState(() => _note = note.copyWith(isLocked: false));
+          await _lockWithPin();
+        case 'bio-on':
+          await _setBiometric(true);
+        case 'bio-off':
+          await _setBiometric(false);
       }
-      await service.lockWithPin(uid: widget.authUser.uid, note: note, pin: pin);
-      if (!mounted) return;
-      // Keep the note marked as PIN-locked so unlocking re-wraps the key.
-      setState(() => _note = note.copyWith(isLocked: true, pinWrappedKey: 'pending'));
     } catch (error, stack) {
       AppErrorHandler().handle(error, stack);
       messenger.showSnackBar(SnackBar(
@@ -975,6 +1036,24 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                           child: Text(
                             'Read once: this note is permanently deleted when you close it.',
                             style: TextStyle(color: Colors.redAccent.shade200, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      if (_isOwner && (note?.isLocked ?? false) && !(note?.hasPinLock ?? false))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'This note is hidden but not encrypted.',
+                                  style: TextStyle(color: notely.text3),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _toggleLock,
+                                child: const Text('Encrypt with PIN'),
+                              ),
+                            ],
                           ),
                         ),
                       if (note?.decryptionFailed ?? false)

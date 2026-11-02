@@ -624,8 +624,10 @@ class NotesService {
   // The server holds no PIN verifier, so the PIN cannot be brute-forced from
   // Firestore data, and the note cannot be decrypted without the PIN.
   //
-  // Biometric locks are a privacy screen on this device only (the platform
-  // biometric API cannot release key material portably).
+  // Biometric unlock is a convenience on top of a PIN lock: the PIN-derived
+  // key is kept in biometric-protected device storage (BiometricUnlockService)
+  // and handed back here via [unlockWithKek]. Older biometric-only locks are
+  // a privacy screen until the user sets a PIN.
 
   Future<SecretKey> _pinKek(String noteId, String pin, List<int> salt) async {
     final stretched = await crypto.deriveKey(password: pin, salt: salt, iterations: _pinIterations);
@@ -656,9 +658,31 @@ class NotesService {
     _noteKeys[note.id] = (gen: existing.keyGen, key: key);
   }
 
-  Future<void> lockWithBiometrics({required String uid, required Note note}) async {
-    if (note.hasPinLock) await removeLock(uid: uid, note: note);
-    await _noteRef(uid, note.id).update({NoteFields.isLocked: true});
+  /// Raw bytes of the PIN-derived key for a note unlocked in this session,
+  /// for storing behind biometrics. Null if the note is not unlocked.
+  Future<List<int>?> exportPinKek(String noteId) async {
+    final kek = _pinKeks[noteId];
+    return kek?.extractBytes();
+  }
+
+  /// Unlock a PIN-locked note with a previously exported PIN-derived key.
+  /// Returns null if the key no longer matches (e.g. the PIN was changed).
+  Future<Note?> unlockWithKek({required Note note, required List<int> kek}) async {
+    final wrapped = note.pinWrappedKey;
+    if (wrapped == null) return null;
+    final kekKey = SecretKey(List<int>.from(kek));
+    try {
+      final key = await keyManager.unwrapKeyWith(
+        wrappingKey: kekKey,
+        wrapped: wrapped,
+        aad: _pinAad(note.id),
+      );
+      _pinKeks[note.id] = kekKey;
+      _noteKeys[note.id] = (gen: note.keyGen, key: key);
+      return note.isSealed ? note.decryptNote(key, crypto) : note;
+    } on SecretBoxAuthenticationError {
+      return null;
+    }
   }
 
   /// Returns the decrypted note, or null if [pin] is wrong.
