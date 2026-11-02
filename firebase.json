@@ -40,7 +40,8 @@
         "node_modules",
         ".git",
         "test",
-        "*.log"
+        "*.log",
+        "scripts"
       ]
     }
   ]
