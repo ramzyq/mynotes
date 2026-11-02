@@ -16,7 +16,7 @@ A privacy-first notes app built with Flutter and Firebase, featuring end-to-end 
 - **Version history** — An encrypted snapshot is taken on save (at most every 5 minutes). Restoring a version first snapshots the current one, so restores can be undone. Up to 50 versions per note.
 - **Collaboration** — Share by email or by link (open or approval-required). Each collaborator gets the note key wrapped for their X25519 public key. Removing a collaborator rotates the note key. Collaborators can read and comment; only the owner edits.
 - **Context switcher** — Organize notes with tags. Filter to a focused view per project or topic.
-- **Self-destructing notes** — Set a destruction date, or mark a note read-once so it is deleted when you close it. The note's versions, comments, and share links are deleted with it. Expired notes are removed by the app when it runs; a server-side TTL policy is recommended for guaranteed deletion.
+- **Self-destructing notes** — Set a destruction date, or mark a note read-once so it is deleted when you close it. The note's versions, comments, and share links are deleted with it. Expired notes are deleted server-side by a Firestore TTL policy (usually within 24 hours of expiry; the app also deletes them on time while it is open), and a Cloud Function removes everything attached to a deleted note. Self-destruct cannot remove copies a collaborator has already decrypted on their own device.
 - **Dark theme** — Calm, dark workspace for focused writing. Light theme also available.
 
 ## Privacy & Security
@@ -72,12 +72,28 @@ flutter pub get
 flutter run
 ```
 
-### Firebase Security Rules
+### Firebase Rules, Indexes, and Functions
 
-Deploy the versioned rules:
+Deploy the versioned rules and indexes (the indexes file also enables the
+`selfDestructAt` TTL policy on the `notes` collection group):
 
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes,storage
+```
+
+Deploy the cleanup function, which deletes a note's versions, comments, and
+share links whenever the note is deleted (by the app, by TTL, or from the
+console). Cloud Functions require the Blaze (pay-as-you-go) plan.
+
+```bash
+npm --prefix functions install
+firebase deploy --only functions
+```
+
+To run the function tests locally:
+
+```bash
+firebase emulators:exec --only firestore 'npm --prefix functions test'
 ```
 
 To run the rules tests locally:
@@ -110,6 +126,8 @@ lib/
 │   └── study/                    # Spaced repetition / flashcards
 ├── firestore.rules               # Firestore security rules
 ├── storage.rules                 # Storage security rules
+├── firestore.indexes.json        # Indexes and the selfDestructAt TTL policy
+├── functions/                    # Cloud Function: clean up after deleted notes
 └── tests/                        # Firebase rules unit tests
 ```
 
