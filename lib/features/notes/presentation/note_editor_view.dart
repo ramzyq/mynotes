@@ -1,12 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/features/notes/data/notes_service.dart';
 import 'package:mynotes/core/theme/note_palette.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
@@ -14,12 +13,14 @@ import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
 import 'package:mynotes/core/theme/widgets/tag_pill.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
-import 'package:mynotes/features/collaboration/models/share_link.dart';
 
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/notes/data/comment.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/presentation/version_history_view.dart';
+import 'package:mynotes/features/notes/presentation/widgets/self_destruct_sheet.dart';
+import 'package:mynotes/features/notes/presentation/widgets/share_sheet.dart';
+import 'package:mynotes/features/notes/presentation/widgets/tags_sheet.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class NoteEditorView extends ConsumerStatefulWidget {
@@ -37,6 +38,10 @@ class NoteEditorView extends ConsumerStatefulWidget {
 }
 
 class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
+  /// Latest known state of the note. Updated after lock/share operations so
+  /// later actions never act on the stale copy the editor was opened with.
+  Note? _note;
+  late final NotesService _notesService;
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
   late int _selectedColorIndex;
@@ -66,6 +71,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   @override
   void initState() {
     super.initState();
+    _notesService = ref.read(notesServiceProvider);
+    _note = widget.note;
     final note = widget.note;
     _titleController = TextEditingController(text: note?.title ?? '');
     _contentController = TextEditingController(text: note?.content ?? '');
@@ -87,9 +94,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       _loadBacklinks();
     }
 
-    if (note?.selfDestructOnRead == true) {
-      _handleSelfDestructOnRead();
-    }
   }
 
   void _onContentChanged() {
@@ -330,26 +334,31 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     _audioAttachments = [..._audioAttachments, filePath];
   }
 
-  Future<void> _handleSelfDestructOnRead() async {
-    final note = widget.note;
-    if (note == null) return;
+  /// Owner of the note being edited (the current user for new notes).
+  String get _ownerUid => _note?.ownerUid ?? widget.authUser.uid;
 
-    try {
-      await ref.read(notesServiceProvider).deleteNote(
-        uid: widget.authUser.uid,
-        noteId: note.id,
-      );
-    } catch (_) {}
+  bool get _isOwner => _ownerUid == widget.authUser.uid;
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('This note has self-destructed')),
-    );
-    Navigator.of(context).pop(true);
-  }
+  /// Collaborators can read and comment but not edit; undecryptable notes
+  /// must never be saved (that would overwrite them with empty content).
+  bool get _canEdit => _isOwner && !(_note?.decryptionFailed ?? false);
+
+  /// A read-once note is deleted when the owner closes it after reading.
+  bool get _destroysOnClose =>
+      _isOwner && (widget.note?.selfDestructOnRead ?? false);
 
   @override
   void dispose() {
+    final note = widget.note;
+    if (note != null) {
+      if (_destroysOnClose) {
+        _notesService
+            .deleteNote(uid: widget.authUser.uid, noteId: note.id)
+            .catchError(AppErrorHandler().handle);
+      }
+      // Forget the key of a PIN-locked note once it is closed.
+      _notesService.relock(note.id);
+    }
     _contentController.removeListener(_onContentChanged);
     _titleController.dispose();
     _contentController.dispose();
@@ -359,6 +368,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   }
 
   Future<void> _saveNote() async {
+    if (!_canEdit) return;
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
 
@@ -387,7 +397,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       } else {
         await ref.read(notesServiceProvider).updateNote(
           uid: widget.authUser.uid,
-          note: widget.note!.copyWith(
+          note: _note!.copyWith(
             title: title.isEmpty && content.isEmpty ? 'Untitled note' : title,
             content: content,
             colorIndex: _selectedColorIndex,
@@ -407,10 +417,15 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         }
         Navigator.of(context).pop(true);
       }
-    } catch (e) {
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save note: $e')),
+          SnackBar(
+            content: Text(error is NoteException
+                ? error.message
+                : 'Could not save note. Please try again.'),
+          ),
         );
       }
     } finally {
@@ -457,6 +472,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
         return;
       }
       Navigator.of(context).pop(true);
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete note. Please try again.')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isDeleting = false);
@@ -464,73 +486,157 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     }
   }
 
-  Future<void> _toggleLock() async {
-    final note = widget.note;
-    if (note == null) return;
-
-    final lockService = ref.read(lockServiceProvider);
-    final canBio = await lockService.canUseBiometrics();
-
-    if (!note.isLocked) {
-      if (canBio) {
-        // Lock with biometrics only
-        await ref.read(notesServiceProvider).updateNote(
-          uid: widget.authUser.uid,
-          note: note.copyWith(isLocked: true),
-        );
-      } else {
-        // No biometrics - prompt for PIN
-        if (!mounted) return;
-        final pinController = TextEditingController();
-        final pin = await showNotelyDialog<String>(
-          context: context,
-          title: 'Set a PIN',
-          content: TextField(
-            controller: pinController,
-            obscureText: true,
-            decoration: const InputDecoration(
-              hintText: 'Enter PIN',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          actions: [
-            NotelyDialogAction(
-              label: 'Cancel',
-              onPressed: () => Navigator.of(context).pop(null),
-            ),
-            NotelyDialogAction(
-              label: 'Set PIN',
-              isPrimary: true,
-              onPressed: () => Navigator.of(context).pop(pinController.text),
-            ),
-          ],
-        );
-        if (pin != null && pin.isNotEmpty) {
-          final pinHash = await lockService.hashPin(pin);
-          await ref.read(notesServiceProvider).updateNote(
-            uid: widget.authUser.uid,
-            note: note.copyWith(
-              isLocked: true,
-              pinHash: pinHash.hash,
-              pinSalt: pinHash.salt,
-            ),
-          );
-        }
-      }
-      if (!mounted) return;
-      setState(() {});
-    } else {
-      // Unlock - clear lock
-      await ref.read(notesServiceProvider).updateNote(
-        uid: widget.authUser.uid,
-        note: note.copyWith(
-          isLocked: false,
-          pinHash: null,
-          pinSalt: null,
+  Future<String?> _askForPin() async {
+    final pinController = TextEditingController();
+    final pin = await showNotelyDialog<String>(
+      context: context,
+      title: 'Set a PIN',
+      message: null,
+      content: TextField(
+        controller: pinController,
+        obscureText: true,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          hintText: 'At least 4 digits',
+          helperText: 'The PIN encrypts this note. It cannot be recovered.',
+          border: OutlineInputBorder(),
         ),
-      );
+      ),
+      actions: [
+        NotelyDialogAction(
+          label: 'Cancel',
+          onPressed: () => Navigator.of(context).pop(null),
+        ),
+        NotelyDialogAction(
+          label: 'Set PIN',
+          isPrimary: true,
+          onPressed: () => Navigator.of(context).pop(pinController.text),
+        ),
+      ],
+    );
+    pinController.dispose();
+    return pin;
+  }
+
+  /// Ask for a PIN, encrypt the note under it, and offer biometric unlock.
+  Future<void> _lockWithPin() async {
+    final note = _note;
+    if (note == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final pin = await _askForPin();
+    if (pin == null || !mounted) return;
+    if (pin.length < 4) {
+      messenger.showSnackBar(const SnackBar(content: Text('Use a PIN of at least 4 digits.')));
+      return;
+    }
+    final uid = widget.authUser.uid;
+    final biometrics = ref.read(biometricUnlockServiceProvider);
+    // A new PIN means a new PIN-derived key; any old biometric entry is stale.
+    await biometrics.disable(uid, note.id);
+    await ref.read(notesServiceProvider).lockWithPin(uid: uid, note: note, pin: pin);
+    if (!mounted) return;
+    // Mark as PIN-locked locally; the real wrapped key is on the server and
+    // the unlocked key stays cached until the editor closes.
+    setState(() => _note = note.copyWith(isLocked: true, pinWrappedKey: 'pending', pinHash: null));
+
+    if (!await biometrics.isSupported() || !mounted) return;
+    final useBiometrics = await showNotelyDialog<bool>(
+      context: context,
+      title: 'Unlock with biometrics?',
+      message: 'Open this note with Face ID, Touch ID, or your fingerprint on '
+          'this device. Your PIN keeps working and is needed on other devices.',
+      actions: [
+        NotelyDialogAction(label: 'Not now', onPressed: () => Navigator.of(context).pop(false)),
+        NotelyDialogAction(label: 'Turn on', isPrimary: true, onPressed: () => Navigator.of(context).pop(true)),
+      ],
+    );
+    if (useBiometrics == true) await _setBiometric(true);
+  }
+
+  Future<void> _setBiometric(bool enabled) async {
+    final note = _note;
+    if (note == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final biometrics = ref.read(biometricUnlockServiceProvider);
+    if (!enabled) {
+      await biometrics.disable(widget.authUser.uid, note.id);
+      messenger.showSnackBar(const SnackBar(content: Text('Biometric unlock turned off on this device.')));
+      return;
+    }
+    final ok = await biometrics.enable(widget.authUser.uid, note.id);
+    messenger.showSnackBar(SnackBar(
+      content: Text(ok
+          ? 'Biometric unlock turned on for this device.'
+          : "Couldn't turn on biometric unlock. Your PIN still works."),
+    ));
+  }
+
+  Future<void> _toggleLock() async {
+    final note = _note;
+    if (note == null || !_isOwner) return;
+    final service = ref.read(notesServiceProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final uid = widget.authUser.uid;
+
+    try {
+      if (!note.isLocked) {
+        await _lockWithPin();
+        return;
+      }
+
+      final biometrics = ref.read(biometricUnlockServiceProvider);
+      final pinLocked = note.hasPinLock;
+      final supported = pinLocked && await biometrics.isSupported();
+      final enabled = supported && await biometrics.isEnabled(uid, note.id);
       if (!mounted) return;
-      setState(() {});
+
+      final choice = await showNotelyDialog<String>(
+        context: context,
+        title: 'Locked note',
+        message: pinLocked
+            ? 'This note is encrypted with your PIN.'
+            : 'This note is only hidden on this device. Set a PIN to encrypt it.',
+        actions: [
+          NotelyDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(null)),
+          NotelyDialogAction(label: 'Remove lock', isDestructive: true, onPressed: () => Navigator.of(context).pop('remove')),
+          if (!pinLocked)
+            NotelyDialogAction(label: 'Set PIN', isPrimary: true, onPressed: () => Navigator.of(context).pop('pin')),
+          if (supported)
+            NotelyDialogAction(
+              label: enabled ? 'Turn off biometrics' : 'Use biometrics',
+              isPrimary: true,
+              onPressed: () => Navigator.of(context).pop(enabled ? 'bio-off' : 'bio-on'),
+            ),
+        ],
+      );
+      if (choice == null || !mounted) return;
+
+      switch (choice) {
+        case 'remove':
+          await service.removeLock(uid: uid, note: note);
+          await biometrics.disable(uid, note.id);
+          if (!mounted) return;
+          setState(() => _note = note.copyWith(
+                isLocked: false,
+                pinWrappedKey: null,
+                pinHash: null,
+                pinSalt: null,
+              ));
+        case 'pin':
+          await service.removeLock(uid: uid, note: note);
+          if (!mounted) return;
+          setState(() => _note = note.copyWith(isLocked: false));
+          await _lockWithPin();
+        case 'bio-on':
+          await _setBiometric(true);
+        case 'bio-off':
+          await _setBiometric(false);
+      }
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      messenger.showSnackBar(SnackBar(
+        content: Text(error is NoteException ? error.message : 'Could not change the lock.'),
+      ));
     }
   }
 
@@ -543,7 +649,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       isScrollControlled: true,
       builder: (context) => Material(
         type: MaterialType.transparency,
-        child: _SelfDestructSheet(
+        child: SelfDestructSheet(
           initialDate: pickedDate,
           initialOnRead: onRead,
         ),
@@ -572,7 +678,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       isScrollControlled: true,
       builder: (context) => Material(
         type: MaterialType.transparency,
-        child: _TagsSheet(
+        child: TagsSheet(
           allTags: allTags,
           initialSelected: List<String>.of(_tags),
         ),
@@ -585,13 +691,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   }
 
   bool get _isShared {
-    if (widget.note == null) return false;
-    return _collaborators.isNotEmpty || widget.note!.sharedBy != null;
+    if (_note == null) return false;
+    return _collaborators.isNotEmpty || _note!.sharedBy != null || !_isOwner;
   }
 
   Future<void> _showShareSheet() async {
-    final note = widget.note;
-    if (note == null) return;
+    final note = _note;
+    if (note == null || !_isOwner) return;
 
     final emailController = TextEditingController();
     final messenger = ScaffoldMessenger.of(context);
@@ -601,23 +707,22 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       isScrollControlled: true,
       builder: (context) => Material(
         type: MaterialType.transparency,
-        child: _ShareSheet(
+        child: ShareSheet(
         collaborators: List.of(_collaborators),
         emailController: emailController,
         onAddCollaborator: (email) async {
-          final shareService = ref.read(shareServiceProvider);
-          final collaboratorUid =
-              await shareService.lookupUserByEmail(email);
-          await shareService.shareNote(
-            uid: widget.authUser.uid,
-            note: note,
-            collaboratorEmail: email,
-            collaboratorName: '',
-          );
+          final collaboratorUid = await ref.read(shareServiceProvider).shareNote(
+                uid: widget.authUser.uid,
+                note: note,
+                collaboratorEmail: email,
+              );
+          if (mounted) {
+            setState(() => _collaborators = [..._collaborators, collaboratorUid]);
+          }
           messenger.showSnackBar(
             const SnackBar(content: Text('Note shared')),
           );
-          return collaboratorUid ?? '';
+          return collaboratorUid;
         },
         onRemoveCollaborator: (collaboratorUid) async {
           final shareService = ref.read(shareServiceProvider);
@@ -653,13 +758,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   }
 
   Future<void> _addComment(String content) async {
-    final note = widget.note;
+    final note = _note;
     if (note == null) return;
 
     setState(() => _isAddingComment = true);
     try {
       await ref.read(notesServiceProvider).addComment(
-            noteOwnerId: note.sharedBy ?? widget.authUser.uid,
+            noteOwnerId: _ownerUid,
             noteId: note.id,
             authorUid: widget.authUser.uid,
             authorName: widget.authUser.displayName ?? widget.authUser.email.split('@').first,
@@ -667,23 +772,37 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           );
       if (!mounted) return;
       _commentController.clear();
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not post comment. Please try again.')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isAddingComment = false);
     }
   }
 
   Future<void> _deleteComment(String commentId) async {
-    final note = widget.note;
+    final note = _note;
     if (note == null) return;
 
     try {
       await ref.read(notesServiceProvider).deleteComment(
-            noteOwnerId: note.sharedBy ?? widget.authUser.uid,
+            noteOwnerId: _ownerUid,
             noteId: note.id,
             commentId: commentId,
             authorUid: widget.authUser.uid,
           );
-    } catch (_) {}
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not delete comment.')),
+        );
+      }
+    }
   }
 
   static const List<String> _reportReasons = [
@@ -695,7 +814,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   ];
 
   Future<void> _reportComment(Comment comment) async {
-    final note = widget.note;
+    final note = _note;
     if (note == null) return;
 
     final reason = await showDialog<String>(
@@ -718,7 +837,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
     try {
       await ref.read(notesServiceProvider).reportComment(
-            noteOwnerId: note.sharedBy ?? widget.authUser.uid,
+            noteOwnerId: _ownerUid,
             noteId: note.id,
             commentId: comment.id,
             commentAuthorUid: comment.authorUid,
@@ -732,7 +851,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
               Text('Report submitted. Thank you for helping keep Notely safe.'),
         ),
       );
-    } catch (_) {
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -744,7 +864,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   @override
   Widget build(BuildContext context) {
-    final note = widget.note;
+    final note = _note;
     final notely = NotelyTheme.of(context);
     final accent = kNotePalette[_selectedColorIndex % kNotePalette.length];
 
@@ -761,7 +881,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
             visualDensity: VisualDensity.compact,
           ),
           title: Text(
-            note == null ? 'New note' : 'Edit note',
+            note == null ? 'New note' : (_canEdit ? 'Edit note' : 'View note'),
             style: TextStyle(fontFamily: 'Geist', fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: -0.3, color: notely.text),
           ),
           actions: [
@@ -802,7 +922,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     iconSize: 20,
                     visualDensity: VisualDensity.compact,
                   ),
-                  if (note != null) ...[
+                  if (note != null && _isOwner) ...[
                     const SizedBox(width: 6),
                     IconButton(
                       icon: Icon(note.isLocked ? Icons.lock : Icons.lock_open),
@@ -910,9 +1030,44 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                         ],
                       ),
                       const SizedBox(height: 20),
+                      if (_destroysOnClose)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Read once: this note is permanently deleted when you close it.',
+                            style: TextStyle(color: Colors.redAccent.shade200, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      if (_isOwner && (note?.isLocked ?? false) && !(note?.hasPinLock ?? false))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'This note is hidden but not encrypted.',
+                                  style: TextStyle(color: notely.text3),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _toggleLock,
+                                child: const Text('Encrypt with PIN'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (note?.decryptionFailed ?? false)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            "This note can't be decrypted on this device, so it can't be edited.",
+                            style: TextStyle(color: notely.text3),
+                          ),
+                        ),
                       TextField(
                         controller: _titleController,
                         enabled: !_isSaving,
+                        readOnly: !_canEdit,
                         style: const TextStyle(fontFamily: 'Instrument Serif', fontSize: 30, height: 1.1, letterSpacing: -0.6),
                         decoration: const InputDecoration(
                           hintText: 'Note title',
@@ -927,6 +1082,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                           controller: _contentController,
                           focusNode: _contentFocusNode,
                           enabled: !_isSaving,
+                          readOnly: !_canEdit,
                           minLines: 12,
                           maxLines: null,
                           textAlignVertical: TextAlignVertical.top,
@@ -1208,7 +1364,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _isSaving ? null : _saveNote,
+                    onPressed: _isSaving || !_canEdit ? null : _saveNote,
                     icon: _isSaving
                         ? const SizedBox(
                             height: 18,
@@ -1317,7 +1473,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                       const Spacer(),
                       ref.watch(
                         commentsProvider(
-                          (noteOwnerId: note.sharedBy ?? widget.authUser.uid, noteId: note.id),
+                          (noteOwnerId: _ownerUid, noteId: note.id, viewerUid: widget.authUser.uid),
                         ),
                       ).when(
                         data: (comments) => Badge(
@@ -1344,7 +1500,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                     padding: const EdgeInsets.all(12),
                     child: ref.watch(
                       commentsProvider(
-                        (noteOwnerId: note.sharedBy ?? widget.authUser.uid, noteId: note.id),
+                        (noteOwnerId: _ownerUid, noteId: note.id, viewerUid: widget.authUser.uid),
                       ),
                     ).when(
                       data: (comments) {
@@ -1408,7 +1564,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        comment.content,
+                                        comment.displayContent,
                                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                               color: notely.text2,
                                               height: 1.35,
@@ -1485,642 +1641,5 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     if (difference.inMinutes < 60) return '${difference.inMinutes}m';
     if (difference.inHours < 24) return '${difference.inHours}h';
     return '${time.month}/${time.day}/${time.year}';
-  }
-}
-
-class _TagsSheet extends StatefulWidget {
-  final Set<String> allTags;
-  final List<String> initialSelected;
-
-  const _TagsSheet({
-    required this.allTags,
-    required this.initialSelected,
-  });
-
-  @override
-  State<_TagsSheet> createState() => _TagsSheetState();
-}
-
-class _TagsSheetState extends State<_TagsSheet> {
-  late final TextEditingController _controller = TextEditingController();
-  late final Set<String> _allTags = Set<String>.of(widget.allTags);
-  late final List<String> _selected = List<String>.of(widget.initialSelected);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _addNewTag() {
-    final tag = _controller.text.trim();
-    if (tag.isEmpty) return;
-    setState(() {
-      if (!_selected.contains(tag)) _selected.add(tag);
-      _allTags.add(tag);
-      _controller.clear();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final notely = NotelyTheme.of(context);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
-      child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Tags',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    onSubmitted: (_) => _addNewTag(),
-                    decoration: const InputDecoration(
-                      hintText: 'New tag name',
-                      prefixIcon: Icon(Icons.add),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _addNewTag,
-                  icon: const Icon(Icons.add_circle_outline),
-                  tooltip: 'Add tag',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_allTags.isEmpty)
-              Text(
-                'No tags yet. Create one above.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: notely.text3),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _allTags.map((tag) {
-                  return FilterChip(
-                    label: Text(tag),
-                    selected: _selected.contains(tag),
-                    onSelected: (isSelected) {
-                      setState(() {
-                        if (isSelected) {
-                          if (!_selected.contains(tag)) _selected.add(tag);
-                        } else {
-                          _selected.remove(tag);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(_selected),
-                child: const Text('Save'),
-              ),
-            ),
-          ],
-        ),
-    );
-  }
-}
-
-class _SelfDestructSheet extends StatefulWidget {
-  final DateTime? initialDate;
-  final bool initialOnRead;
-
-  const _SelfDestructSheet({
-    required this.initialDate,
-    required this.initialOnRead,
-  });
-
-  @override
-  State<_SelfDestructSheet> createState() => _SelfDestructSheetState();
-}
-
-class _SelfDestructSheetState extends State<_SelfDestructSheet> {
-  late DateTime? _date;
-  late bool _onRead;
-  late bool _hasSettings;
-
-  @override
-  void initState() {
-    super.initState();
-    _date = widget.initialDate;
-    _onRead = widget.initialOnRead;
-    _hasSettings = widget.initialDate != null || widget.initialOnRead;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final notely = NotelyTheme.of(context);
-    return NotelySheet(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.timer_outlined, color: notely.text2),
-              const SizedBox(width: 12),
-              Text(
-                'Self-destruct settings',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.schedule, color: notely.text2),
-            title: const Text('Timed destruction'),
-            subtitle: Text(
-              _date != null
-                  ? '${_date!.month}/${_date!.day}/${_date!.year} ${_date!.hour.toString().padLeft(2, '0')}:${_date!.minute.toString().padLeft(2, '0')}'
-                  : 'Not set',
-            ),
-            trailing: FilledButton.tonal(
-              onPressed: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _date ?? DateTime.now().add(const Duration(hours: 1)),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (date == null || !context.mounted) return;
-                final time = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(
-                    _date ?? DateTime.now().add(const Duration(hours: 1)),
-                  ),
-                );
-                if (time == null || !mounted) return;
-                setState(() {
-                  _date = DateTime(
-                    date.year,
-                    date.month,
-                    date.day,
-                    time.hour,
-                    time.minute,
-                  );
-                });
-              },
-              child: const Text('Pick'),
-            ),
-          ),
-          const Divider(height: 32),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            secondary: Icon(Icons.visibility_off_outlined, color: notely.text2),
-            title: const Text('Delete after first read'),
-            subtitle: const Text('Note disappears once opened'),
-            value: _onRead,
-            onChanged: (value) {
-              setState(() => _onRead = value);
-            },
-          ),
-          if (_hasSettings) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pop(<String, dynamic>{
-                    'date': null,
-                    'onRead': false,
-                  });
-                },
-                icon: const Icon(Icons.remove_circle_outline),
-                label: const Text('Remove self-destruct'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.redAccent,
-                  side: const BorderSide(color: Colors.redAccent),
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop(<String, dynamic>{
-                  'date': _date,
-                  'onRead': _onRead,
-                });
-              },
-              child: const Text('Apply'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ShareSheet extends ConsumerStatefulWidget {
-  final List<String> collaborators;
-  final TextEditingController emailController;
-  final Future<String> Function(String email) onAddCollaborator;
-  final Future<void> Function(String collaboratorUid) onRemoveCollaborator;
-  final Future<ShareLink> Function(String mode) onCreateLink;
-  final Future<void> Function(String token) onRevokeLink;
-
-  const _ShareSheet({
-    required this.collaborators,
-    required this.emailController,
-    required this.onAddCollaborator,
-    required this.onRemoveCollaborator,
-    required this.onCreateLink,
-    required this.onRevokeLink,
-  });
-
-  @override
-  ConsumerState<_ShareSheet> createState() => _ShareSheetState();
-}
-
-class _ShareSheetState extends ConsumerState<_ShareSheet> {
-  late List<String> _collaborators;
-  bool _isAdding = false;
-  String? _error;
-  final Map<String, String> _emails = {};
-  String _linkMode = 'approval';
-  ShareLink? _link;
-  bool _isGenerating = false;
-  bool _isRevoking = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _collaborators = List.of(widget.collaborators);
-    _loadEmails();
-  }
-
-  Future<void> _loadEmails() async {
-    final emails = <String, String>{};
-    for (final uid in _collaborators) {
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .get();
-        if (doc.exists) {
-          emails[uid] = doc.data()?['email'] as String? ?? uid;
-        } else {
-          emails[uid] = uid;
-        }
-      } catch (_) {
-        emails[uid] = uid;
-      }
-    }
-    if (!mounted) return;
-    setState(() => _emails.addAll(emails));
-  }
-
-  Future<void> _submit() async {
-    final email = widget.emailController.text.trim();
-    if (email.isEmpty) return;
-
-    setState(() {
-      _isAdding = true;
-      _error = null;
-    });
-    try {
-      final collaboratorUid = await widget.onAddCollaborator(email);
-      if (!mounted) return;
-      widget.emailController.clear();
-      setState(() {
-        if (collaboratorUid.isNotEmpty) {
-          _collaborators = [..._collaborators, collaboratorUid];
-          _emails[collaboratorUid] = email;
-        }
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _isAdding = false);
-    }
-  }
-
-  Future<void> _remove(String collaboratorUid) async {
-    setState(() {
-      _error = null;
-      _isAdding = true;
-    });
-    try {
-      await widget.onRemoveCollaborator(collaboratorUid);
-      if (!mounted) return;
-      setState(() {
-        _collaborators =
-            _collaborators.where((uid) => uid != collaboratorUid).toList();
-        _emails.remove(collaboratorUid);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _isAdding = false);
-    }
-  }
-
-  Future<void> _generateLink() async {
-    setState(() {
-      _isGenerating = true;
-      _error = null;
-    });
-    try {
-      final link = await widget.onCreateLink(_linkMode);
-      if (!mounted) return;
-      setState(() => _link = link);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _isGenerating = false);
-    }
-  }
-
-  Future<void> _copyLink() async {
-    final link = _link;
-    if (link == null) return;
-    await Clipboard.setData(ClipboardData(text: link.url));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Link copied to clipboard')),
-    );
-  }
-
-  Future<void> _shareLink() async {
-    final link = _link;
-    if (link == null) return;
-    await SharePlus.instance.share(ShareParams(text: link.url));
-  }
-
-  Future<void> _revokeLink() async {
-    final link = _link;
-    if (link == null) return;
-    setState(() {
-      _isRevoking = true;
-      _error = null;
-    });
-    try {
-      await widget.onRevokeLink(link.token);
-      if (!mounted) return;
-      setState(() => _link = null);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Link revoked')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _isRevoking = false);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.emailController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final notely = NotelyTheme.of(context);
-    return NotelySheet(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.group_add_outlined, color: notely.text2),
-              const SizedBox(width: 12),
-              Text(
-                'Share note',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Shared',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: const Color(0xFF86E7C8),
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: widget.emailController,
-                  enabled: !_isAdding,
-                  decoration: const InputDecoration(
-                    hintText: 'Add people by email',
-                    prefixIcon: Icon(Icons.alternate_email),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                onPressed: _isAdding ? null : _submit,
-                icon: _isAdding
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send_rounded),
-              ),
-            ],
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-              ),
-            ),
-          const SizedBox(height: 16),
-          if (_collaborators.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Text(
-                  'No collaborators yet.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: notely.text3,
-                      ),
-                ),
-              ),
-            )
-          else
-            ..._collaborators.map(
-              (uid) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: notely.surface2,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline, color: notely.text3, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _emails[uid] ?? uid,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: notely.text2,
-                            ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _isAdding ? null : () => _remove(uid),
-                      icon: const Icon(Icons.person_remove_outlined, size: 16),
-                      label: const Text('Remove'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          const SizedBox(height: 20),
-          const Divider(height: 1),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Icon(Icons.link, color: notely.text2, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Share via link',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Anyone with the link can request access. You approve before they see the note.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: notely.text3,
-                ),
-          ),
-          const SizedBox(height: 12),
-          if (_link == null) ...[
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'approval',
-                  label: Text('Require approval'),
-                ),
-                ButtonSegment(value: 'open', label: Text('Auto-approve')),
-              ],
-              selected: {_linkMode},
-              onSelectionChanged: (selection) {
-                setState(() => _linkMode = selection.first);
-              },
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _isGenerating ? null : _generateLink,
-                icon: _isGenerating
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.add_link_rounded),
-                label: const Text('Create share link'),
-              ),
-            ),
-          ] else ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: notely.surface2,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _link!.url,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: notely.text2,
-                            fontFamily: 'JetBrains Mono',
-                          ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Copy',
-                    onPressed: _copyLink,
-                    icon: const Icon(Icons.copy_rounded, size: 18),
-                  ),
-                  IconButton(
-                    tooltip: 'Share',
-                    onPressed: _shareLink,
-                    icon: const Icon(Icons.ios_share, size: 18),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: _isRevoking ? null : _revokeLink,
-              icon: const Icon(Icons.link_off_rounded, size: 16),
-              label: const Text('Revoke link'),
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }

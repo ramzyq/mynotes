@@ -20,9 +20,10 @@ void main() {
     expect(_note().copyWith(isArchived: true).isArchived, true);
   });
 
-  test('toMap round-trips isArchived', () {
+  test('plainFields round-trips isArchived', () {
     final archived = _note().copyWith(isArchived: true);
-    final map = archived.toMap();
+    final map = archived.plainFields();
     expect(map['isArchived'], true);
+    expect(Note.fromData('n1', map).isArchived, true);
   });
 }

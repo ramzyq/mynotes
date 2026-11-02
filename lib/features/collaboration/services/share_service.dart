@@ -13,8 +13,15 @@ enum JoinStatus { notFound, ownerLink, alreadyShared, pending, approved, shared 
 
 class JoinResult {
   final JoinStatus status;
-  final String? noteTitle;
-  const JoinResult(this.status, {this.noteTitle});
+  const JoinResult(this.status);
+}
+
+/// A sharing problem with a message that is safe to show to the user.
+class ShareException implements Exception {
+  const ShareException(this.message);
+  final String message;
+  @override
+  String toString() => message;
 }
 
 class ShareLinkToken {
@@ -62,6 +69,19 @@ String buildJoinUrl(String token) => 'https://${appConfig.shareDomain}/join/$tok
   return (status: JoinStatus.pending, requestStatus: 'pending');
 }
 
+/// Whether the owner's app may finish sharing for a request. Approval-mode
+/// links require the owner's own approval; this is enforced by the security
+/// rules too, and re-checked here as defense in depth.
+bool canCompleteShare({
+  required String linkMode,
+  required String requestStatus,
+  required String? approvedBy,
+  required String ownerUid,
+}) {
+  if (requestStatus != 'approved') return false;
+  return linkMode == 'open' || approvedBy == ownerUid;
+}
+
 class ShareService {
   final FirebaseFirestore firestore;
   final NotesService notesService;
@@ -75,124 +95,103 @@ class ShareService {
     required this.crypto,
   });
 
+  DocumentReference<Map<String, dynamic>> _noteRef(String ownerUid, String noteId) =>
+      firestore.collection('users').doc(ownerUid).collection('notes').doc(noteId);
+
+  /// Publish this user's sharing public key and claim their email lookup.
   Future<void> ensureUserProfile({
     required String uid,
     required String email,
     String? displayName,
   }) async {
     final publicKey = await keyManager.getMyPublicKey();
+    final normalized = email.trim().toLowerCase();
     await firestore.collection('users').doc(uid).set({
-      'email': email.toLowerCase(),
+      'email': normalized,
       'displayName': displayName ?? '',
       'publicKey': base64Encode(publicKey),
     }, SetOptions(merge: true));
-  }
-
-  Future<String?> lookupUserByEmail(String email) async {
-    final snapshot = await firestore
-        .collection('users')
-        .where('email', isEqualTo: email.toLowerCase())
-        .limit(1)
-        .get();
-    if (snapshot.docs.isNotEmpty) {
-      return snapshot.docs.first.id;
+    if (normalized.isNotEmpty) {
+      await firestore.collection('emailIndex').doc(normalized).set({'uid': uid});
     }
-    return null;
   }
 
-  Future<void> shareNote({
+  /// Exact-match lookup; the user directory itself is not listable.
+  Future<String?> lookupUserByEmail(String email) async {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return null;
+    final doc = await firestore.collection('emailIndex').doc(normalized).get();
+    return doc.data()?['uid'] as String?;
+  }
+
+  /// Share [note] with the user registered under [collaboratorEmail].
+  /// Returns the collaborator's uid.
+  Future<String> shareNote({
     required String uid,
     required Note note,
     required String collaboratorEmail,
-    required String collaboratorName,
+    String collaboratorName = '',
   }) async {
     final collaboratorUid = await lookupUserByEmail(collaboratorEmail);
     if (collaboratorUid == null) {
-      throw Exception('User with email $collaboratorEmail not found');
+      throw ShareException('No Notely account uses $collaboratorEmail.');
     }
-
     if (collaboratorUid == uid) {
-      throw Exception('Cannot share a note with yourself');
+      throw const ShareException("You can't share a note with yourself.");
     }
 
-    final noteRef =
-        firestore.collection('users').doc(uid).collection('notes').doc(note.id);
-
-    final existingNote = await noteRef.get();
-    final data = existingNote.data() ?? {};
-
-    final currentCollaborators =
-        List<String>.from(data['collaborators'] ?? []);
-    if (currentCollaborators.contains(collaboratorUid)) {
-      throw Exception('Already shared with this user');
+    final existing = Note.fromFirestore(await _noteRef(uid, note.id).get());
+    if (existing.collaborators?.contains(collaboratorUid) ?? false) {
+      throw const ShareException('This note is already shared with them.');
     }
 
-    final currentEncryptedKeys =
-        Map<String, String>.from(data['encryptedKeys'] ?? {});
-
-    final storedEncryptionVersion =
-        (data['encryptionVersion'] as int?) ?? note.encryptionVersion;
-    final storedWrappedKey = data['wrappedKey'] ?? note.wrappedKey;
-
-    final recipientDoc = await firestore
-        .collection('users')
-        .doc(collaboratorUid)
-        .get();
-    final recipientPublicKeyB64 = recipientDoc.data()?['publicKey'] as String?;
-    if (recipientPublicKeyB64 == null) {
-      throw Exception('Recipient has not set up sharing yet; ask them to open the app once.');
+    final recipientKey = await notesService.publicKeyOf(collaboratorUid);
+    if (recipientKey == null) {
+      throw const ShareException('They need to open Notely once before you can share with them.');
     }
 
-    if (storedEncryptionVersion >= 1 && storedWrappedKey != null) {
-      final noteKey = await keyManager
-          .unwrapNoteKey((storedWrappedKey as Map).cast<String, String>());
-      final encryptedKey = await keyManager.wrapNoteKeyForCollaborator(
-        noteKey: noteKey,
-        recipientPublicKey: base64Decode(recipientPublicKeyB64),
-      );
-      currentEncryptedKeys[collaboratorUid] = encryptedKey;
-    }
+    await _grantAccess(
+      ownerUid: uid,
+      noteId: note.id,
+      recipientUid: collaboratorUid,
+      recipientPublicKey: recipientKey,
+    );
+    return collaboratorUid;
+  }
 
-    currentCollaborators.add(collaboratorUid);
-
-    await noteRef.update({
-      'collaborators': currentCollaborators,
-      'encryptedKeys': currentEncryptedKeys,
-      'sharedBy': uid,
-      'sharedAt': Timestamp.fromDate(DateTime.now()),
+  /// Add one collaborator. Uses field-level writes so concurrent shares
+  /// cannot overwrite each other.
+  Future<void> _grantAccess({
+    required String ownerUid,
+    required String noteId,
+    required String recipientUid,
+    required List<int> recipientPublicKey,
+  }) async {
+    final noteKey = await notesService.ownNoteKey(ownerUid, noteId);
+    final wrapped = await keyManager.wrapNoteKeyForCollaborator(
+      noteKey: noteKey,
+      recipientPublicKey: recipientPublicKey,
+    );
+    await _noteRef(ownerUid, noteId).update({
+      NoteFields.collaborators: FieldValue.arrayUnion([recipientUid]),
+      '${NoteFields.encryptedKeys}.$recipientUid': wrapped,
+      NoteFields.sharedBy: ownerUid,
+      NoteFields.sharedAt: Timestamp.fromDate(DateTime.now()),
     });
   }
 
+  /// Remove a collaborator and rotate the note key, so the removed user
+  /// cannot decrypt anything written after this point.
   Future<void> removeCollaborator({
     required String uid,
     required Note note,
     required String collaboratorUid,
   }) async {
-    final noteRef =
-        firestore.collection('users').doc(uid).collection('notes').doc(note.id);
-
-    final existingNote = await noteRef.get();
-    final data = existingNote.data() ?? {};
-
-    final collaborators =
-        List<String>.from(data['collaborators'] ?? []);
-    collaborators.remove(collaboratorUid);
-
-    final encryptedKeys =
-        Map<String, String>.from(data['encryptedKeys'] ?? {});
-    encryptedKeys.remove(collaboratorUid);
-
-    final updateData = <String, dynamic>{
-      'collaborators': collaborators,
-      'encryptedKeys': encryptedKeys,
-    };
-
-    if (collaborators.isEmpty) {
-      updateData['sharedBy'] = null;
-      updateData['sharedAt'] = null;
-    }
-
-    await noteRef.update(updateData);
+    final current = Note.fromFirestore(await _noteRef(uid, note.id).get());
+    final remaining = (current.collaborators ?? const <String>[])
+        .where((c) => c != collaboratorUid)
+        .toList();
+    await notesService.rotateNoteKey(uid: uid, noteId: note.id, collaborators: remaining);
   }
 
   Future<ShareLink> createShareLink({
@@ -201,11 +200,12 @@ class ShareService {
     required String mode,
   }) async {
     final token = ShareLinkToken.generate();
+    // No title or content: the link document is readable by anyone who has
+    // the token, and note titles are end-to-end encrypted.
     await firestore.collection('shareLinks').doc(token).set({
       'ownerUid': uid,
       'noteId': note.id,
       'mode': mode,
-      'noteTitlePlain': note.displayTitle,
       'createdAt': Timestamp.fromDate(DateTime.now()),
     });
     return ShareLink(
@@ -217,7 +217,14 @@ class ShareService {
   }
 
   Future<void> revokeShareLink({required String token}) async {
-    await firestore.collection('shareLinks').doc(token).delete();
+    final linkRef = firestore.collection('shareLinks').doc(token);
+    final requests = await linkRef.collection('requests').get();
+    final batch = firestore.batch();
+    for (final doc in requests.docs) {
+      batch.delete(doc.reference);
+    }
+    batch.delete(linkRef);
+    await batch.commit();
   }
 
   Future<JoinResult> joinSharedNote({
@@ -235,56 +242,48 @@ class ShareService {
     final ownerUid = linkData['ownerUid'] as String;
     final noteId = linkData['noteId'] as String;
     final mode = linkData['mode'] as String? ?? 'approval';
-    final noteTitle = linkData['noteTitlePlain'] as String? ?? 'Note';
 
     if (ownerUid == uid) return const JoinResult(JoinStatus.ownerLink);
 
-    final noteRef = firestore
-        .collection('users')
-        .doc(ownerUid)
-        .collection('notes')
-        .doc(noteId);
-    final requestRef = linkRef.collection('requests').doc(uid);
-
-    bool alreadyShared = false;
+    // Reading the note only succeeds if we are already a collaborator.
+    var alreadyShared = false;
     try {
-      final noteDoc = await noteRef.get();
-      if (!noteDoc.exists) return const JoinResult(JoinStatus.notFound);
-      alreadyShared = true;
-    } catch (_) {
-      alreadyShared = false;
+      alreadyShared = (await _noteRef(ownerUid, noteId).get()).exists;
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
     }
     if (alreadyShared) return const JoinResult(JoinStatus.alreadyShared);
 
+    final requestRef = linkRef.collection('requests').doc(uid);
     final requestDoc = await requestRef.get();
+    final existing = requestDoc.data();
     final plan = planJoin(
       linkExists: true,
       isOwner: false,
       alreadyShared: false,
       requestExists: requestDoc.exists,
-      existingRequestStatus: requestDoc.exists
-          ? (requestDoc.data()?['status'] as String? ?? 'pending')
-          : '',
+      existingRequestStatus: existing?['status'] as String? ?? 'pending',
       linkMode: mode,
     );
 
-    if (plan.requestStatus.isNotEmpty &&
-        (!requestDoc.exists ||
-            requestDoc.data()?['status'] != plan.requestStatus)) {
+    final publicKeyB64 = base64Encode(recipientPublicKey);
+    if (!requestDoc.exists) {
       await requestRef.set({
         'ownerUid': ownerUid,
         'noteId': noteId,
-        'noteTitle': noteTitle,
         'recipientUid': uid,
         'recipientName': recipientName,
         'recipientEmail': recipientEmail,
-        'recipientPublicKey': base64Encode(recipientPublicKey),
+        'recipientPublicKey': publicKeyB64,
         'status': plan.requestStatus,
         'createdAt': Timestamp.fromDate(DateTime.now()),
-      }, SetOptions(merge: true));
+      });
+    } else if (existing?['recipientPublicKey'] != publicKeyB64) {
+      // Recipients may only refresh their own profile fields.
+      await requestRef.update({'recipientPublicKey': publicKeyB64});
     }
 
-    return JoinResult(plan.status, noteTitle: noteTitle);
+    return JoinResult(plan.status);
   }
 
   Stream<List<JoinRequest>> watchOwnerJoinRequests(String ownerUid) {
@@ -293,9 +292,7 @@ class ShareService {
         .where('ownerUid', isEqualTo: ownerUid)
         .where('status', whereIn: ['pending', 'approved'])
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => JoinRequest.fromDoc(doc))
-            .toList());
+        .map((snapshot) => snapshot.docs.map(JoinRequest.fromDoc).toList());
   }
 
   Future<void> approveJoinRequest({
@@ -308,7 +305,7 @@ class ShareService {
         .doc(token)
         .collection('requests')
         .doc(recipientUid)
-        .update({'status': 'approved'});
+        .update({'status': 'approved', 'approvedBy': ownerUid});
     await completeShareForRequest(
       ownerUid: ownerUid,
       token: token,
@@ -328,6 +325,7 @@ class ShareService {
         .delete();
   }
 
+  /// Owner side: grant access for an approved request.
   Future<void> completeShareForRequest({
     required String ownerUid,
     required String token,
@@ -337,58 +335,35 @@ class ShareService {
     final requestRef = linkRef.collection('requests').doc(recipientUid);
 
     final linkDoc = await linkRef.get();
-    if (!linkDoc.exists) {
+    final link = linkDoc.data();
+    if (link == null || link['ownerUid'] != ownerUid) {
       await requestRef.delete();
       return;
     }
 
-    final requestDoc = await requestRef.get();
-    if (!requestDoc.exists) return;
-    if (requestDoc.data()?['status'] == 'shared') return;
-    final requestData = requestDoc.data()!;
-
-    final recipientPublicKeyB64 =
-        requestData['recipientPublicKey'] as String?;
-    if (recipientPublicKeyB64 == null) return;
-
-    final noteId = requestData['noteId'] as String?;
-    if (noteId == null) return;
-
-    final noteRef = firestore
-        .collection('users')
-        .doc(ownerUid)
-        .collection('notes')
-        .doc(noteId);
-    final noteDoc = await noteRef.get();
-    final data = noteDoc.data();
-    if (data == null) return;
-
-    final storedEncryptionVersion = (data['encryptionVersion'] as int?) ?? 0;
-    final storedWrappedKey = data['wrappedKey'];
-
-    final collaborators = List<String>.from(data['collaborators'] ?? []);
-    final encryptedKeys = Map<String, String>.from(data['encryptedKeys'] ?? {});
-
-    if (storedEncryptionVersion >= 1 && storedWrappedKey != null) {
-      final noteKey = await keyManager
-          .unwrapNoteKey((storedWrappedKey as Map).cast<String, String>());
-      encryptedKeys[recipientUid] = await keyManager
-          .wrapNoteKeyForCollaborator(
-            noteKey: noteKey,
-            recipientPublicKey: base64Decode(recipientPublicKeyB64),
-          );
+    final request = (await requestRef.get()).data();
+    if (request == null) return;
+    if (!canCompleteShare(
+      linkMode: link['mode'] as String? ?? 'approval',
+      requestStatus: request['status'] as String? ?? '',
+      approvedBy: request['approvedBy'] as String?,
+      ownerUid: ownerUid,
+    )) {
+      return;
     }
+    // The request must point at the link's note, not one the requester chose.
+    final noteId = link['noteId'] as String;
+    if (request['noteId'] != noteId) return;
 
-    if (!collaborators.contains(recipientUid)) {
-      collaborators.add(recipientUid);
-    }
+    final publicKeyB64 = request['recipientPublicKey'] as String?;
+    if (publicKeyB64 == null) return;
 
-    await noteRef.update({
-      'collaborators': collaborators,
-      'encryptedKeys': encryptedKeys,
-      'sharedBy': ownerUid,
-      'sharedAt': Timestamp.fromDate(DateTime.now()),
-    });
+    await _grantAccess(
+      ownerUid: ownerUid,
+      noteId: noteId,
+      recipientUid: recipientUid,
+      recipientPublicKey: base64Decode(publicKeyB64),
+    );
     await requestRef.update({'status': 'shared'});
   }
 }

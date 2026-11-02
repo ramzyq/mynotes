@@ -1,139 +1,188 @@
 import 'dart:convert';
-import 'dart:math' as dart_math;
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/sharing_keys.dart';
 
+/// Thrown when an operation needs the master key but it has not been set up
+/// or recovered on this device yet (see `KeyBackupService.prepare`).
+class MasterKeyUnavailableException implements Exception {
+  const MasterKeyUnavailableException();
+  @override
+  String toString() => 'Encryption key is not available on this device yet.';
+}
+
+/// Owns the user's master key and every key-wrapping operation.
+///
+/// Key hierarchy:
+///   master key (32 random bytes, per user, backed up via KeyBackupService)
+///     -> note keys (one per note, wrapped with the master key)
+///     -> X25519 sharing keypair (derived from the master key)
 class KeyManager {
-  final CryptoService _crypto = CryptoService();
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  KeyManager({FlutterSecureStorage? storage, CryptoService? crypto})
+      : _storage = storage ?? const FlutterSecureStorage(),
+        _crypto = crypto ?? CryptoService();
+
+  final CryptoService _crypto;
+  final FlutterSecureStorage _storage;
   final SharingKeys _sharing = SharingKeys();
-  static const _masterKeyKey = 'master_key';
-  static const _saltKey = 'key_salt';
-  static const _keyVersion = 1;
 
+  static const _legacyMasterKeyKey = 'master_key';
+  static const _legacySaltKey = 'key_salt';
+  static const _noteKeyVersion = 1;
+  static const _sharePrefixV2 = 'v2:';
+
+  String? _uid;
   SecretKey? _cachedMasterKey;
+  SimpleKeyPair? _cachedKeyPair;
 
-  /// Derive and persist the Master Key on first login.
-  Future<void> initializeMasterKey(String password) async {
-    final salt = _crypto.generateSalt();
-    final masterKey = await _crypto.deriveKey(
-      password: password,
-      salt: salt,
-    );
+  String? get activeUid => _uid;
 
-    // Store salt and a key-wrapped version for later re-derivation
-    final masterKeyBytes = await masterKey.extractBytes();
-    await _storage.write(key: _saltKey, value: base64Encode(salt));
-    // Store the key material (wrapped with itself for persistence)
-    // Alternative: store salt only and re-derive on each login
-    await _storage.write(
-      key: _masterKeyKey,
-      value: base64Encode(masterKeyBytes),
-    );
+  String _masterKeyKey(String uid) => 'master_key_$uid';
 
-    _cachedMasterKey = masterKey;
+  /// Scope all key operations to [uid]. Passing null (sign-out) or a
+  /// different user clears every cached key from memory.
+  void setActiveUser(String? uid) {
+    if (uid == _uid) return;
+    _uid = uid;
+    clearCachedKey();
   }
 
-  /// Load Master Key from secure storage (called on app start / login).
+  /// Clear key material from memory.
+  void clearCachedKey() {
+    _cachedMasterKey = null;
+    _cachedKeyPair = null;
+  }
+
+  String _requireUid() {
+    final uid = _uid;
+    if (uid == null) throw const MasterKeyUnavailableException();
+    return uid;
+  }
+
+  /// Load this user's master key from secure storage, adopting a key stored
+  /// by an older app version (which kept a single unscoped key) if present.
   Future<SecretKey?> loadMasterKey() async {
     if (_cachedMasterKey != null) return _cachedMasterKey;
+    final uid = _uid;
+    if (uid == null) return null;
 
-    final keyBytes = await _storage.read(key: _masterKeyKey);
-    if (keyBytes == null) return null;
-
-    _cachedMasterKey = SecretKey(base64Decode(keyBytes));
+    var stored = await _storage.read(key: _masterKeyKey(uid));
+    if (stored == null) {
+      final legacy = await _storage.read(key: _legacyMasterKeyKey);
+      if (legacy != null) {
+        await _storage.write(key: _masterKeyKey(uid), value: legacy);
+        await _storage.delete(key: _legacyMasterKeyKey);
+        await _storage.delete(key: _legacySaltKey);
+        stored = legacy;
+      }
+    }
+    if (stored == null) return null;
+    _cachedMasterKey = SecretKey(base64Decode(stored));
     return _cachedMasterKey;
   }
 
-  /// Load an existing Master Key, or generate and persist one on first use.
-  Future<SecretKey> ensureMasterKey() async {
-    final existing = await loadMasterKey();
-    if (existing != null) return existing;
+  Future<bool> hasMasterKey() async => await loadMasterKey() != null;
 
-    final bytes = Uint8List.fromList(
-      List.generate(32, (_) => dart_math.Random.secure().nextInt(256)),
-    );
-    final masterKey = SecretKey(bytes);
-    await _storage.write(key: _masterKeyKey, value: base64Encode(bytes));
-    _cachedMasterKey = masterKey;
-    return masterKey;
+  /// The master key, or [MasterKeyUnavailableException] if it is not set up.
+  /// Never silently creates a new key: doing so would orphan existing notes.
+  Future<SecretKey> requireMasterKey() async {
+    final key = await loadMasterKey();
+    if (key == null) throw const MasterKeyUnavailableException();
+    return key;
   }
 
-  /// Generate a new random Note Key and wrap it with the Master Key.
-  Future<Map<String, String>> createNoteKey(String noteId) async {
-    final masterKey = await ensureMasterKey();
+  /// Persist [bytes] as this user's master key (first setup or recovery).
+  Future<void> storeMasterKey(List<int> bytes) async {
+    final uid = _requireUid();
+    await _storage.write(key: _masterKeyKey(uid), value: base64Encode(bytes));
+    clearCachedKey();
+    _cachedMasterKey = SecretKey(List<int>.from(bytes));
+  }
 
-    // Generate random Note Key
-    final noteKey = SecretKey(Uint8List.fromList(
-      List.generate(32, (_) => dart_math.Random.secure().nextInt(256)),
-    ));
+  /// Generate and persist a brand-new master key. Only call this when the
+  /// user has no backup anywhere (first ever setup).
+  Future<List<int>> generateMasterKey() async {
+    final bytes = CryptoService.randomBytes(32);
+    await storeMasterKey(bytes);
+    return bytes;
+  }
 
-    // Wrap Note Key with Master Key
-    final noteKeyBytes = await noteKey.extractBytes();
+  // ---------------------------------------------------------------- note keys
+
+  /// Generate a random note key.
+  SecretKey generateNoteKey() => SecretKey(CryptoService.randomBytes(32));
+
+  /// Wrap [noteKey] with the master key for storage on the note document.
+  Future<Map<String, String>> wrapNoteKey(SecretKey noteKey) async {
+    final masterKey = await requireMasterKey();
     final encrypted = await _crypto.encrypt(
       key: masterKey,
-      plaintext: base64Encode(noteKeyBytes),
+      plaintext: base64Encode(await noteKey.extractBytes()),
     );
-
-    return {
-      '$_keyVersion': base64Encode(encrypted.ciphertext + encrypted.nonce + encrypted.mac),
-    };
+    return {'$_noteKeyVersion': encrypted.toBase64()};
   }
 
-  /// Unwrap a Note Key using the Master Key.
+  /// Generate a new note key and return it wrapped with the master key.
+  Future<Map<String, String>> createNoteKey(String noteId) async {
+    return wrapNoteKey(generateNoteKey());
+  }
+
+  /// Unwrap a note key using the master key. Uses the newest supported
+  /// wrapping version present in [wrappedKeyData].
   Future<SecretKey> unwrapNoteKey(Map<String, String> wrappedKeyData) async {
-    final masterKey = await ensureMasterKey();
-
-    // Find latest version
-    final wrappedKeyStr = wrappedKeyData['$_keyVersion'];
-    if (wrappedKeyStr == null) throw Exception('No key version $_keyVersion');
-
-    final combined = base64Decode(wrappedKeyStr);
-    final payload = _splitPayload(combined);
-
-    final noteKeyStr = await _crypto.decrypt(key: masterKey, payload: payload);
+    final masterKey = await requireMasterKey();
+    final versions = wrappedKeyData.keys
+        .map(int.tryParse)
+        .whereType<int>()
+        .where((v) => v <= _noteKeyVersion)
+        .toList()
+      ..sort();
+    if (versions.isEmpty) {
+      throw const FormatException('No supported note key version');
+    }
+    final wrapped = wrappedKeyData['${versions.last}']!;
+    final noteKeyStr = await _crypto.decrypt(
+      key: masterKey,
+      payload: EncryptedPayload.fromBase64(wrapped),
+    );
     return SecretKey(base64Decode(noteKeyStr));
   }
 
-  static EncryptedPayload _splitPayload(Uint8List combined) {
-    final nonceLength = 12;
-    final macLength = 16;
-    return EncryptedPayload(
-      ciphertext: combined.sublist(0, combined.length - nonceLength - macLength),
-      nonce: combined.sublist(
-        combined.length - nonceLength - macLength,
-        combined.length - macLength,
-      ),
-      mac: combined.sublist(combined.length - macLength),
+  /// Wrap any key with another key (used for key history and PIN locks).
+  Future<String> wrapKeyWith({
+    required SecretKey wrappingKey,
+    required SecretKey key,
+    required String aad,
+  }) async {
+    return _crypto.seal(key: wrappingKey, data: await key.extractBytes(), aad: aad);
+  }
+
+  Future<SecretKey> unwrapKeyWith({
+    required SecretKey wrappingKey,
+    required String wrapped,
+    required String aad,
+  }) async {
+    return SecretKey(
+      await _crypto.open(key: wrappingKey, sealed: wrapped, aad: aad),
     );
   }
 
-  /// Clear Master Key from memory (on app background).
-  void clearCachedKey() {
-    _cachedMasterKey = null;
-  }
-
-  /// Check if a Master Key exists (user has set up encryption).
-  Future<bool> hasMasterKey() async {
-    return await _storage.read(key: _masterKeyKey) != null;
-  }
+  // ------------------------------------------------------------------ sharing
 
   /// Encrypt a note key so only the owner of [recipientPublicKey] can unwrap it.
   Future<String> wrapNoteKeyForCollaborator({
     required SecretKey noteKey,
     required List<int> recipientPublicKey,
   }) async {
-    final sharedSecret = await _ecdhSharedSecret(recipientPublicKey);
-    final noteKeyBytes = await noteKey.extractBytes();
-    final encrypted = await _crypto.encrypt(
-      key: sharedSecret,
-      plaintext: base64Encode(noteKeyBytes),
+    final wrapKey = await _shareWrapKey(recipientPublicKey);
+    final sealed = await _crypto.seal(
+      key: wrapKey,
+      data: await noteKey.extractBytes(),
+      aad: 'notely-share-v2',
     );
-    final combined = encrypted.ciphertext + encrypted.nonce + encrypted.mac;
-    return base64Encode(combined);
+    return '$_sharePrefixV2$sealed';
   }
 
   /// Decrypt a note key that was wrapped for us by the owner of [ownerPublicKey].
@@ -141,18 +190,30 @@ class KeyManager {
     required String encryptedKeyStr,
     required List<int> ownerPublicKey,
   }) async {
+    if (encryptedKeyStr.startsWith(_sharePrefixV2)) {
+      final wrapKey = await _shareWrapKey(ownerPublicKey);
+      final bytes = await _crypto.open(
+        key: wrapKey,
+        sealed: encryptedKeyStr.substring(_sharePrefixV2.length),
+        aad: 'notely-share-v2',
+      );
+      return SecretKey(bytes);
+    }
+    // Legacy v1: raw ECDH output used directly as the AES key.
     final sharedSecret = await _ecdhSharedSecret(ownerPublicKey);
-    final combined = base64Decode(encryptedKeyStr);
-    final payload = _splitPayload(combined);
-    final noteKeyStr = await _crypto.decrypt(key: sharedSecret, payload: payload);
+    final noteKeyStr = await _crypto.decrypt(
+      key: sharedSecret,
+      payload: EncryptedPayload.fromBase64(encryptedKeyStr),
+    );
     return SecretKey(base64Decode(noteKeyStr));
   }
 
-  /// Deterministic X25519 keypair derived from this device's master key.
   Future<SimpleKeyPair> _loadMyKeyPair() async {
-    final masterKey = await ensureMasterKey();
-    final masterBytes = await masterKey.extractBytes();
-    return _sharing.keyPairFromMasterKey(masterBytes);
+    if (_cachedKeyPair != null) return _cachedKeyPair!;
+    final masterKey = await requireMasterKey();
+    _cachedKeyPair =
+        await _sharing.keyPairFromMasterKey(await masterKey.extractBytes());
+    return _cachedKeyPair!;
   }
 
   Future<SecretKey> _ecdhSharedSecret(List<int> remotePublicKey) async {
@@ -162,8 +223,23 @@ class KeyManager {
     );
   }
 
+  /// HKDF over the ECDH output, bound to both public keys (order-independent)
+  /// so the same pair of users always derives the same wrapping key.
+  Future<SecretKey> _shareWrapKey(List<int> remotePublicKey) async {
+    final shared = await _ecdhSharedSecret(remotePublicKey);
+    final mine = await getMyPublicKey();
+    final a = base64Encode(mine);
+    final b = base64Encode(remotePublicKey);
+    final transcript = a.compareTo(b) <= 0 ? '$a|$b' : '$b|$a';
+    return _crypto.hkdf(
+      secret: await shared.extractBytes(),
+      salt: utf8.encode(transcript),
+      info: 'notely-share-wrap-v2',
+    );
+  }
+
   /// This user's X25519 public key (32 bytes), derived deterministically
-  /// from the master key.
+  /// from the master key, so it is identical on every device.
   Future<Uint8List> getMyPublicKey() async {
     final keyPair = await _loadMyKeyPair();
     final publicKey = await keyPair.extractPublicKey();

@@ -97,13 +97,16 @@ class _LoginViewState extends ConsumerState<LoginView> {
 
     setState(() => _isLoading = true);
 
+    // Held in memory only; the key setup gate uses it to open the encrypted
+    // key backup, then clears it.
+    ref.read(pendingPasswordProvider.notifier).state = password;
+    var signedIn = false;
     try {
       final user = await ref.read(authServiceProvider).logIn(
         email: email,
         password: password,
       );
-      if (!mounted) return;
-      await _ensureMasterKey(password);
+      signedIn = true;
       if (!mounted) return;
       // If email is not verified, navigate to verification screen
       if (!user.isEmailVerified) {
@@ -134,22 +137,10 @@ class _LoginViewState extends ConsumerState<LoginView> {
         const SnackBar(content: Text('Login failed. Please try again.')),
       );
     } finally {
+      if (!signedIn && mounted) ref.read(pendingPasswordProvider.notifier).state = null;
       if (mounted) {
         setState(() => _isLoading = false);
       }
-    }
-  }
-
-  /// Derive and persist the Master Key from the password on first login.
-  /// Failures are ignored: KeyManager lazily ensures a key on first use.
-  Future<void> _ensureMasterKey(String password) async {
-    try {
-      final keyManager = ref.read(keyManagerProvider);
-      if (!await keyManager.hasMasterKey()) {
-        await keyManager.initializeMasterKey(password);
-      }
-    } catch (_) {
-      // Non-critical: KeyManager.ensureMasterKey() covers this path.
     }
   }
 

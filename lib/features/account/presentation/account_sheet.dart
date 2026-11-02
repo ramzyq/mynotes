@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
@@ -208,11 +209,27 @@ class _JoinRequestsSection extends ConsumerWidget {
   final String uid;
   const _JoinRequestsSection({required this.uid});
 
+  Future<void> _run(BuildContext context, Future<void> Function() action, String failure) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await action();
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      messenger.showSnackBar(SnackBar(content: Text(failure)));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notely = NotelyTheme.of(context);
-    final requests = ref.watch(ownerJoinRequestsProvider(uid)).valueOrNull ?? const [];
+    final requests = (ref.watch(ownerJoinRequestsProvider(uid)).valueOrNull ?? const [])
+        .where((r) => r.status == 'pending')
+        .toList();
     if (requests.isEmpty) return const SizedBox.shrink();
+    // Titles are end-to-end encrypted, so resolve them from our own notes.
+    final notes = ref.watch(notesProvider(uid)).valueOrNull ?? const [];
+    String titleOf(String noteId) =>
+        notes.where((n) => n.id == noteId).firstOrNull?.displayTitle ?? 'a note';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -244,7 +261,7 @@ class _JoinRequestsSection extends ConsumerWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '"${request.noteTitle}"',
+                  '"${titleOf(request.noteId)}"',
                   style: TextStyle(fontSize: 12, color: notely.text3),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -252,22 +269,26 @@ class _JoinRequestsSection extends ConsumerWidget {
                 Row(
                   children: [
                     TextButton(
-                      onPressed: () async {
-                        await ref.read(shareServiceProvider).approveJoinRequest(
+                      onPressed: () => _run(
+                        context,
+                        () => ref.read(shareServiceProvider).approveJoinRequest(
                               ownerUid: uid,
                               token: request.token,
                               recipientUid: request.recipientUid,
-                            );
-                      },
+                            ),
+                        'Could not approve the request.',
+                      ),
                       child: const Text('Approve'),
                     ),
                     TextButton(
-                      onPressed: () async {
-                        await ref.read(shareServiceProvider).denyJoinRequest(
+                      onPressed: () => _run(
+                        context,
+                        () => ref.read(shareServiceProvider).denyJoinRequest(
                               token: request.token,
                               recipientUid: request.recipientUid,
-                            );
-                      },
+                            ),
+                        'Could not deny the request.',
+                      ),
                       style: TextButton.styleFrom(
                         foregroundColor: Colors.redAccent,
                       ),

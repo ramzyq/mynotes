@@ -1,4 +1,6 @@
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 
 void main() {
@@ -23,7 +25,9 @@ void main() {
     expect(cleared.tags, isNull);
   });
 
-  test('Note toMap includes tags', () {
+  test('tags are encrypted, not stored in plaintext', () async {
+    final crypto = CryptoService();
+    final key = SecretKey(List.generate(32, (i) => i));
     final note = Note(
       id: 'n1',
       title: 'Title',
@@ -34,8 +38,11 @@ void main() {
       updatedAt: DateTime(2024, 1, 1),
       tags: ['work', 'ideas'],
     );
+    final stored = {...note.plainFields(), ...await note.encryptedFields(key, crypto)};
+    expect(stored.containsKey('tags'), isFalse);
+    expect(stored.values.whereType<String>().any((v) => v.contains('work')), isFalse);
 
-    final map = note.toMap();
-    expect(map['tags'], ['work', 'ideas']);
+    final roundTrip = await Note.fromData('n1', stored).decryptNote(key, crypto);
+    expect(roundTrip.tags, ['work', 'ideas']);
   });
 }

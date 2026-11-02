@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
@@ -53,9 +54,13 @@ class ArchivedNotesView extends ConsumerWidget {
                       Expanded(
                         child: GestureDetector(
                           onTap: () async {
+                            final messenger = ScaffoldMessenger.of(context);
                             try {
                               await ref.read(notesServiceProvider).setArchived(uid: uid, note: note, archived: false);
-                            } catch (_) {}
+                            } catch (error, stack) {
+                              AppErrorHandler().handle(error, stack);
+                              messenger.showSnackBar(const SnackBar(content: Text('Could not restore the note.')));
+                            }
                           },
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(note.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
@@ -77,9 +82,14 @@ class ArchivedNotesView extends ConsumerWidget {
                             ],
                           );
                           if (confirmed == true) {
+                            if (!context.mounted) return;
+                            final messenger = ScaffoldMessenger.of(context);
                             try {
                               await ref.read(notesServiceProvider).deleteNote(uid: uid, noteId: note.id);
-                            } catch (_) {}
+                            } catch (error, stack) {
+                              AppErrorHandler().handle(error, stack);
+                              messenger.showSnackBar(const SnackBar(content: Text('Could not delete the note.')));
+                            }
                           }
                         },
                         iconSize: 20,

@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -6,6 +5,8 @@ import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
+import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/features/notes/data/notes_service.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class VersionHistoryView extends ConsumerStatefulWidget {
@@ -24,7 +25,7 @@ class VersionHistoryView extends ConsumerStatefulWidget {
 }
 
 class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
-  late Future<List<Map<String, dynamic>>> _versionsFuture;
+  late Future<List<NoteVersion>> _versionsFuture;
 
   @override
   void initState() {
@@ -69,10 +70,13 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
         const SnackBar(content: Text('Version restored')),
       );
       Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to restore version')),
+        SnackBar(
+          content: Text(error is NoteException ? error.message : 'Failed to restore version'),
+        ),
       );
     }
   }
@@ -97,7 +101,7 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
             style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
           ),
         ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
+      body: FutureBuilder<List<NoteVersion>>(
         future: _versionsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -105,7 +109,10 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
           }
           if (snapshot.hasError) {
             return Center(
-              child: Text('Error: ${snapshot.error}'),
+              child: Text(
+                "Couldn't load version history.",
+                style: TextStyle(color: notely.text3),
+              ),
             );
           }
           final versions = snapshot.data ?? [];
@@ -122,12 +129,11 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
             itemCount: versions.length,
             itemBuilder: (context, index) {
               final version = versions[index];
-              final createdAt = (version['createdAt'] as Timestamp).toDate();
-              final versionNumber = version['versionNumber'] as int;
-              final encrypted = version.containsKey('encryptedContent');
-              final preview = encrypted
-                  ? 'Encrypted version'
-                  : ((version['content'] as String?) ?? '').trim();
+              final createdAt = version.createdAt;
+              final versionNumber = version.versionNumber;
+              final preview = version.decryptionFailed
+                  ? "Can't decrypt this version"
+                  : (version.content ?? version.title ?? '').trim();
               final previewText = preview.length > 100
                   ? '${preview.substring(0, 100)}...'
                   : preview;
@@ -177,8 +183,9 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
                       ),
                       const SizedBox(width: 8),
                       FilledButton.tonal(
-                        onPressed: () =>
-                            _restoreVersion(version['id'] as String),
+                        onPressed: version.decryptionFailed
+                            ? null
+                            : () => _restoreVersion(version.id),
                         child: const Text('Restore'),
                       ),
                     ],

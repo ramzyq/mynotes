@@ -41,11 +41,11 @@ final sharedNotesProvider = StreamProvider.family<List<Note>, String>((ref, uid)
   return notesService.getSharedNotes(uid);
 });
 
-final commentsProvider =
-    StreamProvider.family<List<Comment>, ({String noteOwnerId, String noteId})>(
+final commentsProvider = StreamProvider.family<List<Comment>,
+    ({String noteOwnerId, String noteId, String viewerUid})>(
   (ref, params) {
     final notesService = ref.watch(notesServiceProvider);
-    return notesService.watchComments(params.noteOwnerId, params.noteId);
+    return notesService.watchComments(params.noteOwnerId, params.noteId, params.viewerUid);
   },
 );
 

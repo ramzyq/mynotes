@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_links/app_links.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -55,7 +57,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
               displayName: widget.authUser.displayName,
             );
         await ref.read(joinLinkProcessorProvider).processPending();
-      } catch (_) {}
+      } catch (error, stack) {
+        AppErrorHandler().handle(error, stack);
+      }
       _maybeAskAnalyticsConsent();
       _watchOwnerRequests();
       _listenForLinks();
@@ -64,8 +68,8 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   void _listenForLinks() {
     _uriSub = AppLinks().uriLinkStream.listen((uri) {
-      ref.read(joinLinkProcessorProvider).handleUri(uri);
-    });
+      ref.read(joinLinkProcessorProvider).handleUri(uri).catchError(AppErrorHandler().handle);
+    }, onError: AppErrorHandler().handle);
   }
 
   void _watchOwnerRequests() {
@@ -78,9 +82,11 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                 token: request.token,
                 recipientUid: request.recipientUid,
               );
-        } catch (_) {}
+        } catch (error, stack) {
+          AppErrorHandler().handle(error, stack);
+        }
       }
-    });
+    }, onError: AppErrorHandler().handle);
   }
 
   /// One-time analytics consent prompt shown on first authenticated launch.
@@ -140,44 +146,65 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   }
 
   String _joinMessage(JoinResult result) {
-    final title = result.noteTitle ?? '';
     return switch (result.status) {
       JoinStatus.notFound => 'This link is invalid or has expired.',
       JoinStatus.ownerLink => 'You opened your own share link.',
       JoinStatus.alreadyShared => 'This note is already shared with you.',
-      JoinStatus.pending => 'Request sent. Waiting for the owner to approve your request to join "$title".',
-      JoinStatus.approved => 'Almost there — the owner will share "$title" with you shortly.',
-      JoinStatus.shared => '"$title" is now shared with you.',
+      JoinStatus.pending => 'Request sent. The note will appear here once the owner approves it.',
+      JoinStatus.approved => "Almost there. The note will appear here the next time the owner opens Notely.",
+      JoinStatus.shared => 'The note is now shared with you.',
     };
   }
 
   Future<void> _openEditor({Note? note}) async {
+    if (note != null && note.decryptionFailed) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("This note can't be decrypted on this device. If you reset "
+            'your password, sign out and unlock with your recovery code.'),
+      ));
+      return;
+    }
     if (note != null && note.isLocked) {
-      await Navigator.of(context).push(MaterialPageRoute(builder: (context) => LockScreen(noteId: note.id, pinHash: note.pinHash, pinSalt: note.pinSalt, child: NoteEditorView(authUser: widget.authUser, note: note))));
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (context) => LockScreen(
+          uid: widget.authUser.uid,
+          note: note,
+          builder: (unlocked) => NoteEditorView(authUser: widget.authUser, note: unlocked),
+        ),
+      ));
     } else {
       await Navigator.of(context).push(MaterialPageRoute(builder: (context) => NoteEditorView(authUser: widget.authUser, note: note)));
     }
   }
 
+  void _reportFailure(Object error, StackTrace stack, String message) {
+    AppErrorHandler().handle(error, stack);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _togglePin(Note note) async {
     try {
       await ref.read(notesServiceProvider).togglePin(uid: widget.authUser.uid, note: note);
-    } catch (_) {}
+    } catch (error, stack) {
+      _reportFailure(error, stack, 'Could not update the note.');
+    }
   }
 
   Future<void> _archive(Note note) async {
     try {
       await ref.read(notesServiceProvider).setArchived(uid: widget.authUser.uid, note: note, archived: true);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not archive note')));
+    } catch (error, stack) {
+      _reportFailure(error, stack, 'Could not archive note');
       return;
     }
     if (!mounted) return;
     showArchiveToast(context, () async {
       try {
         await ref.read(notesServiceProvider).setArchived(uid: widget.authUser.uid, note: note, archived: false);
-      } catch (_) {}
+      } catch (error, stack) {
+        _reportFailure(error, stack, 'Could not restore the note.');
+      }
     });
   }
 
@@ -185,7 +212,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     final notes = _selectedNotes();
     try {
       await ref.read(notesServiceProvider).archiveMany(uid: widget.authUser.uid, notes: notes);
-    } catch (_) {}
+    } catch (error, stack) {
+      _reportFailure(error, stack, 'Could not archive the selected notes.');
+    }
     setState(() { _selected.clear(); _selectMode = false; });
   }
 
@@ -203,7 +232,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     if (confirmed != true) return;
     try {
       await ref.read(notesServiceProvider).deleteMany(uid: widget.authUser.uid, notes: notes);
-    } catch (_) {}
+    } catch (error, stack) {
+      _reportFailure(error, stack, 'Some notes could not be deleted.');
+    }
     if (mounted) setState(() { _selected.clear(); _selectMode = false; });
   }
 
@@ -212,7 +243,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     final target = !notes.every((n) => n.isPinned);
     try {
       await ref.read(notesServiceProvider).setPinnedMany(uid: widget.authUser.uid, notes: notes, pinned: target);
-    } catch (_) {}
+    } catch (error, stack) {
+      _reportFailure(error, stack, 'Could not update the selected notes.');
+    }
     if (mounted) setState(() { _selected.clear(); _selectMode = false; });
   }
 
@@ -233,7 +266,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
       final q = _query.toLowerCase();
       list = list.where((n) =>
         n.title?.toLowerCase().contains(q) == true ||
-        n.content?.toLowerCase().contains(q) == true ||
+        (!n.isLocked && n.content?.toLowerCase().contains(q) == true) ||
         (n.tags ?? const <String>[]).any((t) => t.toLowerCase().contains(q))).toList();
     }
     if (_activeTag != null) {
@@ -252,6 +285,15 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   @override
   Widget build(BuildContext context) {
+    // Forget biometric unlock entries for notes deleted or no longer PIN-locked.
+    ref.listen<AsyncValue<List<Note>>>(notesProvider(widget.authUser.uid), (previous, next) {
+      final notes = next.valueOrNull;
+      if (notes == null) return;
+      ref
+          .read(biometricUnlockServiceProvider)
+          .prune(widget.authUser.uid, notes)
+          .catchError(AppErrorHandler().handle);
+    });
     ref.listen<JoinResult?>(joinResultProvider, (previous, next) {
       if (next == null) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
