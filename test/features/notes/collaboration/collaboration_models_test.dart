@@ -1,4 +1,6 @@
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/features/notes/data/comment.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 
@@ -34,7 +36,20 @@ void main() {
     expect(cleared.sharedBy, isNull);
   });
 
-  test('Note toMap includes collaboration fields', () {
+  test('Note.fromData parses collaboration fields', () {
+    final note = Note.fromData('n1', {
+      'encryptionVersion': 2,
+      'collaborators': ['uid-a'],
+      'encryptedKeys': {'uid-a': 'wrapped-key'},
+      'sharedBy': 'owner-uid',
+    }, ownerUid: 'owner-uid');
+    expect(note.collaborators, ['uid-a']);
+    expect(note.encryptedKeys, {'uid-a': 'wrapped-key'});
+    expect(note.sharedBy, 'owner-uid');
+    expect(note.ownerUid, 'owner-uid');
+  });
+
+  test('plainFields never carries sharing or key fields', () {
     final note = Note(
       id: 'n1',
       title: 'Title',
@@ -45,30 +60,30 @@ void main() {
       updatedAt: DateTime(2024, 1, 1),
       collaborators: ['uid-a'],
       encryptedKeys: {'uid-a': 'wrapped-key'},
-      sharedBy: 'owner-uid',
-      sharedAt: DateTime(2024, 1, 2),
     );
-
-    final map = note.toMap();
-    expect(map['collaborators'], ['uid-a']);
-    expect(map['encryptedKeys'], {'uid-a': 'wrapped-key'});
-    expect(map['sharedBy'], 'owner-uid');
-    expect(map['sharedAt'], isNotNull);
+    final map = note.plainFields();
+    for (final field in ['collaborators', 'encryptedKeys', 'wrappedKey', 'title', 'content', 'isLocked']) {
+      expect(map.containsKey(field), isFalse, reason: field);
+    }
   });
 
-  test('Comment toMap contains author and content', () {
-    final comment = Comment(
-      id: 'c1',
-      authorUid: 'uid-a',
-      authorName: 'Alice',
-      content: 'Looks good!',
-      createdAt: DateTime(2024, 1, 1),
+  test('Comment body is encrypted and bound to its note and id', () async {
+    final crypto = CryptoService();
+    final key = SecretKey(List.generate(32, (i) => i));
+    final map = await Comment.encryptedMap(
+      noteId: 'n1', commentId: 'c1', authorUid: 'uid-a', authorName: 'Alice',
+      content: 'Looks good!', noteKey: key, keyGen: 1, crypto: crypto,
     );
-
-    final map = comment.toMap();
+    expect(map.containsKey('content'), isFalse);
+    expect(map['encryptedContent'], isNot(contains('Looks good')));
     expect(map['authorUid'], 'uid-a');
-    expect(map['authorName'], 'Alice');
-    expect(map['content'], 'Looks good!');
-    expect(map['createdAt'], isNotNull);
+
+    Comment sealed(String id) => Comment(
+          id: id, authorUid: 'uid-a', authorName: 'Alice',
+          encryptedContent: map['encryptedContent'] as String, createdAt: DateTime(2024),
+        );
+    expect((await sealed('c1').decrypt('n1', key, crypto)).content, 'Looks good!');
+    await expectLater(sealed('c2').decrypt('n1', key, crypto), throwsA(anything));
+    await expectLater(sealed('c1').decrypt('n2', key, crypto), throwsA(anything));
   });
 }
