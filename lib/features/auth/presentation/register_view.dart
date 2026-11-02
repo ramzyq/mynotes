@@ -7,6 +7,7 @@ import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
+import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 
 class RegisterView extends ConsumerStatefulWidget {
   const RegisterView({
@@ -86,12 +87,15 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
 
     setState(() => _isLoading = true);
 
+    ref.read(pendingPasswordProvider.notifier).state = password;
+    var signedIn = false;
     try {
       await ref.read(authServiceProvider).createUser(
         email: email,
         password: password,
         displayName: firstName,
       );
+      signedIn = true;
       if (!mounted) return;
       // Navigate to email verification screen
       Navigator.of(context).pushReplacement(
@@ -120,6 +124,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
         const SnackBar(content: Text('Registration failed. Please try again.')),
       );
     } finally {
+      if (!signedIn && mounted) ref.read(pendingPasswordProvider.notifier).state = null;
       if (mounted) {
         setState(() => _isLoading = false);
       }

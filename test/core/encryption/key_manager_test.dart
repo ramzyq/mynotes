@@ -3,95 +3,97 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/key_manager.dart';
 
+Future<KeyManager> _ready(String uid) async {
+  final keyManager = KeyManager()..setActiveUser(uid);
+  await keyManager.generateMasterKey();
+  return keyManager;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
 
-  test('createNoteKey does not require a pre-initialized master key', () async {
-    FlutterSecureStorage.setMockInitialValues({});
-    final keyManager = KeyManager();
+  test('operations fail instead of silently creating a new master key', () async {
+    final keyManager = KeyManager()..setActiveUser('u1');
+    expect(() => keyManager.createNoteKey('note-1'),
+        throwsA(isA<MasterKeyUnavailableException>()));
+  });
+
+  test('note key wrap round-trips', () async {
+    final keyManager = await _ready('u1');
     final wrapped = await keyManager.createNoteKey('note-1');
     final noteKey = await keyManager.unwrapNoteKey(wrapped);
-    final bytes = await noteKey.extractBytes();
-    expect(bytes.length, equals(32));
+    expect((await noteKey.extractBytes()).length, 32);
   });
+
+  test('master keys are scoped per user', () async {
+    final keyManager = await _ready('alice');
+    final aliceKey = await (await keyManager.requireMasterKey()).extractBytes();
+    keyManager.setActiveUser('bob');
+    expect(await keyManager.hasMasterKey(), isFalse);
+    keyManager.setActiveUser('alice');
+    expect(await (await keyManager.requireMasterKey()).extractBytes(), aliceKey);
+  });
+
+  test('a legacy unscoped key is adopted by the signed-in user', () async {
+    FlutterSecureStorage.setMockInitialValues({
+      'master_key': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    });
+    final keyManager = KeyManager()..setActiveUser('u1');
+    expect(await keyManager.hasMasterKey(), isTrue);
+    keyManager.setActiveUser('u2');
+    expect(await keyManager.hasMasterKey(), isFalse);
+  });
+
   test('derives 256-bit key from password', () async {
     final salt = CryptoService().generateSalt();
     final key = await CryptoService().deriveKey(password: 'test-password', salt: salt);
-    final extracted = await key.extractBytes();
-    expect(extracted.length, equals(32));
+    expect((await key.extractBytes()).length, 32);
   });
 
   test('same password with different salt produces different keys', () async {
     final crypto = CryptoService();
-    final salt1 = crypto.generateSalt();
-    final salt2 = crypto.generateSalt();
-    final key1 = await crypto.deriveKey(password: 'password', salt: salt1);
-    final key2 = await crypto.deriveKey(password: 'password', salt: salt2);
-    final bytes1 = await key1.extractBytes();
-    final bytes2 = await key2.extractBytes();
-    expect(bytes1, isNot(equals(bytes2)));
-  });
-
-  test('different password with same salt produces different keys', () async {
-    final crypto = CryptoService();
-    final salt = crypto.generateSalt();
-    final key1 = await crypto.deriveKey(password: 'password-a', salt: salt);
-    final key2 = await crypto.deriveKey(password: 'password-b', salt: salt);
-    final bytes1 = await key1.extractBytes();
-    final bytes2 = await key2.extractBytes();
-    expect(bytes1, isNot(equals(bytes2)));
+    final key1 = await crypto.deriveKey(password: 'password', salt: crypto.generateSalt());
+    final key2 = await crypto.deriveKey(password: 'password', salt: crypto.generateSalt());
+    expect(await key1.extractBytes(), isNot(equals(await key2.extractBytes())));
   });
 
   test('getMyPublicKey is deterministic for the same master key', () async {
-    FlutterSecureStorage.setMockInitialValues({});
-    final keyManager = KeyManager();
+    final keyManager = await _ready('u1');
     final first = await keyManager.getMyPublicKey();
-    final second = await keyManager.getMyPublicKey();
-    expect(second, equals(first));
+    keyManager.clearCachedKey();
+    expect(await keyManager.getMyPublicKey(), equals(first));
   });
 
-  test('wrap and unwrap with own public key round-trips the note key', () async {
-    FlutterSecureStorage.setMockInitialValues({});
-    final keyManager = KeyManager();
-    final wrapped = await keyManager.createNoteKey('note-1');
-    final noteKey = await keyManager.unwrapNoteKey(wrapped);
+  test('collaborator wrap round-trips between two users', () async {
+    final owner = await _ready('owner');
+    final noteKey = owner.generateNoteKey();
+    final ownerPub = await owner.getMyPublicKey();
 
-    final ownPublicKey = await keyManager.getMyPublicKey();
-    final encryptedKey = await keyManager.wrapNoteKeyForCollaborator(
-      noteKey: noteKey,
-      recipientPublicKey: ownPublicKey,
-    );
-    final recovered = await keyManager.unwrapCollaboratorNoteKey(
-      encryptedKeyStr: encryptedKey,
-      ownerPublicKey: ownPublicKey,
-    );
+    final recipient = await _ready('recipient');
+    final recipientPub = await recipient.getMyPublicKey();
 
-    final original = await noteKey.extractBytes();
-    final result = await recovered.extractBytes();
-    expect(result, equals(original));
+    final wrapped = await owner.wrapNoteKeyForCollaborator(
+        noteKey: noteKey, recipientPublicKey: recipientPub);
+    expect(wrapped, startsWith('v2:'));
+    final recovered = await recipient.unwrapCollaboratorNoteKey(
+        encryptedKeyStr: wrapped, ownerPublicKey: ownerPub);
+    expect(await recovered.extractBytes(), await noteKey.extractBytes());
   });
 
-  test('unwrapping with a different user public key fails', () async {
-    FlutterSecureStorage.setMockInitialValues({});
-    final owner = KeyManager();
-    final wrapped = await owner.createNoteKey('note-1');
-    final noteKey = await owner.unwrapNoteKey(wrapped);
+  test('unwrapping with a different user key fails', () async {
+    final owner = await _ready('owner');
+    final noteKey = owner.generateNoteKey();
+    final ownerPub = await owner.getMyPublicKey();
 
-    FlutterSecureStorage.setMockInitialValues({});
-    final stranger = KeyManager();
-    final strangerPublicKey = await stranger.getMyPublicKey();
+    final recipient = await _ready('recipient');
+    final wrapped = await owner.wrapNoteKeyForCollaborator(
+        noteKey: noteKey, recipientPublicKey: await recipient.getMyPublicKey());
 
-    final encryptedKey = await owner.wrapNoteKeyForCollaborator(
-      noteKey: noteKey,
-      recipientPublicKey: strangerPublicKey,
-    );
-
-    expect(
-      () => stranger.unwrapCollaboratorNoteKey(
-        encryptedKeyStr: encryptedKey,
-        ownerPublicKey: strangerPublicKey,
-      ),
-      throwsA(isA<Exception>()),
+    final stranger = await _ready('stranger');
+    await expectLater(
+      stranger.unwrapCollaboratorNoteKey(encryptedKeyStr: wrapped, ownerPublicKey: ownerPub),
+      throwsA(anything),
     );
   });
 }

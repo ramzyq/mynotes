@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/encryption/presentation/key_setup_gate.dart';
+import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/providers/theme_mode_provider.dart';
 import 'package:mynotes/core/theme/notely_theme.dart';
 import 'package:mynotes/features/auth/presentation/login_view.dart';
@@ -78,17 +81,33 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
   void _cleanupExpiredNotes() {
     final user = ref.read(authStateProvider).valueOrNull;
     if (user == null) return;
-    ref.read(notesServiceProvider).deleteExpiredNotes(user.uid);
+    ref
+        .read(notesServiceProvider)
+        .deleteExpiredNotes(user.uid)
+        .catchError(AppErrorHandler().handle);
   }
 
   @override
   Widget build(BuildContext context) {
+    // Drop all key material and decrypted caches when the user changes.
+    ref.listen(authStateProvider, (previous, next) {
+      final previousUid = previous?.valueOrNull?.uid;
+      final uid = next.valueOrNull?.uid;
+      if (previousUid == uid) return;
+      ref.read(keyManagerProvider).setActiveUser(uid);
+      ref.read(notesServiceProvider).clearCaches();
+      if (uid == null) ref.read(pendingPasswordProvider.notifier).state = null;
+    });
     final authState = ref.watch(authStateProvider);
     return authState.when(
       data: (user) {
         if (user != null) {
           if (user.isEmailVerified) {
-            return NotesHomeView(authUser: user);
+            return KeySetupGate(
+              key: ValueKey(user.uid),
+              authUser: user,
+              child: NotesHomeView(authUser: user),
+            );
           }
           return const VerifyEmailView();
         }
