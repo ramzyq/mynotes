@@ -94,8 +94,25 @@ firebase deploy --only functions
 To run the function tests locally:
 
 ```bash
-firebase emulators:exec --only firestore 'npm --prefix functions test'
+firebase emulators:exec --only firestore,auth 'npm --prefix functions test'
 ```
+
+### One-off data migration
+
+Older app versions stored each encrypted note's plaintext title and content
+next to the ciphertext. `functions/scripts/maintenance.js` deletes those
+fields and backfills the share-by-email index for existing verified accounts.
+It needs Admin SDK credentials (a service-account key) and is a dry run
+unless `--apply` is passed:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+node functions/scripts/maintenance.js --project ramzyqnotes          # dry run
+node functions/scripts/maintenance.js --project ramzyqnotes --apply  # write
+```
+
+Copies of the plaintext may remain in Firestore backups or exports made
+before the purge.
 
 To run the rules tests locally:
 
