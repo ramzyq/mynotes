@@ -17,7 +17,7 @@ async function seed(path, data) {
   });
 }
 
-const as = (uid) => testEnv.authenticatedContext(uid, { email: `${uid}@example.com` }).firestore();
+const as = (uid, verified = true) => testEnv.authenticatedContext(uid, { email: `${uid}@example.com`, email_verified: verified }).firestore();
 
 afterEach(async () => {
   await testEnv.clearFirestore();
@@ -163,6 +163,10 @@ describe('Firestore rules', () => {
     await assertFails(as('alice').doc('emailIndex/alice@example.com').set({ uid: 'bob' }));
   });
 
+  it('denies claiming an email index entry with an unverified email', async () => {
+    await assertFails(as('alice', false).doc('emailIndex/alice@example.com').set({ uid: 'alice' }));
+  });
+
   it('allows exact email lookup but not listing', async () => {
     await seed('emailIndex/bob@example.com', { uid: 'bob' });
     await assertSucceeds(as('alice').doc('emailIndex/bob@example.com').get());
@@ -241,6 +245,13 @@ describe('Firestore rules', () => {
     await seed('shareLinks/token1', { ownerUid: 'owner', noteId: 'note1', mode: 'open' });
     await assertSucceeds(as('stranger').doc('shareLinks/token1').get());
     await assertFails(as('stranger').collection('shareLinks').get());
+  });
+
+  it('allows owners to list only their own links', async () => {
+    await seed('shareLinks/token1', { ownerUid: 'owner', noteId: 'note1', mode: 'open' });
+    await seed('shareLinks/token2', { ownerUid: 'other', noteId: 'note2', mode: 'open' });
+    await assertSucceeds(as('owner').collection('shareLinks').where('ownerUid', '==', 'owner').get());
+    await assertFails(as('owner').collection('shareLinks').where('ownerUid', '==', 'other').get());
   });
 
   // ---------- join requests ----------

@@ -6,7 +6,6 @@ class JoinRequest {
   final String recipientName;
   final String recipientEmail;
   final String noteId;
-  final String noteTitle;
   final String status;
   final DateTime createdAt;
 
@@ -16,7 +15,6 @@ class JoinRequest {
     required this.recipientName,
     required this.recipientEmail,
     required this.noteId,
-    required this.noteTitle,
     required this.status,
     required this.createdAt,
   });
@@ -29,7 +27,6 @@ class JoinRequest {
       recipientName: data['recipientName'] as String? ?? '',
       recipientEmail: data['recipientEmail'] as String? ?? '',
       noteId: data['noteId'] as String? ?? '',
-      noteTitle: data['noteTitle'] as String? ?? 'Note',
       status: data['status'] as String? ?? 'pending',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );

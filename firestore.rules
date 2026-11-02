@@ -71,6 +71,7 @@ service cloud.firestore {
       allow list: if false;
       allow create, update: if signedIn()
         && request.auth.token.email != null
+        && request.auth.token.email_verified == true
         && email == request.auth.token.email.lower()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['uid']);
@@ -97,7 +98,8 @@ service cloud.firestore {
       }
 
       allow get: if signedIn();
-      allow list: if false;
+      // Owners may query their own links (e.g. to clean up on note delete).
+      allow list: if signedIn() && resource.data.ownerUid == request.auth.uid;
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.mode in ['open', 'approval']

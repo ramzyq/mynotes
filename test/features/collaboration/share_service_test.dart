@@ -67,4 +67,21 @@ void main() {
       expect(plan.status, JoinStatus.shared);
     });
   });
+
+  group('canCompleteShare', () {
+    test('open-mode links complete once approved', () {
+      expect(canCompleteShare(linkMode: 'open', requestStatus: 'approved', approvedBy: null, ownerUid: 'o'), isTrue);
+    });
+
+    test('approval-mode links require approval by the owner', () {
+      expect(canCompleteShare(linkMode: 'approval', requestStatus: 'approved', approvedBy: null, ownerUid: 'o'), isFalse);
+      expect(canCompleteShare(linkMode: 'approval', requestStatus: 'approved', approvedBy: 'recipient', ownerUid: 'o'), isFalse);
+      expect(canCompleteShare(linkMode: 'approval', requestStatus: 'approved', approvedBy: 'o', ownerUid: 'o'), isTrue);
+    });
+
+    test('pending or already-shared requests never complete', () {
+      expect(canCompleteShare(linkMode: 'open', requestStatus: 'pending', approvedBy: 'o', ownerUid: 'o'), isFalse);
+      expect(canCompleteShare(linkMode: 'open', requestStatus: 'shared', approvedBy: 'o', ownerUid: 'o'), isFalse);
+    });
+  });
 }
