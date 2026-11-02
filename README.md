@@ -1,46 +1,51 @@
-# Note Log
+# Notely
 
 A privacy-first notes app built with Flutter and Firebase, featuring end-to-end encryption, biometric lock, voice notes, OCR capture, spaced repetition, and real-time collaboration.
 
 ## Features
 
-- **End-to-end encryption** — All notes encrypted with AES-256-GCM before leaving your device. Per-note keys wrapped with a Master Key derived from your password. Firebase never sees plaintext.
-- **Per-note lock** — Lock individual notes behind biometric (fingerprint/face) or a numeric PIN. Failed PIN attempts trigger a 30-second cooldown after 3 tries.
-- **Firebase security rules** — Production-hardened Firestore and Storage rules. Users can only access their own data. Collaborator access is explicitly granted per note.
-- **Client-side search** — Full-text search powered by SQLite FTS5. Works with encrypted notes (index rebuilt from decrypted content).
+- **End-to-end encryption** — Note titles, bodies, tags, location, links, and comments are encrypted with AES-256-GCM before leaving your device. Each note has its own key, wrapped with your master key. The master key is backed up encrypted under your password and a recovery code, so it survives reinstalls and new devices.
+- **Per-note lock** — A PIN lock encrypts the note's key under the PIN, so the note cannot be opened without it; no PIN hash is stored anywhere. A biometric lock hides the note on this device. After 3 wrong PINs a cooldown starts (30 s, doubling each time) and persists across restarts.
+- **Firebase security rules** — Users can only access their own data; collaborators can read notes shared with them and comment as themselves. User profiles, share links, and the email lookup can be fetched by id but never listed. Covered by emulator tests in `tests/`.
+- **Client-side search** — Search runs in memory over notes decrypted on your device. Nothing searchable is sent to or stored on a server.
 - **OCR from photo** — Extract text from images using on-device ML Kit text recognition. No images leave your device.
 - **Voice-to-note** — Record audio and get on-device speech-to-text transcription. Original audio file retained as an attachment.
 - **Location-tagged notes** — Attach coordinates to notes with one tap. Reverse-geocoded to a readable place name. Privacy-respecting (opt-in per note, not live-tracked).
-- **Wiki-style [[links]]** — Link notes together with `[[Note Title]]` syntax. Autocomplete suggestions. Backlinks view shows which notes reference the current one.
+- **Wiki-style [[links]]** — Link notes together with `[[Note Title]]` syntax. Autocomplete suggestions. Backlinks view shows which notes reference the current one. Links are resolved on-device because titles are encrypted.
 - **Spaced repetition / flashcards** — Flag notes as study material. Review with SM-2 spaced repetition algorithm. Daily review notifications.
-- **Version history** — Automatic snapshots on each save (rate-limited). Restore any previous version. Up to 50 versions per note.
-- **Real-time collaboration** — Share notes with other users via E2EE. Each collaborator gets the note key encrypted with their public key. Comments on shared notes.
+- **Version history** — An encrypted snapshot is taken on save (at most every 5 minutes). Restoring a version first snapshots the current one, so restores can be undone. Up to 50 versions per note.
+- **Collaboration** — Share by email or by link (open or approval-required). Each collaborator gets the note key wrapped for their X25519 public key. Removing a collaborator rotates the note key. Collaborators can read and comment; only the owner edits.
 - **Context switcher** — Organize notes with tags. Filter to a focused view per project or topic.
-- **Self-destructing notes** — Set a destruction date or mark as read-once. Note is permanently deleted at the trigger point.
+- **Self-destructing notes** — Set a destruction date, or mark a note read-once so it is deleted when you close it. The note's versions, comments, and share links are deleted with it. Expired notes are removed by the app when it runs; a server-side TTL policy is recommended for guaranteed deletion.
 - **Dark theme** — Calm, dark workspace for focused writing. Light theme also available.
 
 ## Privacy & Security
 
-Note Log is designed with privacy as a default, not an afterthought.
+Notely is designed with privacy as a default, not an afterthought.
 
 | Feature | Security Model |
 |---------|---------------|
-| Note content | AES-256-GCM encrypted on-device before sync |
-| Encryption keys | Derived via PBKDF2 from your password; stored in OS keychain |
-| Search | Client-side only (SQLite FTS5 index from decrypted notes) |
+| Note content & metadata | AES-256-GCM on-device; each field is bound to its note via associated data |
+| Master key | Random 256-bit key in the OS keychain; backed up encrypted under your password (PBKDF2-SHA256) and a 128-bit recovery code (HKDF). The server cannot open the backup. |
+| Search | Client-side only, in memory over decrypted notes |
 | OCR / Voice | Runs entirely on-device — no data sent to servers |
-| Location | Opt-in per note, captured once, not live-tracked |
-| Collaboration | E2EE — note key encrypted per collaborator; server never sees plaintext |
+| Location | Opt-in per note, captured once, stored encrypted |
+| Collaboration | X25519 + HKDF key wrapping per collaborator; key rotation on removal |
+| Comments | Encrypted with the note key |
 | Authentication | Firebase Auth (email/password + Google Sign-In) |
 | File storage | Firebase Storage, access controlled by security rules |
+
+**What is not encrypted:** timestamps, color, pin/archive/lock flags, study scheduling fields, self-destruct time (needed for server queries), collaborator uids, and display names.
+
+**Recovery:** if you sign in on a new device with Google, or after resetting your password, Notely asks for your recovery code. Without the code (or your current password), encrypted notes cannot be recovered by anyone, including us.
 
 ## Tech Stack
 
 - **Framework:** Flutter (Dart)
 - **State management:** Riverpod
 - **Backend:** Firebase (Firestore, Auth, Storage, Analytics)
-- **Local database:** Drift (SQLite with FTS5)
-- **Encryption:** `cryptography` (AES-256-GCM, PBKDF2)
+- **Local database:** Drift (SQLite) — present but not currently used by any feature
+- **Encryption:** `cryptography` (AES-256-GCM, PBKDF2, HKDF, X25519)
 - **Key storage:** `flutter_secure_storage`
 - **Biometrics:** `local_auth`
 
@@ -76,7 +81,7 @@ flutter run
 Deploy the versioned rules:
 
 ```bash
-firebase deploy --only firestore,storage
+firebase deploy --only firestore:rules,firestore:indexes,storage
 ```
 
 To run the rules tests locally:
@@ -96,8 +101,8 @@ lib/
 ├── core/
 │   ├── auth/models/              # AuthUser model
 │   ├── auth/services/            # AuthService, FirebaseAuthProvider
-│   ├── db/                       # Drift database, tables
-│   ├── encryption/               # CryptoService, KeyManager
+│   ├── db/                       # Drift database (currently unused)
+│   ├── encryption/               # CryptoService, KeyManager, KeyBackupService, key setup gate
 │   ├── error/                    # Error handling
 │   └── providers/                # Global Riverpod providers
 ├── features/
@@ -106,7 +111,7 @@ lib/
 │   ├── collaboration/            # Shared notes, comments
 │   ├── lock/                     # Per-note biometric/PIN lock
 │   ├── notes/                    # Note model, service, editor, home views
-│   ├── settings/                 # Theme toggle, app settings
+│   ├── account/                  # Account sheet, archived notes, join requests
 │   └── study/                    # Spaced repetition / flashcards
 ├── firestore.rules               # Firestore security rules
 ├── storage.rules                 # Storage security rules
