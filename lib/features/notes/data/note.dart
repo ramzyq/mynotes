@@ -160,6 +160,19 @@ class Note {
   bool get isSealed => encryptionVersion >= 1 && (encryptedTitle != null || encryptedContent != null);
 
   /// PIN-locked notes need the PIN to unwrap their key.
+  /// The earliest future self-destruct time among [notes], or null if none
+  /// is pending. Used to wake the UI exactly when the next note expires.
+  static DateTime? nextExpiry(Iterable<Note> notes, {DateTime? now}) {
+    final at = now ?? DateTime.now();
+    DateTime? next;
+    for (final note in notes) {
+      final when = note.selfDestructAt;
+      if (when == null || !when.isAfter(at)) continue;
+      if (next == null || when.isBefore(next)) next = when;
+    }
+    return next;
+  }
+
   /// Past its self-destruct time and only waiting to be deleted. Hidden from
   /// every list; collaborators can no longer open it (see firestore.rules).
   bool get isExpired =>

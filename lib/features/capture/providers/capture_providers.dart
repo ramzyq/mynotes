@@ -4,11 +4,15 @@ import 'package:mynotes/features/capture/services/ocr_service.dart';
 import 'package:mynotes/features/capture/services/voice_service.dart';
 
 final ocrServiceProvider = Provider<OcrService>((ref) {
-  return OcrService();
+  final service = OcrService();
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 final voiceServiceProvider = Provider<VoiceService>((ref) {
-  return VoiceService();
+  final service = VoiceService();
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 final locationServiceProvider = Provider<LocationService>((ref) {

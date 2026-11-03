@@ -54,6 +54,7 @@ void main() {
     registerFallbackValue('fallback');
   });
   setUp(() {
+    when(() => notesService.deleteExpiredNotes(any())).thenAnswer((_) async {});
     when(() => notesService.setArchived(uid: any(named: 'uid'), note: any(named: 'note'), archived: any(named: 'archived')))
         .thenAnswer((_) async {});
     when(() => shareService.ensureUserProfile(uid: any(named: 'uid'), email: any(named: 'email'), displayName: any(named: 'displayName')))
