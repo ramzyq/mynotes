@@ -63,6 +63,9 @@ dependencies:
   firebase_crashlytics: ^5.4.1
   flutter_slidable: ^4.0.3
   cryptography_flutter: ^2.3.4
+  file_picker: ^13.3.2
+  quick_actions: ^1.1.1
+  timezone: ^0.10.1
 
 dev_dependencies:
   flutter_test:
@@ -123,6 +126,10 @@ flutter:
     - family: Geist
       fonts:
         - asset: assets/fonts/Geist-Regular.ttf
+        - asset: assets/fonts/Geist-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Geist-SemiBold.ttf
+          weight: 600
     - family: Instrument Serif
       fonts:
         - asset: assets/fonts/InstrumentSerif-Regular.ttf

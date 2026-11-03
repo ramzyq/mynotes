@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_avatar.dart';
 import 'package:mynotes/core/theme/widgets/notely_wordmark.dart';
@@ -30,56 +29,57 @@ class ListHeader extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const NotelyWordmark(size: 17),
+            const NotelyWordmark(size: 16),
             Row(
               children: [
-                IconButton(
-                  icon: Icon(selectMode ? Icons.close : Icons.check),
+                TextButton(
                   onPressed: onToggleSelect,
-                  iconSize: 20,
-                  visualDensity: VisualDensity.compact,
+                  style: TextButton.styleFrom(
+                    foregroundColor: notely.text2,
+                    textStyle: const TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w500),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(0, 36),
+                  ),
+                  child: Text(selectMode ? 'Cancel' : 'Select'),
                 ),
-                const SizedBox(width: 8),
-                InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: onOpenAccount,
-                  child: NotelyAvatar(initial: userName, ring: true),
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: 'Account',
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onOpenAccount,
+                    child: NotelyAvatar(initial: userName),
+                  ),
                 ),
               ],
             ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 32),
         Text.rich(
           TextSpan(
+            style: Theme.of(context).textTheme.displayLarge,
             children: [
-              TextSpan(
-                text: 'Your notes, ',
-                style: TextStyle(fontFamily: 'Instrument Serif', fontSize: 42, height: 1.02, letterSpacing: -1.2, color: notely.text),
-              ),
+              const TextSpan(text: 'Your notes, '),
               TextSpan(
                 text: '$userName.',
-                style: TextStyle(fontFamily: 'Instrument Serif', fontStyle: FontStyle.italic, fontSize: 42, height: 1.02, letterSpacing: -1.2, color: notely.violet),
+                style: TextStyle(fontStyle: FontStyle.italic, color: notely.violet),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
+        // The privacy promise, stated where people look first. True for every
+        // note: content is encrypted on this device before it is synced.
         Row(
           children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: notely.success,
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: notely.success.withValues(alpha: 0.18), blurRadius: 0, spreadRadius: 3)],
-              ),
-            ),
+            Icon(Icons.lock_outline, size: 14, color: notely.text3),
             const SizedBox(width: 6),
-            Text(
-              '$noteCount notes · synced',
-              style: TextStyle(fontSize: 13, color: notely.text3, letterSpacing: -0.1),
+            Flexible(
+              child: Text(
+                '$noteCount ${noteCount == 1 ? 'note' : 'notes'} · encrypted on this device',
+                style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3),
+              ),
             ),
           ],
         ),
@@ -97,20 +97,76 @@ class NoteSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    final hasText = controller.text.isNotEmpty;
-    return GlassTextField.search(
-      controller: controller,
-      onChanged: onChanged,
-      placeholder: 'Search notes, tags, content…',
-      textStyle: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text),
-      placeholderStyle: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text3),
-      suffixIcon: hasText ? Icon(Icons.close, size: 16, color: notely.text3) : null,
-      onSuffixTap: hasText
-          ? () {
-              controller.clear();
-              onChanged('');
-            }
-          : null,
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) => SizedBox(
+        height: 44,
+        child: TextField(
+          controller: controller,
+          onChanged: onChanged,
+          textInputAction: TextInputAction.search,
+          style: TextStyle(fontFamily: 'Geist', fontSize: 15, color: notely.text),
+          decoration: InputDecoration(
+            hintText: 'Search',
+            hintStyle: TextStyle(fontFamily: 'Geist', fontSize: 15, color: notely.text3),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            prefixIcon: Icon(Icons.search, size: 18, color: notely.text3),
+            prefixIconConstraints: const BoxConstraints(minWidth: 40),
+            suffixIcon: value.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Clear search',
+                    icon: Icon(Icons.close, size: 16, color: notely.text3),
+                    onPressed: () {
+                      controller.clear();
+                      onChanged('');
+                    },
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A quiet filter chip: hairline when idle, ink tint when selected.
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  const _FilterChip({required this.label, required this.selected, required this.onTap, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    final fg = selected ? notely.violetInk : notely.text2;
+    return Material(
+      color: selected ? notely.violetSoft : Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: selected ? notely.violetSoft2 : notely.border),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 14, color: fg),
+                const SizedBox(width: 6),
+              ],
+              Text(label, style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w500, color: fg)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -124,45 +180,17 @@ class FilterChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final notely = NotelyTheme.of(context);
-    Widget chip(String label) {
-      final isActive = active == label;
-      return GlassChip(
-        label: label,
-        selected: isActive,
-        selectedColor: notely.violet,
-        onTap: () => onChanged(label),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        labelStyle: TextStyle(
-          fontFamily: 'Geist',
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          letterSpacing: -0.1,
-          color: isActive ? Colors.white : notely.text2,
-        ),
-      );
-    }
-
     return Row(
       children: [
-        chip('All'),
-        const SizedBox(width: 6),
-        GlassChip(
-          label: pinnedCount > 0 ? 'Pinned · $pinnedCount' : 'Pinned',
+        _FilterChip(label: 'All', selected: active == 'All', onTap: () => onChanged('All')),
+        const SizedBox(width: 8),
+        _FilterChip(
+          label: pinnedCount > 0 ? 'Pinned $pinnedCount' : 'Pinned',
           selected: active == 'Pinned',
-          selectedColor: notely.violet,
           onTap: () => onChanged('Pinned'),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          labelStyle: TextStyle(
-            fontFamily: 'Geist',
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            letterSpacing: -0.1,
-            color: active == 'Pinned' ? Colors.white : notely.text2,
-          ),
         ),
-        const SizedBox(width: 6),
-        chip('Recent'),
+        const SizedBox(width: 8),
+        _FilterChip(label: 'Recent', selected: active == 'Recent', onTap: () => onChanged('Recent')),
       ],
     );
   }
@@ -177,31 +205,40 @@ class SortMenu extends StatelessWidget {
   String _labelFor(NoteSort sort) => switch (sort) {
         NoteSort.updated => 'Updated',
         NoteSort.created => 'Created',
-        NoteSort.titleAZ => 'Title (A–Z)',
+        NoteSort.titleAZ => 'Title A–Z',
         NoteSort.tag => 'Tag',
       };
 
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    return GlassMenu(
-      menuWidth: 180,
-      triggerBuilder: (context, toggleMenu) => GlassChip(
-        label: _labelFor(sort),
-        icon: Icon(Icons.swap_vert, size: 14, color: notely.text2),
-        onTap: toggleMenu,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        labelStyle: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w500, color: notely.text2),
+    return MenuAnchor(
+      alignmentOffset: const Offset(0, 4),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(notely.surface),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: notely.border),
+        )),
       ),
-      items: [
+      menuChildren: [
         for (final option in NoteSort.values)
-          GlassMenuItem(
-            title: _labelFor(option),
-            isSelected: sort == option,
-            titleStyle: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text),
-            onTap: () => onChanged(option),
+          MenuItemButton(
+            onPressed: () => onChanged(option),
+            trailingIcon: sort == option ? Icon(Icons.check, size: 16, color: notely.violet) : null,
+            child: SizedBox(
+              width: 140,
+              child: Text(_labelFor(option), style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text)),
+            ),
           ),
       ],
+      builder: (context, controller, _) => _FilterChip(
+        label: _labelFor(sort),
+        icon: Icons.swap_vert,
+        selected: false,
+        onTap: () => controller.isOpen ? controller.close() : controller.open(),
+      ),
     );
   }
 }

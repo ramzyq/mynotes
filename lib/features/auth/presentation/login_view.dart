@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
-import 'package:mynotes/core/theme/widgets/notely_background.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/auth/presentation/register_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
@@ -77,14 +76,14 @@ class _LoginViewState extends ConsumerState<LoginView> {
 
     if (email.isEmpty || password.isEmpty) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields')),
+        const SnackBar(content: Text('Enter your email and password')),
       );
       return;
     }
 
     if (!_isValidEmail(email)) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Please enter a valid email')),
+        const SnackBar(content: Text('Enter a valid email address')),
       );
       return;
     }
@@ -120,7 +119,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
     } on UserNotFoundAuthException {
       if (!mounted) return;
       messenger.showSnackBar(
-        const SnackBar(content: Text('User not found. Please sign up.')),
+        const SnackBar(content: Text('No account with that email. Create one below.')),
       );
     } on WrongPasswordAuthException {
       if (!mounted) return;
@@ -148,124 +147,87 @@ class _LoginViewState extends ConsumerState<LoginView> {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    return GlassPage(
-      background: const NotelyBackground(),
-      statusBarStyle: GlassStatusBarStyle.auto,
-      child: Scaffold(
-        appBar: GlassAppBar(
-          centerTitle: false,
-          title: Text(
-            'Login',
-            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
-          ),
-        ),
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 40),
-                Center(
-                  child: const NotelyWordmark(size: 28),
-                ),
-                const SizedBox(height: 10),
-                Center(
-                  child: Text(
-                    'Your private notes workspace',
-                    style: TextStyle(fontSize: 16, color: notely.text3),
-                  ),
-                ),
-                const SizedBox(height: 50),
-                GlassTextField(
-                  controller: _email,
-                  placeholder: 'Email',
-                  prefixIcon: const Icon(Icons.email_outlined),
-                  keyboardType: TextInputType.emailAddress,
-                  enabled: !_isLoading,
-                ),
-                const SizedBox(height: 16),
-                GlassPasswordField(
-                  controller: _password,
-                  placeholder: 'Password',
-                  enabled: !_isLoading,
-                ),
-                const SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity,
-                  child: GlassButton.custom(
-                    onTap: _isLoading ? () {} : _handleLogin,
-                    enabled: !_isLoading,
-                    height: 54,
-                    glowColor: notely.violet,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text(
-                            'Login',
-                            style: TextStyle(fontFamily: 'Geist', fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
+    return Scaffold(
+      backgroundColor: notely.bg,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: AutofillGroup(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Divider(color: notely.border, thickness: 1),
+                    const Align(alignment: Alignment.centerLeft, child: NotelyWordmark(size: 18)),
+                    const SizedBox(height: 48),
+                    const NotelyHeading(
+                      title: 'Sign in',
+                      subtitle: 'Your notes are encrypted on your device. Only you can read them.',
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'or continue with',
-                        style: TextStyle(
-                          color: notely.text3,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                    const SizedBox(height: 32),
+                    TextField(
+                      controller: _email,
+                      enabled: !_isLoading,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.email],
+                      decoration: const InputDecoration(labelText: 'Email'),
+                    ),
+                    const SizedBox(height: 12),
+                    NotelyPasswordField(
+                      controller: _password,
+                      enabled: !_isLoading,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _handleLogin(),
+                    ),
+                    const SizedBox(height: 24),
+                    NotelyPrimaryButton(label: 'Sign in', loading: _isLoading, onPressed: _handleLogin),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('or', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3)),
+                        ),
+                        const Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: SignInButton(
+                        Buttons.google,
+                        text: 'Continue with Google',
+                        elevation: 0,
+                        onPressed: _isLoading ? () {} : _handleGoogleSignIn,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(color: notely.borderStrong),
                         ),
                       ),
                     ),
-                    Expanded(
-                      child: Divider(color: notely.border, thickness: 1),
+                    const SizedBox(height: 24),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text('New to Notely?', style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text2)),
+                        TextButton(
+                          onPressed: _isLoading
+                              ? null
+                              : () => Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (context) => const RegisterView()),
+                                  ),
+                          child: const Text('Create an account'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: SignInButton(
-                    Buttons.google,
-                    text: 'Continue with Google',
-                    onPressed: _isLoading ? () {} : _handleGoogleSignIn,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Don't have an account? "),
-                    TextButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const RegisterView(),
-                                ),
-                              );
-                            },
-                      child: const Text('Sign up'),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
           ),
         ),

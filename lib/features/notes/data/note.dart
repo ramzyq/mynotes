@@ -42,6 +42,8 @@ abstract final class NoteFields {
   static const sharedAt = 'sharedAt';
   static const versionCounter = 'versionCounter';
   static const lastVersionAt = 'lastVersionAt';
+  static const deletedAt = 'deletedAt';
+  static const reminderAt = 'reminderAt';
 
   /// Fields that must never be stored in plaintext on an encrypted note.
   /// Older app versions wrote these alongside the ciphertext.
@@ -106,6 +108,14 @@ class Note {
   final DateTime? sharedAt;
   final List<String>? tags;
 
+  /// When the note was moved to the trash; null for live notes. Plain so the
+  /// 30-day purge can query it. Written only by the trash operations.
+  final DateTime? deletedAt;
+
+  /// A reminder for this note. Kept inside the encrypted metadata: only the
+  /// owner's devices need it, to schedule a local notification.
+  final DateTime? reminderAt;
+
   /// True when this note is encrypted but could not be decrypted on this
   /// device (missing/wrong key). UI must not treat it as an empty note.
   final bool decryptionFailed;
@@ -152,6 +162,8 @@ class Note {
     this.sharedBy,
     this.sharedAt,
     this.tags,
+    this.deletedAt,
+    this.reminderAt,
     this.decryptionFailed = false,
     this.hasLegacyPlaintext = false,
   });
@@ -179,6 +191,24 @@ class Note {
       selfDestructAt != null && !selfDestructAt!.isAfter(DateTime.now());
 
   bool get hasPinLock => pinWrappedKey != null || pinHash != null;
+
+  /// In the trash: hidden from every list except the Trash view.
+  bool get isTrashed => deletedAt != null;
+
+  /// How long a trashed note is kept before it is deleted for good.
+  static const trashRetention = Duration(days: 30);
+
+  /// A checklist line: "- [ ] item" or "- [x] item".
+  static final checkItem = RegExp(r'^[ \t]*- \[( |x|X)\] ', multiLine: true);
+
+  /// Checklist progress as (done, total), or null when the note has none.
+  ({int done, int total})? get checklist {
+    if (isLocked) return null;
+    final matches = checkItem.allMatches(content ?? '').toList();
+    if (matches.isEmpty) return null;
+    final done = matches.where((m) => m.group(1)!.toLowerCase() == 'x').length;
+    return (done: done, total: matches.length);
+  }
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     return Note.fromData(doc.id, doc.data() ?? const {}, ownerUid: doc.reference.parent.parent?.id);
@@ -235,6 +265,7 @@ class Note {
       encryptedKeys: _stringMap(data[NoteFields.encryptedKeys]),
       sharedBy: data[NoteFields.sharedBy] as String?,
       sharedAt: _toDateTime(data[NoteFields.sharedAt]),
+      deletedAt: _toDateTime(data[NoteFields.deletedAt]),
       hasLegacyPlaintext: legacyPlaintext,
     );
   }
@@ -287,6 +318,8 @@ class Note {
     Object? sharedBy = _ignore,
     Object? sharedAt = _ignore,
     Object? tags = _ignore,
+    Object? deletedAt = _ignore,
+    Object? reminderAt = _ignore,
     bool? decryptionFailed,
     bool? hasLegacyPlaintext,
   }) {
@@ -329,6 +362,8 @@ class Note {
       sharedBy: pick(sharedBy, this.sharedBy),
       sharedAt: pick(sharedAt, this.sharedAt),
       tags: pick(tags, this.tags),
+      deletedAt: pick(deletedAt, this.deletedAt),
+      reminderAt: pick(reminderAt, this.reminderAt),
       decryptionFailed: decryptionFailed ?? this.decryptionFailed,
       hasLegacyPlaintext: hasLegacyPlaintext ?? this.hasLegacyPlaintext,
     );
@@ -360,6 +395,7 @@ class Note {
         NoteFields.placeName: placeName,
         NoteFields.audioAttachments: audioAttachments,
         NoteFields.links: links ?? const <String>[],
+        NoteFields.reminderAt: reminderAt?.toUtc().toIso8601String(),
       };
 
   static String aad(String noteId, String field) => 'notely:v2:$noteId:$field';
@@ -388,6 +424,7 @@ class Note {
       longitude: null,
       placeName: null,
       links: null,
+      reminderAt: null,
       audioAttachments: const [],
       encryptedTitle: fields[NoteFields.encryptedTitle],
       encryptedContent: fields[NoteFields.encryptedContent],
@@ -430,6 +467,7 @@ class Note {
       placeName: meta[NoteFields.placeName] as String?,
       audioAttachments: _stringList(meta[NoteFields.audioAttachments]) ?? const [],
       links: _stringList(meta[NoteFields.links]),
+      reminderAt: DateTime.tryParse(meta[NoteFields.reminderAt] as String? ?? '')?.toLocal(),
       encryptedTitle: null,
       encryptedContent: null,
       encryptedMeta: null,
@@ -471,6 +509,9 @@ class Note {
       return 'Start typing your note here.';
     }
 
-    return combined.replaceAll('\n', ' ').trim();
+    return combined
+        .replaceAll(checkItem, '')
+        .replaceAll('\n', ' ')
+        .trim();
   }
 }

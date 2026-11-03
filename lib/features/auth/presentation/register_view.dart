@@ -2,9 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
-import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
@@ -135,90 +134,74 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    return GlassPage(
-      background: const NotelyBackground(),
-      statusBarStyle: GlassStatusBarStyle.auto,
-      child: Scaffold(
-        appBar: GlassAppBar(
-          centerTitle: false,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(),
-            iconSize: 20,
-            visualDensity: VisualDensity.compact,
-          ),
-          title: Text(
-            'Create account',
-            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
-          ),
-        ),
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 30),
-                GlassTextField(
-                  controller: _firstName,
-                  placeholder: 'First Name',
-                  prefixIcon: const Icon(Icons.person_outline),
-                  keyboardType: TextInputType.name,
-                  enabled: !_isLoading,
-                ),
-                const SizedBox(height: 16),
-                GlassTextField(
-                  controller: _email,
-                  placeholder: 'Email',
-                  prefixIcon: const Icon(Icons.email_outlined),
-                  keyboardType: TextInputType.emailAddress,
-                  enabled: !_isLoading,
-                ),
-                const SizedBox(height: 16),
-                GlassPasswordField(
-                  controller: _password,
-                  placeholder: 'Password',
-                  enabled: !_isLoading,
-                ),
-                const SizedBox(height: 16),
-                GlassPasswordField(
-                  controller: _confirmPassword,
-                  placeholder: 'Confirm Password',
-                  enabled: !_isLoading,
-                ),
-                const SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity,
-                  child: GlassButton.custom(
-                    onTap: _isLoading ? () {} : _handleRegister,
-                    enabled: !_isLoading,
-                    height: 54,
-                    glowColor: notely.violet,
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text(
-                            'Sign Up',
-                            style: TextStyle(fontFamily: 'Geist', fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+    return NotelyPage(
+      body: SafeArea(
+        top: false,
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: AutofillGroup(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Already have an account? '),
-                    TextButton(
-                      onPressed:
-                          _isLoading ? null : () => Navigator.of(context).pop(),
-                      child: const Text('Log in'),
+                    const NotelyHeading(
+                      title: 'Create your notebook',
+                      subtitle: 'Your password also protects your encryption key, so choose one you will remember.',
+                    ),
+                    const SizedBox(height: 32),
+                    TextField(
+                      controller: _firstName,
+                      enabled: !_isLoading,
+                      keyboardType: TextInputType.name,
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.givenName],
+                      decoration: const InputDecoration(labelText: 'First name'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _email,
+                      enabled: !_isLoading,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.email],
+                      decoration: const InputDecoration(labelText: 'Email'),
+                    ),
+                    const SizedBox(height: 12),
+                    NotelyPasswordField(
+                      controller: _password,
+                      enabled: !_isLoading,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.newPassword],
+                    ),
+                    const SizedBox(height: 12),
+                    NotelyPasswordField(
+                      controller: _confirmPassword,
+                      label: 'Confirm password',
+                      enabled: !_isLoading,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.newPassword],
+                      onSubmitted: (_) => _handleRegister(),
+                    ),
+                    const SizedBox(height: 24),
+                    NotelyPrimaryButton(label: 'Create account', loading: _isLoading, onPressed: _handleRegister),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text('Already have an account?', style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text2)),
+                        TextButton(
+                          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                          child: const Text('Sign in'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

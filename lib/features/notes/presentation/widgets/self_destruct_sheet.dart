@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/format/dates.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
 
 class SelfDestructSheet extends StatefulWidget {
@@ -39,32 +41,25 @@ class _SelfDestructSheetState extends State<SelfDestructSheet> {
         children: [
           Row(
             children: [
-              Icon(Icons.timer_outlined, color: notely.text2),
-              const SizedBox(width: 12),
-              Text(
-                'Self-destruct settings',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const Spacer(),
+              Expanded(child: Text('Self-destruct', style: Theme.of(context).textTheme.titleLarge)),
               IconButton(
+                tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close),
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          Text(
+            'The note, its versions and comments are deleted for good. Copies a collaborator already opened stay on their device.',
+            style: TextStyle(fontFamily: 'Geist', fontSize: 13, height: 1.45, color: notely.text2),
+          ),
+          const SizedBox(height: 16),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: Icon(Icons.schedule, color: notely.text2),
-            title: const Text('Timed destruction'),
-            subtitle: Text(
-              _date != null
-                  ? '${_date!.month}/${_date!.day}/${_date!.year} ${_date!.hour.toString().padLeft(2, '0')}:${_date!.minute.toString().padLeft(2, '0')}'
-                  : 'Not set',
-            ),
-            trailing: FilledButton.tonal(
+            title: const Text('On a date'),
+            subtitle: Text(_date != null ? formatDateTime(_date!) : 'Not set'),
+            trailing: OutlinedButton(
               onPressed: () async {
                 final date = await showDatePicker(
                   context: context,
@@ -90,15 +85,15 @@ class _SelfDestructSheetState extends State<SelfDestructSheet> {
                   );
                 });
               },
-              child: const Text('Pick'),
+              child: Text(_date == null ? 'Pick' : 'Change'),
             ),
           ),
-          const Divider(height: 32),
+          const Divider(height: 24),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             secondary: Icon(Icons.visibility_off_outlined, color: notely.text2),
-            title: const Text('Delete after first read'),
-            subtitle: const Text('Note disappears once opened'),
+            title: const Text('After reading once'),
+            subtitle: const Text('Deleted when you close it'),
             value: _onRead,
             onChanged: (value) {
               setState(() => _onRead = value);
@@ -106,36 +101,26 @@ class _SelfDestructSheetState extends State<SelfDestructSheet> {
           ),
           if (_hasSettings) ...[
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pop(<String, dynamic>{
-                    'date': null,
-                    'onRead': false,
-                  });
-                },
-                icon: const Icon(Icons.remove_circle_outline),
-                label: const Text('Remove self-destruct'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.redAccent,
-                  side: const BorderSide(color: Colors.redAccent),
-                ),
-              ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(<String, dynamic>{
+                  'date': null,
+                  'onRead': false,
+                });
+              },
+              style: TextButton.styleFrom(foregroundColor: notely.danger),
+              child: const Text('Turn off self-destruct'),
             ),
           ],
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop(<String, dynamic>{
-                  'date': _date,
-                  'onRead': _onRead,
-                });
-              },
-              child: const Text('Apply'),
-            ),
+          NotelyPrimaryButton(
+            label: 'Apply',
+            onPressed: () {
+              Navigator.of(context).pop(<String, dynamic>{
+                'date': _date,
+                'onRead': _onRead,
+              });
+            },
           ),
         ],
       ),

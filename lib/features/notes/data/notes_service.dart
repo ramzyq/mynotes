@@ -222,7 +222,8 @@ class NotesService {
       ))
           .where((note) => !note.isExpired)
           .toList();
-      _ownNotes = notes;
+      // Links, backlinks and [[ suggestions only see live notes.
+      _ownNotes = notes.where((n) => !n.isTrashed).toList();
       // Already ordered by updatedAt (the query); views sort for display.
       return notes;
     });
@@ -237,7 +238,7 @@ class NotesService {
         .asyncMap((snapshot) async => (await Future.wait(
               snapshot.docs.map((doc) => _decryptCached(doc, (n) => _decryptOwn(uid, n))),
             ))
-                .where((note) => !note.isExpired)
+                .where((note) => !note.isExpired && !note.isTrashed)
                 .toList());
   }
 
@@ -258,7 +259,7 @@ class NotesService {
           }
         }),
       ));
-      decrypted.removeWhere((note) => note.isExpired);
+      decrypted.removeWhere((note) => note.isExpired || note.isTrashed);
       return decrypted;
     });
   }
@@ -355,6 +356,8 @@ class NotesService {
     List<String> tags = const [],
     DateTime? selfDestructAt,
     bool selfDestructOnRead = false,
+    DateTime? reminderAt,
+    DateTime? createdAt,
   }) async {
     final now = DateTime.now();
     final document = _notesCollection(uid).doc();
@@ -375,7 +378,8 @@ class NotesService {
       tags: tags,
       selfDestructAt: selfDestructAt,
       selfDestructOnRead: selfDestructOnRead,
-      createdAt: now,
+      reminderAt: reminderAt,
+      createdAt: createdAt ?? now,
       updatedAt: now,
       links: resolveLinks(content, selfId: document.id),
       encryptionVersion: Note.currentEncryptionVersion,
@@ -570,6 +574,38 @@ class NotesService {
 
   Future<void> deleteMany({required String uid, required List<Note> notes}) async {
     await Future.wait(notes.map((note) => deleteNote(uid: uid, noteId: note.id)));
+  }
+
+  // =================================================================== trash
+  // Deleting a note moves it to the trash for [Note.trashRetention]. Only
+  // self-destruct, read-once, "Delete forever" and the purge delete for good.
+
+  Future<void> moveToTrash({required String uid, required List<Note> notes}) async {
+    final batch = firestore.batch();
+    final now = Timestamp.fromDate(DateTime.now());
+    for (final note in notes) {
+      batch.update(_noteRef(uid, note.id), {NoteFields.deletedAt: now});
+    }
+    await batch.commit();
+  }
+
+  Future<void> restoreFromTrash({required String uid, required List<Note> notes}) async {
+    final batch = firestore.batch();
+    for (final note in notes) {
+      batch.update(_noteRef(uid, note.id), {NoteFields.deletedAt: FieldValue.delete()});
+    }
+    await batch.commit();
+  }
+
+  /// Delete notes that have been in the trash longer than the retention
+  /// period, up to 50 per call. Runs when the app opens.
+  Future<void> purgeTrash(String uid, {DateTime? now}) async {
+    final cutoff = (now ?? DateTime.now()).subtract(Note.trashRetention);
+    final snapshot = await _notesCollection(uid)
+        .where(NoteFields.deletedAt, isLessThanOrEqualTo: Timestamp.fromDate(cutoff))
+        .limit(50)
+        .get();
+    await Future.wait(snapshot.docs.map((doc) => deleteNote(uid: uid, noteId: doc.id)));
   }
 
   // ======================================================= simple field edits

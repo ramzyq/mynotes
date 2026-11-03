@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
 import 'package:mynotes/features/collaboration/models/share_link.dart';
 import 'package:mynotes/features/collaboration/services/share_service.dart';
@@ -180,185 +181,142 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
+    final caption = TextStyle(fontFamily: 'Geist', fontSize: 13, height: 1.45, color: notely.text2);
+    final section = TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w500, color: notely.text);
     return NotelySheet(
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(Icons.group_add_outlined, color: notely.text2),
-              const SizedBox(width: 12),
-              Text(
-                'Share note',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const Spacer(),
+              Expanded(child: Text('Share note', style: Theme.of(context).textTheme.titleLarge)),
               IconButton(
+                tooltip: 'Close',
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close),
               ),
             ],
           ),
-          const SizedBox(height: 8),
           Text(
-            'Shared',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: const Color(0xFF86E7C8),
-                  fontWeight: FontWeight.w700,
-                ),
+            'People you add get their own key to this note. They can read and comment; only you can edit.',
+            style: caption,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: widget.emailController,
                   enabled: !_isAdding,
-                  decoration: const InputDecoration(
-                    hintText: 'Add people by email',
-                    prefixIcon: Icon(Icons.alternate_email),
-                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _isAdding ? null : _submit(),
+                  decoration: const InputDecoration(hintText: 'Email address'),
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(
-                onPressed: _isAdding ? null : _submit,
-                icon: _isAdding
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send_rounded),
+              SizedBox(
+                height: 48,
+                child: FilledButton(
+                  onPressed: _isAdding ? null : _submit,
+                  style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16)),
+                  child: _isAdding
+                      ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Add'),
+                ),
               ),
             ],
           ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-              ),
+              child: Text(_error!, style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.danger)),
             ),
           const SizedBox(height: 16),
+          Text('People with access', style: section),
+          const SizedBox(height: 8),
           if (_collaborators.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Text(
-                  'No collaborators yet.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: notely.text3,
-                      ),
-                ),
-              ),
-            )
+            Text('Only you', style: caption)
           else
-            ..._collaborators.map(
-              (uid) => Container(
+            for (final uid in _collaborators)
+              Container(
+                height: 48,
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.only(left: 12),
                 decoration: BoxDecoration(
-                  color: notely.surface2,
-                  borderRadius: BorderRadius.circular(12),
+                  color: notely.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: notely.border),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.person_outline, color: notely.text3, size: 20),
-                    const SizedBox(width: 12),
+                    Icon(Icons.person_outline, color: notely.text3, size: 18),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         _emails[uid] ?? uid,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: notely.text2,
-                            ),
+                        style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    TextButton.icon(
+                    TextButton(
                       onPressed: _isAdding ? null : () => _remove(uid),
-                      icon: const Icon(Icons.person_remove_outlined, size: 16),
-                      label: const Text('Remove'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                      ),
+                      style: TextButton.styleFrom(foregroundColor: notely.text2),
+                      child: const Text('Remove'),
                     ),
                   ],
                 ),
               ),
-            ),
-          const SizedBox(height: 20),
-          const Divider(height: 1),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Icon(Icons.link, color: notely.text2, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Share via link',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+          const Divider(),
+          const SizedBox(height: 16),
+          Text('Share with a link', style: section),
+          const SizedBox(height: 4),
           Text(
-            'Anyone with the link can request access. You approve before they see the note.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: notely.text3,
-                ),
+            _linkMode == 'approval'
+                ? 'Anyone with the link can ask for access. You approve each request.'
+                : 'Anyone with the link who signs in gets access right away.',
+            style: caption,
           ),
           const SizedBox(height: 12),
           if (_link == null) ...[
             SegmentedButton<String>(
+              showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: notely.violetSoft2,
+                selectedForegroundColor: notely.violetInk,
+                foregroundColor: notely.text2,
+                side: BorderSide(color: notely.borderStrong),
+                textStyle: const TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w500),
+              ),
               segments: const [
-                ButtonSegment(
-                  value: 'approval',
-                  label: Text('Require approval'),
-                ),
-                ButtonSegment(value: 'open', label: Text('Auto-approve')),
+                ButtonSegment(value: 'approval', label: Text('Ask me first')),
+                ButtonSegment(value: 'open', label: Text('Anyone with link')),
               ],
               selected: {_linkMode},
-              onSelectionChanged: (selection) {
-                setState(() => _linkMode = selection.first);
-              },
+              onSelectionChanged: (selection) => setState(() => _linkMode = selection.first),
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _isGenerating ? null : _generateLink,
-                icon: _isGenerating
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.add_link_rounded),
-                label: const Text('Create share link'),
-              ),
+            NotelySecondaryButton(
+              label: _isGenerating ? 'Creating link…' : 'Create link',
+              leading: Icon(Icons.add_link, size: 18, color: notely.text2),
+              onPressed: _isGenerating ? null : _generateLink,
             ),
           ] else ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.only(left: 12),
               decoration: BoxDecoration(
-                color: notely.surface2,
-                borderRadius: BorderRadius.circular(12),
+                color: notely.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: notely.border),
               ),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
                       _link!.url,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: notely.text2,
-                            fontFamily: 'JetBrains Mono',
-                          ),
+                      style: TextStyle(fontFamily: 'JetBrains Mono', fontSize: 12, color: notely.text2),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -375,12 +333,14 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: _isRevoking ? null : _revokeLink,
-              icon: const Icon(Icons.link_off_rounded, size: 16),
-              label: const Text('Revoke link'),
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _isRevoking ? null : _revokeLink,
+                style: TextButton.styleFrom(foregroundColor: notely.danger),
+                child: const Text('Turn off link'),
+              ),
             ),
           ],
         ],
@@ -388,7 +348,6 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
     );
   }
 }
-
 String _friendlyError(Object error) {
   if (error is ShareException) return error.message;
   if (error is NoteException) return error.message;

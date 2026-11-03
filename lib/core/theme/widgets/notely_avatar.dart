@@ -18,17 +18,10 @@ class NotelyAvatar extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFC4A7FF), Color(0xFF8B5CF6), Color(0xFF5B21B6)],
-          stops: [0, 0.55, 1],
-        ),
-        boxShadow: ring
-            ? [BoxShadow(color: notely.surface, spreadRadius: 2), BoxShadow(color: notely.violet, spreadRadius: 3.5)]
-            : const [BoxShadow(color: Color(0x403C1E78), blurRadius: 1, offset: Offset(0, 1))],
+        color: notely.surface2,
+        border: Border.all(color: ring ? notely.borderStrong : notely.border),
       ),
-      child: Text(char, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: size * 0.42, letterSpacing: -0.2)),
+      child: Text(char, style: TextStyle(fontFamily: 'Geist', color: notely.text2, fontWeight: FontWeight.w500, fontSize: size * 0.42)),
     );
   }
 }

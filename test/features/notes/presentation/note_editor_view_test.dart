@@ -32,9 +32,9 @@ void main() {
     await tester.pumpWidget(_wrap(notesService));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Edit tags'));
+    await tester.ensureVisible(find.text('Add tags'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit tags'));
+    await tester.tap(find.text('Add tags'));
     await tester.pumpAndSettle();
 
     final tagField = find.descendant(

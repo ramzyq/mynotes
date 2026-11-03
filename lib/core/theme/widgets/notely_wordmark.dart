@@ -9,35 +9,26 @@ class NotelyWordmark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
+    // Flat mark: the N stroke in ink, no tile, no gradient.
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: size + 4,
-          height: size + 4,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFFC4A7FF), Color(0xFF7C3AED)],
-            ),
-          ),
-          child: CustomPaint(size: Size(size, size), painter: _NotelyNPainter()),
-        ),
-        const SizedBox(width: 7),
-        Text('Notely', style: TextStyle(fontFamily: 'Geist', fontSize: size, fontWeight: FontWeight.w600, color: notely.text, letterSpacing: -0.4)),
+        CustomPaint(size: Size(size + 4, size + 4), painter: _NotelyNPainter(color: notely.violet)),
+        const SizedBox(width: 8),
+        Text('Notely', style: TextStyle(fontFamily: 'Geist', fontSize: size, fontWeight: FontWeight.w600, color: notely.text)),
       ],
     );
   }
 }
 
 class _NotelyNPainter extends CustomPainter {
+  final Color color;
+  _NotelyNPainter({required this.color});
+
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white
+      ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
@@ -51,5 +42,5 @@ class _NotelyNPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(_NotelyNPainter oldDelegate) => oldDelegate.color != color;
 }

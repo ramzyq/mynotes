@@ -6,6 +6,7 @@ import 'package:mynotes/core/encryption/key_backup.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 
 /// Ensures the user's master key is available on this device before [child]
@@ -113,11 +114,8 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
           title: "Couldn't unlock your notes",
           message: 'Check your connection and try again.',
           children: [
-            FilledButton(onPressed: _prepare, child: const Text('Try again')),
-            TextButton(
-              onPressed: () => ref.read(authServiceProvider).logOut(),
-              child: const Text('Sign out'),
-            ),
+            NotelyPrimaryButton(label: 'Try again', onPressed: _prepare),
+            NotelySecondaryButton(label: 'Sign out', onPressed: () => ref.read(authServiceProvider).logOut()),
           ],
         ),
       _Phase.showCode => _Panel(
@@ -130,7 +128,7 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: notely.surface2,
+                color: notely.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: notely.border),
               ),
@@ -139,16 +137,20 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'JetBrains Mono',
-                  fontSize: 17,
-                  letterSpacing: 1.2,
+                  fontSize: 16,
+                  height: 1.5,
+                  letterSpacing: 1,
                   color: notely.text,
                 ),
               ),
             ),
-            TextButton.icon(
-              icon: const Icon(Icons.copy_rounded, size: 18),
-              label: const Text('Copy'),
-              onPressed: () => Clipboard.setData(ClipboardData(text: _recoveryCode ?? '')),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('Copy code'),
+                onPressed: () => Clipboard.setData(ClipboardData(text: _recoveryCode ?? '')),
+              ),
             ),
             CheckboxListTile(
               value: _codeSaved,
@@ -157,9 +159,9 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
             ),
-            FilledButton(
+            NotelyPrimaryButton(
+              label: 'Continue',
               onPressed: _codeSaved ? () => setState(() => _phase = _Phase.ready) : null,
-              child: const Text('Continue'),
             ),
           ],
         ),
@@ -176,29 +178,20 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
               textCapitalization: TextCapitalization.characters,
               style: const TextStyle(fontFamily: 'JetBrains Mono'),
               decoration: InputDecoration(
+                labelText: 'Recovery code',
                 hintText: 'XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XX',
                 errorText: _codeError,
-                border: const OutlineInputBorder(),
               ),
               onSubmitted: (_) => _busy ? null : _submitCode(),
             ),
-            const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _busy ? null : _submitCode,
-              child: _busy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Unlock'),
-            ),
-            TextButton(
-              onPressed: () => ref.read(authServiceProvider).logOut(),
-              child: const Text('Sign out'),
-            ),
+            NotelyPrimaryButton(label: 'Unlock', loading: _busy, onPressed: _submitCode),
+            NotelySecondaryButton(label: 'Sign out', onPressed: () => ref.read(authServiceProvider).logOut()),
           ],
         ),
       _Phase.ready => const SizedBox.shrink(),
     };
 
-    return Scaffold(body: SafeArea(child: body));
+    return Scaffold(backgroundColor: notely.bg, body: SafeArea(child: body));
   }
 }
 
@@ -220,27 +213,32 @@ class _Panel extends StatelessWidget {
     final notely = NotelyTheme.of(context);
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(icon, size: 52, color: notely.violet),
-              const SizedBox(height: 18),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Instrument Serif', fontSize: 30, color: notely.text),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Geist', fontSize: 14.5, height: 1.5, color: notely.text2),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: notely.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: notely.border),
+                  ),
+                  child: Icon(icon, size: 22, color: notely.violet),
+                ),
               ),
               const SizedBox(height: 24),
-              ...children,
+              NotelyHeading(title: title, subtitle: message),
+              const SizedBox(height: 32),
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                children[i],
+              ],
             ],
           ),
         ),

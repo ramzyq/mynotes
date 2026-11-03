@@ -5,13 +5,10 @@ import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:app_links/app_links.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/analytics/analytics_consent_store.dart';
 import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
-import 'package:mynotes/core/theme/widgets/notely_background.dart';
-import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/features/account/presentation/account_sheet.dart';
 import 'package:mynotes/features/lock/presentation/lock_screen.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -26,6 +23,10 @@ import 'package:mynotes/features/notes/presentation/widgets/pinned_note_card.dar
 import 'package:mynotes/features/collaboration/models/join_request.dart';
 import 'package:mynotes/features/collaboration/services/share_service.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
+import 'package:mynotes/features/study/presentation/review_view.dart';
+import 'package:mynotes/features/study/providers/study_providers.dart';
+import 'package:mynotes/features/capture/services/quick_capture_service.dart';
+import 'package:mynotes/features/reminders/reminder_providers.dart';
 
 class NotesHomeView extends ConsumerStatefulWidget {
   final AuthUser authUser;
@@ -44,6 +45,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   final Set<String> _selected = {};
 
   StreamSubscription<Uri>? _uriSub;
+  final QuickCaptureService _quickCapture = QuickCaptureService();
   StreamSubscription<List<JoinRequest>>? _requestSub;
   Timer? _expiryTimer;
   DateTime? _scheduledExpiry;
@@ -63,6 +65,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
         AppErrorHandler().handle(error, stack);
       }
       _deleteExpired();
+      _purgeTrash();
+      unawaited(_startReminders());
+      unawaited(_quickCapture.start((text) => _openEditor(initialContent: text)));
       unawaited(_maybeAskAnalyticsConsent());
       _watchOwnerRequests();
       _listenForLinks();
@@ -74,6 +79,31 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
         .read(notesServiceProvider)
         .deleteExpiredNotes(widget.authUser.uid)
         .catchError(AppErrorHandler().handle);
+  }
+
+  void _purgeTrash() {
+    ref
+        .read(notesServiceProvider)
+        .purgeTrash(widget.authUser.uid)
+        .catchError(AppErrorHandler().handle);
+  }
+
+  /// Schedule this device's reminder notifications, and open the note when
+  /// one is tapped (or launched the app).
+  Future<void> _startReminders() async {
+    final reminders = ref.read(reminderServiceProvider);
+    await reminders.init(onOpen: _openNoteById);
+    final own = ref.read(notesProvider(widget.authUser.uid)).valueOrNull;
+    if (own != null) await reminders.sync(own);
+    final launchId = await reminders.launchNoteId();
+    if (launchId != null) await _openNoteById(launchId);
+  }
+
+  Future<void> _openNoteById(String noteId) async {
+    final provider = notesProvider(widget.authUser.uid);
+    final List<Note> notes = ref.read(provider).valueOrNull ?? await ref.read(provider.future);
+    final note = notes.where((n) => n.id == noteId && !n.isTrashed).firstOrNull;
+    if (note != null && mounted) await _openEditor(note: note);
   }
 
   /// Arm a single timer for the next self-destruct among the visible notes.
@@ -155,6 +185,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     _uriSub?.cancel();
     _requestSub?.cancel();
     _expiryTimer?.cancel();
+    _quickCapture.stop();
     _searchController.dispose();
     super.dispose();
   }
@@ -187,7 +218,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     };
   }
 
-  Future<void> _openEditor({Note? note}) async {
+  Future<void> _openEditor({Note? note, String? initialContent}) async {
     if (note != null && note.decryptionFailed) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text("This note can't be decrypted on this device. If you reset "
@@ -204,7 +235,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
         ),
       ));
     } else {
-      await Navigator.of(context).push(MaterialPageRoute(builder: (context) => NoteEditorView(authUser: widget.authUser, note: note)));
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (context) => NoteEditorView(authUser: widget.authUser, note: note, initialContent: initialContent),
+      ));
     }
   }
 
@@ -250,21 +283,21 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   }
 
   Future<void> _bulkDelete() async {
-    final notes = _selectedNotes();
-    final confirmed = await showNotelyDialog<bool>(
-      context: context,
-      title: 'Delete ${notes.length} note${notes.length == 1 ? '' : 's'}?',
-      message: 'This removes them permanently.',
-      actions: [
-        NotelyDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(false)),
-        NotelyDialogAction(label: 'Delete', isDestructive: true, onPressed: () => Navigator.of(context).pop(true)),
-      ],
-    );
-    if (confirmed != true) return;
+    final notes = _selectedNotes().where((n) => n.sharedBy == null || n.sharedBy == widget.authUser.uid).toList();
+    final service = ref.read(notesServiceProvider);
+    final uid = widget.authUser.uid;
+    final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(notesServiceProvider).deleteMany(uid: widget.authUser.uid, notes: notes);
+      await service.moveToTrash(uid: uid, notes: notes);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Moved ${notes.length} ${notes.length == 1 ? 'note' : 'notes'} to trash'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => service.restoreFromTrash(uid: uid, notes: notes).catchError(AppErrorHandler().handle),
+        ),
+      ));
     } catch (error, stack) {
-      _reportFailure(error, stack, 'Some notes could not be deleted.');
+      _reportFailure(error, stack, "Couldn't move the selected notes to the trash.");
     }
     if (mounted) setState(() { _selected.clear(); _selectMode = false; });
   }
@@ -288,7 +321,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   List<Note> _mergedNotes() {
     final own = ref.read(notesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
     final shared = ref.read(sharedNotesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
-    return [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)];
+    return [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)].where((n) => !n.isTrashed).toList();
   }
 
   // Filtering and sorting run only when the inputs change, not on every
@@ -360,6 +393,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
           .read(biometricUnlockServiceProvider)
           .prune(widget.authUser.uid, notes)
           .catchError(AppErrorHandler().handle);
+      ref.read(reminderServiceProvider).sync(notes);
     });
     ref.listen<JoinResult?>(joinResultProvider, (previous, next) {
       if (next == null) return;
@@ -383,17 +417,17 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     final own = ref.watch(notesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
     final shared = ref.watch(sharedNotesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
     final notes = [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)]
-        .where((n) => !n.isExpired)
+        .where((n) => !n.isExpired && !n.isTrashed)
         .toList();
     _scheduleExpiry(notes);
     final visible = _visible(own, shared, notes);
     final pinned = visible.where((n) => n.isPinned).toList();
     final rest = visible.where((n) => !n.isPinned).toList();
 
-    return GlassPage(
-      background: const NotelyBackground(),
-      statusBarStyle: GlassStatusBarStyle.auto,
-      child: Scaffold(
+    final due = ref.watch(dueCountProvider(widget.authUser.uid)).valueOrNull ?? 0;
+
+    return Scaffold(
+        backgroundColor: NotelyTheme.of(context).bg,
         body: SafeArea(
           bottom: false,
           child: Stack(
@@ -413,13 +447,13 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
                   sliver: SliverToBoxAdapter(
                     child: NoteSearchField(controller: _searchController, onChanged: (v) => setState(() => _query = v.trim())),
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                   sliver: SliverToBoxAdapter(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -430,14 +464,26 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                     ),
                   ),
                 ),
+                if (due > 0 && !_selectMode)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: _StudyRow(
+                        due: due,
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => ReviewView(authUser: widget.authUser),
+                        )),
+                      ),
+                    ),
+                  ),
                 if (_activeTag != null)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     sliver: SliverToBoxAdapter(child: _FocusBar(tag: _activeTag!, onClear: () => setState(() => _activeTag = null))),
                   ),
                 if (_selectMode)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     sliver: SliverToBoxAdapter(child: _SelectionBar(count: _selected.length, onPin: _bulkPin, onArchive: _bulkArchive, onDelete: _bulkDelete)),
                   ),
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -454,10 +500,10 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                     ),
                   if (pinned.isNotEmpty)
                     SliverPadding(
-                      padding: const EdgeInsets.only(top: 14),
+                      padding: const EdgeInsets.only(top: 12),
                       sliver: SliverToBoxAdapter(
                         child: SizedBox(
-                          height: 210,
+                          height: 208,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -488,11 +534,11 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                     ),
                   if (rest.isNotEmpty)
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                      sliver: SliverToBoxAdapter(child: _SectionHeader(label: 'All notes', count: rest.length, pinned: false)),
+                      padding: const EdgeInsets.fromLTRB(20, 32, 20, 12),
+                      sliver: SliverToBoxAdapter(child: _SectionHeader(label: pinned.isEmpty ? 'Notes' : 'Other notes', count: rest.length, pinned: false)),
                     ),
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 112),
                     sliver: SliverList.separated(
                       itemCount: rest.length,
                       separatorBuilder: (context, index) => const SizedBox(height: 12),
@@ -506,7 +552,6 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
           ],
         ),
         ),
-      ),
     );
   }
 
@@ -546,14 +591,57 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
     return Row(children: [
-      if (pinned) Icon(Icons.push_pin, size: 14, color: notely.text2),
-      if (pinned) const SizedBox(width: 7),
-      Text(label.toUpperCase(), style: TextStyle(fontFamily: 'Geist', fontSize: 11.5, fontWeight: FontWeight.w600, letterSpacing: 0.6, color: notely.text3)),
-      const SizedBox(width: 6),
-      Text('$count', style: TextStyle(fontSize: 11.5, color: notely.text4)),
-      const SizedBox(width: 4),
-      Expanded(child: Container(height: 1, color: notely.border)),
+      Text(label, style: TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w500, color: notely.text2)),
+      const SizedBox(width: 8),
+      Text(
+        '$count',
+        style: TextStyle(
+          fontFamily: 'JetBrains Mono',
+          fontSize: 12,
+          color: notely.text3,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
     ]);
+  }
+}
+
+/// Flashcards due today. Shown only when there is something to review.
+class _StudyRow extends StatelessWidget {
+  final int due;
+  final VoidCallback onTap;
+  const _StudyRow({required this.due, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    return Material(
+      color: notely.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: notely.border)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          height: 44,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(children: [
+              Icon(Icons.style_outlined, size: 18, color: notely.text2),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '$due ${due == 1 ? 'card' : 'cards'} to review today',
+                  style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text),
+                ),
+              ),
+              Text('Study', style: TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w500, color: notely.violet)),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, size: 18, color: notely.violet),
+            ]),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -566,13 +654,14 @@ class _FocusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(color: notely.violetSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: notely.violetSoft2)),
+      height: 40,
+      padding: const EdgeInsets.only(left: 12),
+      decoration: BoxDecoration(color: notely.violetSoft, borderRadius: BorderRadius.circular(10), border: Border.all(color: notely.violetSoft2)),
       child: Row(children: [
         Icon(Icons.sell_outlined, size: 16, color: notely.violetInk),
         const SizedBox(width: 8),
-        Expanded(child: Text('Focus: $tag', style: TextStyle(fontWeight: FontWeight.w700, color: notely.violetInk))),
-        InkWell(onTap: onClear, customBorder: const CircleBorder(), child: Icon(Icons.close, size: 16, color: notely.violetInk)),
+        Expanded(child: Text('Showing $tag', style: TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w500, color: notely.violetInk))),
+        IconButton(tooltip: 'Clear filter', onPressed: onClear, icon: Icon(Icons.close, size: 16, color: notely.violetInk)),
       ]),
     );
   }
@@ -589,10 +678,11 @@ class _SelectionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(color: notely.violetSoft, borderRadius: BorderRadius.circular(12), border: Border.all(color: notely.violetSoft2)),
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(color: notely.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: notely.borderStrong)),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('$count selected', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: notely.violetInk)),
+        Text('$count selected', style: TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w500, color: notely.text)),
         Row(children: [
           _SmallAction(icon: Icons.push_pin_outlined, label: 'Pin', onTap: onPin),
           _SmallAction(icon: Icons.archive_outlined, label: 'Archive', onTap: onArchive),
@@ -614,11 +704,11 @@ class _SmallAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
     return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(8), child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Row(children: [
-        Icon(icon, size: 15, color: danger ? const Color(0xFFB91C1C) : notely.violetInk),
+        Icon(icon, size: 16, color: danger ? notely.danger : notely.text2),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: danger ? const Color(0xFFB91C1C) : notely.violetInk)),
+        Text(label, style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w500, color: danger ? notely.danger : notely.text2)),
       ]),
     ));
   }
