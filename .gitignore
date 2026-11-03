@@ -49,3 +49,5 @@ tests/node_modules/
 
 # Worktrees
 .worktrees/
+# Claude Code personal settings
+.claude/settings.local.json
