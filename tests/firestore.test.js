@@ -35,14 +35,14 @@ describe('Firestore rules', () => {
 
   it('allows authenticated user to read own note', async () => {
     const db = testEnv.authenticatedContext('user1').firestore();
-    await db.collection('users/user1/notes').doc('note1').set({ title: 'test' });
+    await db.collection('users/user1/notes').doc('note1').set({ encryptedTitle: 'x', encryptionVersion: 2 });
     await assertSucceeds(db.collection('users/user1/notes').doc('note1').get());
   });
 
   it('denies user A reading user B note', async () => {
     const dbA = testEnv.authenticatedContext('userA').firestore();
     const dbB = testEnv.authenticatedContext('userB').firestore();
-    await dbB.collection('users/userB/notes').doc('secret').set({ title: 'secret' });
+    await dbB.collection('users/userB/notes').doc('secret').set({ encryptedTitle: 'x', encryptionVersion: 2 });
     await assertFails(dbA.collection('users/userB/notes').doc('secret').get());
   });
 
@@ -50,10 +50,55 @@ describe('Firestore rules', () => {
     const dbOwner = testEnv.authenticatedContext('owner').firestore();
     const dbCollab = testEnv.authenticatedContext('collab').firestore();
     await dbOwner.collection('users/owner/notes').doc('shared').set({
-      title: 'shared',
+      encryptedTitle: 'x',
       collaborators: ['collab'],
     });
     await assertSucceeds(dbCollab.collection('users/owner/notes').doc('shared').get());
+  });
+
+  // ---------- note validation ----------
+
+  const validNote = () => ({
+    colorIndex: 0, isPinned: false, isArchived: false, isStudyMaterial: false,
+    selfDestructAt: null, selfDestructOnRead: false,
+    createdAt: new Date(), updatedAt: new Date(),
+    encryptedTitle: 'ct', encryptedContent: 'ct', encryptedMeta: 'ct', encryptionVersion: 2,
+    wrappedKey: 'wk', keyGen: 1, versionCounter: 0,
+  });
+
+  it('accepts the note shape the app writes', async () => {
+    await assertSucceeds(as('owner').doc('users/owner/notes/n1').set(validNote()));
+    await assertSucceeds(as('owner').doc('users/owner/notes/n1').update({
+      isPinned: true, collaborators: ['c1'], 'encryptedKeys.c1': 'wk2', sharedBy: 'owner', sharedAt: new Date(),
+    }));
+  });
+
+  it('refuses plaintext, unknown fields and wrong types on notes', async () => {
+    const db = as('owner');
+    await assertFails(db.doc('users/owner/notes/a').set({ ...validNote(), title: 'Plaintext!' }));
+    await assertFails(db.doc('users/owner/notes/b').set({ ...validNote(), content: 'Plaintext!' }));
+    await assertFails(db.doc('users/owner/notes/c').set({ ...validNote(), pinHash: 'h' }));
+    await assertFails(db.doc('users/owner/notes/d').set({ ...validNote(), isAdmin: true }));
+    await assertFails(db.doc('users/owner/notes/e').set({ ...validNote(), isPinned: 'yes' }));
+    await assertFails(db.doc('users/owner/notes/f').set({ ...validNote(), sharedBy: 'someone-else' }));
+    await assertFails(db.doc('users/owner/notes/g').set({
+      ...validNote(), collaborators: Array.from({ length: 51 }, (_, i) => `u${i}`),
+    }));
+  });
+
+  it('validates profile, comment and report shapes', async () => {
+    await assertSucceeds(as('u1').doc('users/u1').set({ email: 'u1@example.com', displayName: 'U', publicKey: 'pk' }));
+    await assertFails(as('u1').doc('users/u1').set({ email: 'u1@example.com', isAdmin: true }));
+
+    await seed('users/owner/notes/n1', { collaborators: ['collab'] });
+    const comment = { authorUid: 'collab', authorName: 'C', encryptedContent: 'ct', keyGen: 1, createdAt: new Date() };
+    await assertSucceeds(as('collab').doc('users/owner/notes/n1/comments/c1').set(comment));
+    await assertFails(as('collab').doc('users/owner/notes/n1/comments/c2').set({ ...comment, content: 'plain' }));
+
+    const report = { reporterUid: 'collab', targetOwnerUid: 'owner', noteId: 'n1', commentId: 'c1',
+      commentAuthorUid: 'collab', reason: 'spam', status: 'open', createdAt: new Date() };
+    await assertSucceeds(as('collab').collection('reports').add(report));
+    await assertFails(as('collab').collection('reports').add({ ...report, extra: 1 }));
   });
 
   it('cuts collaborators off from an expired note but not its owner', async () => {
@@ -83,10 +128,10 @@ describe('Firestore rules', () => {
     const dbOwner = testEnv.authenticatedContext('owner').firestore();
     const dbCollab = testEnv.authenticatedContext('collab').firestore();
     await dbOwner.collection('users/owner/notes').doc('shared').set({
-      title: 'shared',
+      encryptedTitle: 'x',
       collaborators: ['collab'],
     });
-    await assertFails(dbCollab.collection('users/owner/notes').doc('shared').set({ title: 'hacked' }));
+    await assertFails(dbCollab.collection('users/owner/notes').doc('shared').set({ encryptedTitle: 'hacked' }));
   });
 
   it('allows authenticated user to report a comment', async () => {

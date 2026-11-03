@@ -88,7 +88,7 @@ void main() {
     final card = find.text('Beta');
     await tester.ensureVisible(card);
     await tester.pumpAndSettle();
-    await tester.drag(card, const Offset(-90, 0));
+    await tester.drag(card, const Offset(-300, 0));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Archive').hitTestable());
     await tester.pumpAndSettle();

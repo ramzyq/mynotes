@@ -55,20 +55,25 @@ void main() {
   });
 
   testWidgets('swiping left reveals archive action', (tester) async {
+    var archived = 0;
     await tester.pumpWidget(_wrap(NoteCard(
       note: _note(),
       selectMode: false,
       selected: false,
       onSelect: () {},
       onPin: () {},
-      onArchive: () {},
+      onArchive: () => archived++,
       onOpen: () {},
       onTagTap: (_) {},
       relativeTime: '1 h',
     )));
-    await tester.drag(find.byType(NoteCard), const Offset(-80, 0));
+    expect(find.text('Archive'), findsNothing, reason: 'hidden until swiped');
+    await tester.drag(find.byType(NoteCard), const Offset(-300, 0));
     await tester.pumpAndSettle();
     expect(find.text('Archive'), findsOneWidget);
+    await tester.tap(find.text('Archive'));
+    await tester.pumpAndSettle();
+    expect(archived, 1);
   });
 
   testWidgets('shows location pin and place name when present', (tester) async {

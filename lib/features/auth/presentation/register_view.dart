@@ -1,3 +1,4 @@
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,11 +99,11 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
       signedIn = true;
       if (!mounted) return;
       // Navigate to email verification screen
-      Navigator.of(context).pushReplacement(
+      unawaited(Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (context) => const VerifyEmailView(),
         ),
-      );
+      ));
     } on WeakPasswordAuthException {
       if (!mounted) return;
       messenger.showSnackBar(

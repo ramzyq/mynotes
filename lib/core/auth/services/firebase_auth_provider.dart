@@ -3,6 +3,7 @@ import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLog
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 
 class FirebaseAuthProvider implements AuthProvider {
   @override
@@ -44,9 +45,9 @@ class FirebaseAuthProvider implements AuthProvider {
         throw GenericAuthException();
       }
 
-    } catch (_) {
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
       throw GenericAuthException();
-
     }
 
   }
@@ -87,7 +88,8 @@ class FirebaseAuthProvider implements AuthProvider {
       } else {
         throw GenericAuthException();
       }
-    } catch (_) {
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
       throw GenericAuthException();
     }
   }
@@ -97,6 +99,8 @@ class FirebaseAuthProvider implements AuthProvider {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await FirebaseAuth.instance.signOut();
+      // Forget the Google account too, so the next sign-in offers the picker.
+      if (_googleReady) await GoogleSignIn.instance.signOut().catchError((_) {});
     } else {
       throw UserNotLoggedInAuthException();
     }
@@ -122,31 +126,44 @@ class FirebaseAuthProvider implements AuthProvider {
     }
   }
 
+  static bool _googleReady = false;
+
+  /// google_sign_in 7 must be initialized once before use. On Android the
+  /// server client ID comes from google-services.json (default_web_client_id).
+  static Future<void> _ensureGoogleReady() async {
+    if (_googleReady) return;
+    await GoogleSignIn.instance.initialize();
+    _googleReady = true;
+  }
+
   @override
   Future<AuthUser> signInWithGoogle() async {
     try {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
+      await _ensureGoogleReady();
+      final account = await GoogleSignIn.instance.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null) throw GenericAuthException();
+
+      await FirebaseAuth.instance.signInWithCredential(
+        GoogleAuthProvider.credential(idToken: idToken),
+      );
+      final user = currentUser;
+      if (user == null) throw UserNotLoggedInAuthException();
+      return user;
+    } on GoogleSignInException catch (e, stack) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
         throw GoogleSignInCancelledException();
       }
-
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      await FirebaseAuth.instance.signInWithCredential(credential);
-      final user = currentUser;
-      if (user != null) {
-        return user;
-      } else {
-        throw UserNotLoggedInAuthException();
-      }
-    } on FirebaseAuthException catch (_) {
+      AppErrorHandler().handle(e, stack);
       throw GenericAuthException();
-    } catch (_) {
+    } on GenericAuthException {
+      rethrow;
+    } on UserNotLoggedInAuthException {
+      rethrow;
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
       throw GenericAuthException();
     }
   }
+
 }

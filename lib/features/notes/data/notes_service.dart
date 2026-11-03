@@ -223,11 +223,8 @@ class NotesService {
           .where((note) => !note.isExpired)
           .toList();
       _ownNotes = notes;
-      final sorted = [...notes]..sort((left, right) {
-          if (left.isPinned != right.isPinned) return left.isPinned ? -1 : 1;
-          return right.updatedAt.compareTo(left.updatedAt);
-        });
-      return sorted;
+      // Already ordered by updatedAt (the query); views sort for display.
+      return notes;
     });
   }
 
@@ -262,10 +259,6 @@ class NotesService {
         }),
       ));
       decrypted.removeWhere((note) => note.isExpired);
-      decrypted.sort((left, right) {
-        if (left.isPinned != right.isPinned) return left.isPinned ? -1 : 1;
-        return right.updatedAt.compareTo(left.updatedAt);
-      });
       return decrypted;
     });
   }

@@ -19,12 +19,13 @@ class ReviewView extends ConsumerStatefulWidget {
 }
 
 class _ReviewViewState extends ConsumerState<ReviewView> {
-  int _currentIndex = 0;
+  // Rated cards leave the due list (their due date moves into the future),
+  // so the current card is always the first one. [_reviewed] only drives the
+  // progress label.
+  int _reviewed = 0;
   bool _showAnswer = false;
-  List<Note> _cards = [];
 
-  Future<void> _rateCard(int quality) async {
-    final note = _cards[_currentIndex];
+  Future<void> _rateCard(Note note, int quality) async {
     final result = calculateSM2(
       quality: quality,
       easeFactor: note.studyEaseFactor ?? 2.5,
@@ -41,17 +42,11 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
       studyDueAt: result.dueAt,
     );
 
-    if (_currentIndex < _cards.length - 1) {
-      setState(() {
-        _currentIndex++;
-        _showAnswer = false;
-      });
-    } else {
-      setState(() {
-        _currentIndex = 0;
-        _showAnswer = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _reviewed++;
+      _showAnswer = false;
+    });
   }
 
   @override
@@ -78,7 +73,6 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
         ),
         body: dueCards.when(
         data: (cards) {
-          _cards = cards;
           if (cards.isEmpty) {
             return Center(
               child: Column(
@@ -100,7 +94,7 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
             );
           }
 
-          final note = cards[_currentIndex];
+          final note = cards.first;
           final parts = (note.content ?? '').split('\n');
           final question = parts.isNotEmpty ? parts.first : note.displayTitle;
           final answer = parts.length > 1 ? parts.sublist(1).join('\n') : '';
@@ -110,14 +104,14 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
             child: Column(
               children: [
                 Text(
-                  '${_currentIndex + 1} of ${cards.length} cards',
+                  '${_reviewed + 1} of ${_reviewed + cards.length} cards',
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         color: notely.text3,
                       ),
                 ),
                 const SizedBox(height: 8),
                 LinearProgressIndicator(
-                  value: (_currentIndex + 1) / cards.length,
+                  value: (_reviewed + 1) / (_reviewed + cards.length),
                   backgroundColor: notely.surface2,
                   valueColor: AlwaysStoppedAnimation<Color>(notely.violet),
                 ),
@@ -197,28 +191,28 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
                         label: 'Again',
                         quality: 1,
                         color: Colors.redAccent,
-                        onTap: () => _rateCard(1),
+                        onTap: () => _rateCard(note, 1),
                       ),
                       const SizedBox(width: 8),
                       _RatingButton(
                         label: 'Hard',
                         quality: 2,
                         color: Colors.orangeAccent,
-                        onTap: () => _rateCard(2),
+                        onTap: () => _rateCard(note, 2),
                       ),
                       const SizedBox(width: 8),
                       _RatingButton(
                         label: 'Good',
                         quality: 3,
                         color: const Color(0xFF8AA7FF),
-                        onTap: () => _rateCard(3),
+                        onTap: () => _rateCard(note, 3),
                       ),
                       const SizedBox(width: 8),
                       _RatingButton(
                         label: 'Easy',
                         quality: 4,
                         color: const Color(0xFF86E7C8),
-                        onTap: () => _rateCard(4),
+                        onTap: () => _rateCard(note, 4),
                       ),
                     ],
                   ),

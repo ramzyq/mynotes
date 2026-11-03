@@ -436,7 +436,16 @@ class Note {
     );
   }
 
-  String get displayTitle {
+  // Notes are immutable, so the display strings are computed once per
+  // instance (cards read them on every rebuild).
+  static final _displayTitleCache = Expando<String>('displayTitle');
+  static final _previewTextCache = Expando<String>('previewText');
+
+  String get displayTitle => _displayTitleCache[this] ??= _computeDisplayTitle();
+
+  String get previewText => _previewTextCache[this] ??= _computePreviewText();
+
+  String _computeDisplayTitle() {
     if (decryptionFailed) return "Can't decrypt on this device";
     if (isSealed && isLocked) return 'Locked note';
     final trimmed = (title ?? '').trim();
@@ -452,7 +461,7 @@ class Note {
     return 'Untitled note';
   }
 
-  String get previewText {
+  String _computePreviewText() {
     if (decryptionFailed) return 'This note was encrypted with a key that is not on this device.';
     if (isLocked) return 'Unlock to view.';
     final combined = (content ?? '').trim().isNotEmpty

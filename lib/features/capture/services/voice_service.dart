@@ -1,3 +1,5 @@
+import 'package:mynotes/features/capture/services/capture_exception.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:path_provider/path_provider.dart';
@@ -16,8 +18,20 @@ class VoiceService {
   String? _recordedFilePath;
   String? _transcription;
 
-  Future<bool> requestPermission() async {
-    return await _speech.initialize();
+  /// Ask for the microphone. Throws [CaptureUnavailableException] if it is
+  /// refused; transcription is optional (recording works without it).
+  Future<void> requestPermission() async {
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) status = await Permission.microphone.request();
+    if (status.isPermanentlyDenied || status.isRestricted) {
+      throw const CaptureUnavailableException(
+        'Microphone access is blocked for Notely.',
+        needsSettings: true,
+      );
+    }
+    if (!status.isGranted) {
+      throw const CaptureUnavailableException('Microphone permission was not granted.');
+    }
   }
 
   Future<void> startRecording() async {

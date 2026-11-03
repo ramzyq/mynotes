@@ -45,9 +45,19 @@ app.*.map.json
 /android/app/release
 node_modules
 
-tests/node_modules/
 
 # Worktrees
 .worktrees/
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Secrets and local debris
+.env
+.env.*
+*.log
+hs_err_pid*
+replay_pid*
+*-firebase-adminsdk-*.json
+
+# Generated code
+*.g.dart

@@ -78,10 +78,13 @@ class NotelyTheme extends ThemeExtension<NotelyTheme> {
     return t!;
   }
 
-  TextStyle get displaySerif {
-    final serif = TextStyle(fontFamily: 'Instrument Serif', fontStyle: FontStyle.italic);
-    return TextStyle(fontFamily: 'Geist').merge(serif);
-  }
+  static const _displaySerif = TextStyle(
+    fontFamily: 'Instrument Serif',
+    fontFamilyFallback: ['Geist'],
+    fontStyle: FontStyle.italic,
+  );
+
+  TextStyle get displaySerif => _displaySerif;
 
   TextStyle get bodyGeist => const TextStyle(fontFamily: 'Geist');
 

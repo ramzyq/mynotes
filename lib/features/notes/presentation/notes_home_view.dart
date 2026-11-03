@@ -63,7 +63,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
         AppErrorHandler().handle(error, stack);
       }
       _deleteExpired();
-      _maybeAskAnalyticsConsent();
+      unawaited(_maybeAskAnalyticsConsent());
       _watchOwnerRequests();
       _listenForLinks();
     });
@@ -291,7 +291,43 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     return [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)];
   }
 
-  List<Note> _visible(List<Note> notes) {
+  // Filtering and sorting run only when the inputs change, not on every
+  // rebuild (typing, dialogs, timers all rebuild this widget).
+  // The provider lists are new objects on every snapshot, so identity is a
+  // cheap and exact change check. The expiry timer changes _scheduledExpiry,
+  // which forces a recompute when a note expires.
+  List<Note>? _visibleCache;
+  List<Note>? _cachedOwn;
+  List<Note>? _cachedShared;
+  String? _cachedQuery;
+  String? _cachedTag;
+  String? _cachedFilter;
+  NoteSort? _cachedSort;
+  DateTime? _cachedExpiry;
+
+  List<Note> _visible(List<Note> own, List<Note> shared, List<Note> notes) {
+    final cached = _visibleCache;
+    if (cached != null &&
+        identical(own, _cachedOwn) &&
+        identical(shared, _cachedShared) &&
+        _query == _cachedQuery &&
+        _activeTag == _cachedTag &&
+        _filter == _cachedFilter &&
+        _sort == _cachedSort &&
+        _scheduledExpiry == _cachedExpiry) {
+      return cached;
+    }
+    _cachedOwn = own;
+    _cachedShared = shared;
+    _cachedQuery = _query;
+    _cachedTag = _activeTag;
+    _cachedFilter = _filter;
+    _cachedSort = _sort;
+    _cachedExpiry = _scheduledExpiry;
+    return _visibleCache = _computeVisible(notes);
+  }
+
+  List<Note> _computeVisible(List<Note> notes) {
     var list = notes.where((n) => !n.isArchived).toList();
     if (_query.trim().isNotEmpty) {
       final q = _query.toLowerCase();
@@ -350,7 +386,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
         .where((n) => !n.isExpired)
         .toList();
     _scheduleExpiry(notes);
-    final visible = _visible(notes);
+    final visible = _visible(own, shared, notes);
     final pinned = visible.where((n) => n.isPinned).toList();
     final rest = visible.where((n) => !n.isPinned).toList();
 
