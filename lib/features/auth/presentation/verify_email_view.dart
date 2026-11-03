@@ -112,12 +112,12 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
       ),
     );
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
+    unawaited(Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => const _VerifiedRedirect(),
       ),
       (route) => false,
-    );
+    ));
   }
 
   Future<void> _signOut() async {

@@ -32,12 +32,61 @@ service cloud.firestore {
             && notExpired(noteData(ownerId, noteId)));
     }
 
+    function optional(data, field, type) {
+      return !(field in data) || data[field] == null
+        || (type == 'string' && data[field] is string)
+        || (type == 'bool' && data[field] is bool)
+        || (type == 'int' && data[field] is int)
+        || (type == 'number' && data[field] is number)
+        || (type == 'timestamp' && data[field] is timestamp)
+        || (type == 'list' && data[field] is list)
+        || (type == 'map' && data[field] is map);
+    }
+
+    // Every field a note document may hold. Plaintext title/content/metadata
+    // and the old PIN verifier are deliberately absent: the server refuses to
+    // store them, so a buggy or old client cannot leak note contents.
+    function validNote(data, ownerId) {
+      return data.keys().hasOnly([
+          'colorIndex', 'isPinned', 'isArchived', 'isLocked', 'isStudyMaterial',
+          'selfDestructAt', 'selfDestructOnRead', 'createdAt', 'updatedAt',
+          'encryptedTitle', 'encryptedContent', 'encryptedMeta', 'encryptionVersion',
+          'wrappedKey', 'pinWrappedKey', 'pinSalt', 'keyGen', 'keyHistory',
+          'collaborators', 'encryptedKeys', 'sharedBy', 'sharedAt',
+          'versionCounter', 'lastVersionAt',
+          'studyDueAt', 'studyInterval', 'studyEaseFactor', 'studyRepetitions'])
+        && optional(data, 'colorIndex', 'int')
+        && optional(data, 'isPinned', 'bool')
+        && optional(data, 'isArchived', 'bool')
+        && optional(data, 'isLocked', 'bool')
+        && optional(data, 'isStudyMaterial', 'bool')
+        && optional(data, 'selfDestructOnRead', 'bool')
+        && optional(data, 'selfDestructAt', 'timestamp')
+        && optional(data, 'createdAt', 'timestamp')
+        && optional(data, 'updatedAt', 'timestamp')
+        && optional(data, 'encryptedTitle', 'string')
+        && optional(data, 'encryptedContent', 'string')
+        && optional(data, 'encryptedMeta', 'string')
+        && optional(data, 'encryptionVersion', 'int')
+        && optional(data, 'keyGen', 'int')
+        && optional(data, 'collaborators', 'list')
+        && data.get('collaborators', []).size() <= 50
+        && optional(data, 'encryptedKeys', 'map')
+        && data.get('encryptedKeys', {}).size() <= 50
+        && data.get('sharedBy', ownerId) in [ownerId, null];
+    }
+
     // User profile (public key, display name). Readable one document at a
     // time by uid; never listable, so the user base cannot be enumerated.
     match /users/{userId} {
       allow get: if signedIn();
       allow list: if false;
-      allow write: if isUser(userId);
+      allow write: if isUser(userId)
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'publicKey'])
+        && optional(request.resource.data, 'email', 'string')
+        && optional(request.resource.data, 'displayName', 'string')
+        && request.resource.data.get('displayName', '').size() <= 200
+        && optional(request.resource.data, 'publicKey', 'string');
     }
 
     // Owner-only private data (key backup, settings, ...). Notes are handled
@@ -53,7 +102,8 @@ service cloud.firestore {
       // Queries cannot be limited by expiry in rules (the feed query has no
       // selfDestructAt filter), so the app hides expired notes from lists.
       allow list: if isUser(ownerId) || isCollaborator(resource.data);
-      allow create, update, delete: if isUser(ownerId);
+      allow create, update: if isUser(ownerId) && validNote(request.resource.data, ownerId);
+      allow delete: if isUser(ownerId);
 
       // Version history is owner-only.
       match /versions/{versionId} {
@@ -65,7 +115,13 @@ service cloud.firestore {
       match /comments/{commentId} {
         allow read: if canAccessNote(ownerId, noteId);
         allow create: if canAccessNote(ownerId, noteId)
-          && request.resource.data.authorUid == request.auth.uid;
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.keys().hasOnly(
+               ['authorUid', 'authorName', 'encryptedContent', 'keyGen', 'createdAt'])
+          && optional(request.resource.data, 'authorName', 'string')
+          && request.resource.data.get('authorName', '').size() <= 200
+          && request.resource.data.encryptedContent is string
+          && request.resource.data.encryptedContent.size() <= 100000;
         allow update: if false;
         allow delete: if signedIn()
           && (resource.data.authorUid == request.auth.uid || isUser(ownerId));
@@ -100,7 +156,12 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow create: if signedIn()
         && request.resource.data.reporterUid == request.auth.uid
-        && request.resource.data.status == 'open';
+        && request.resource.data.status == 'open'
+        && request.resource.data.keys().hasOnly([
+             'reporterUid', 'targetOwnerUid', 'noteId', 'commentId',
+             'commentAuthorUid', 'reason', 'status', 'createdAt'])
+        && optional(request.resource.data, 'reason', 'string')
+        && request.resource.data.get('reason', '').size() <= 2000;
       allow read: if signedIn()
         && (request.auth.uid == resource.data.reporterUid
             || request.auth.uid == resource.data.targetOwnerUid);

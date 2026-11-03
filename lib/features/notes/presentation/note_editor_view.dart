@@ -13,6 +13,8 @@ import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
 import 'package:mynotes/core/theme/widgets/tag_pill.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
+import 'package:mynotes/features/capture/services/capture_exception.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/notes/data/comment.dart';
@@ -150,7 +152,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     final openIdx = before.lastIndexOf('[[');
     if (openIdx == -1) return;
     final closeIdx = text.indexOf(']]', cursorPos);
-    int endIdx = closeIdx != -1 ? closeIdx + 2 : cursorPos;
+    final int endIdx = closeIdx != -1 ? closeIdx + 2 : cursorPos;
     final newText = '${text.substring(0, openIdx)}[[$title]]${text.substring(endIdx)}';
     _contentController.text = newText;
     final newCursor = openIdx + title.length + 4;
@@ -280,13 +282,16 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
       final locationService = ref.read(locationServiceProvider);
       final result = await locationService.getCurrentLocation();
       if (!mounted) return;
-      if (result != null) {
-        setState(() {
-          _latitude = result.latitude;
-          _longitude = result.longitude;
-          _placeName = result.placeName;
-        });
-      }
+      setState(() {
+        _latitude = result.latitude;
+        _longitude = result.longitude;
+        _placeName = result.placeName;
+      });
+    } on CaptureUnavailableException catch (e) {
+      _showCaptureError(e);
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      _showCaptureError(const CaptureUnavailableException("Couldn't get your location."));
     } finally {
       if (mounted) {
         setState(() => _isCapturingLocation = false);
@@ -296,11 +301,28 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   Future<void> _startVoiceRecording() async {
     final voiceService = ref.read(voiceServiceProvider);
-    final permitted = await voiceService.requestPermission();
-    if (!permitted || !mounted) return;
+    try {
+      await voiceService.requestPermission();
+      if (!mounted) return;
+      setState(() => _isRecording = true);
+      await voiceService.startRecording();
+    } on CaptureUnavailableException catch (e) {
+      _showCaptureError(e);
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (mounted) setState(() => _isRecording = false);
+      _showCaptureError(const CaptureUnavailableException("Couldn't start recording."));
+    }
+  }
 
-    setState(() => _isRecording = true);
-    await voiceService.startRecording();
+  void _showCaptureError(CaptureUnavailableException e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(e.message),
+      action: e.needsSettings
+          ? SnackBarAction(label: 'Settings', onPressed: () => openAppSettings())
+          : null,
+    ));
   }
 
   Future<void> _stopVoiceRecording() async {
@@ -641,8 +663,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
   }
 
   Future<void> _showSelfDestructSheet() async {
-    DateTime? pickedDate = _selfDestructAt;
-    bool onRead = _selfDestructOnRead;
+    final DateTime? pickedDate = _selfDestructAt;
+    final bool onRead = _selfDestructOnRead;
 
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,

@@ -1,5 +1,6 @@
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:mynotes/features/capture/services/capture_exception.dart';
 
 class LocationResult {
   final double latitude;
@@ -14,17 +15,28 @@ class LocationResult {
 }
 
 class LocationService {
-  Future<LocationResult?> getCurrentLocation() async {
-    final permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      final requested = await Geolocator.requestPermission();
-      if (requested == LocationPermission.denied) {
-        return null;
-      }
+  /// Throws [CaptureUnavailableException] when location services are off or
+  /// permission is refused.
+  Future<LocationResult> getCurrentLocation() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw const CaptureUnavailableException(
+        'Location services are turned off.',
+        needsSettings: true,
+      );
     }
 
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
     if (permission == LocationPermission.deniedForever) {
-      return null;
+      throw const CaptureUnavailableException(
+        'Location access is blocked for Notely.',
+        needsSettings: true,
+      );
+    }
+    if (permission == LocationPermission.denied) {
+      throw const CaptureUnavailableException('Location permission was not granted.');
     }
 
     final position = await Geolocator.getCurrentPosition(
@@ -52,6 +64,7 @@ class LocationService {
         placeName: placeName,
       );
     } catch (_) {
+      // Reverse geocoding needs a network; fall back to coordinates.
       return LocationResult(
         latitude: position.latitude,
         longitude: position.longitude,

@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -19,7 +18,7 @@ Widget buildNotePreview(
   }
 
   final existingTitles = allNotes.map((n) => n.title?.trim()).whereType<String>().toSet();
-  final spans = <TextSpan>[];
+  final spans = <InlineSpan>[];
   var lastEnd = 0;
   for (final match in matches) {
     if (match.start > lastEnd) {
@@ -27,19 +26,29 @@ Widget buildNotePreview(
     }
     final title = match.group(1)!.trim();
     final exists = existingTitles.contains(title);
-    spans.add(TextSpan(
-      text: title,
-      style: TextStyle(
-        color: exists ? notely.violetInk : notely.text4,
-        decoration: exists ? TextDecoration.underline : TextDecoration.lineThrough,
-        decorationColor: exists ? notely.violetInk : notely.text4,
-        fontWeight: FontWeight.w500,
-      ),
-      recognizer: TapGestureRecognizer()
-        ..onTap = () {
+    // A GestureDetector in a WidgetSpan is owned by the widget tree, unlike a
+    // TapGestureRecognizer created here, which would never be disposed.
+    spans.add(WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: GestureDetector(
+        onTap: () {
           final target = allNotes.where((n) => n.title?.trim() == title).firstOrNull;
           if (target != null) onOpenNote(target);
         },
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 13.25,
+            height: 1.45,
+            letterSpacing: -0.15,
+            color: exists ? notely.violetInk : notely.text4,
+            decoration: exists ? TextDecoration.underline : TextDecoration.lineThrough,
+            decorationColor: exists ? notely.violetInk : notely.text4,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
     ));
     lastEnd = match.end;
   }

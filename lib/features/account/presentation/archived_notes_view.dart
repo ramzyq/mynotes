@@ -8,6 +8,7 @@ import 'package:mynotes/core/theme/widgets/notely_background.dart';
 import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/features/notes/data/note.dart';
+import 'package:mynotes/features/notes/data/note_sort.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class ArchivedNotesView extends ConsumerWidget {
@@ -20,7 +21,8 @@ class ArchivedNotesView extends ConsumerWidget {
     final uid = authUser?.uid ?? ref.read(authStateProvider).valueOrNull?.uid ?? '';
     final own = ref.watch(notesProvider(uid)).valueOrNull ?? const <Note>[];
     final shared = ref.watch(sharedNotesProvider(uid)).valueOrNull ?? const <Note>[];
-    final archived = [...own, ...shared].where((n) => n.isArchived).toList();
+    final archived = [...own, ...shared].where((n) => n.isArchived && !n.isExpired).toList()
+      ..sort(noteComparator(NoteSort.updated));
 
     return GlassPage(
       background: const NotelyBackground(),

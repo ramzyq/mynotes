@@ -1,10 +1,13 @@
 rules_version = '2';
+
+// The app does not use Cloud Storage: audio attachments stay on the device
+// and everything else lives (encrypted) in Firestore. Deny everything so an
+// enabled bucket can never become an open file host. If Storage is adopted
+// later, add narrow per-user rules with contentType and size checks here.
 service firebase.storage {
   match /b/{bucket}/o {
-    // Audio attachments for notes
-    match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null
-        && request.auth.uid == userId;
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

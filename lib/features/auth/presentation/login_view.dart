@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -110,11 +111,11 @@ class _LoginViewState extends ConsumerState<LoginView> {
       if (!mounted) return;
       // If email is not verified, navigate to verification screen
       if (!user.isEmailVerified) {
-        Navigator.of(context).push(
+        unawaited(Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => const VerifyEmailView(),
           ),
-        );
+        ));
       }
     } on UserNotFoundAuthException {
       if (!mounted) return;
