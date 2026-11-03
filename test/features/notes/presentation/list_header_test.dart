@@ -7,7 +7,7 @@ import 'package:mynotes/features/notes/presentation/widgets/list_header.dart';
 Widget _wrap(Widget child) => MaterialApp(theme: buildNotelyTheme(Brightness.light), home: Scaffold(body: child));
 
 void main() {
-  testWidgets('header shows personalized serif title', (tester) async {
+  testWidgets('header shows the title and the privacy line', (tester) async {
     await tester.pumpWidget(_wrap(ListHeader(
       userName: 'Maya',
       noteCount: 3,
@@ -16,6 +16,7 @@ void main() {
       selectMode: false,
     )));
     expect(find.textContaining('Maya'), findsOneWidget);
+    expect(find.textContaining('encrypted on this device'), findsOneWidget);
   });
 
   testWidgets('filter chips respond to taps', (tester) async {
@@ -30,7 +31,8 @@ void main() {
     await tester.pumpWidget(_wrap(SortMenu(sort: NoteSort.updated, onChanged: (v) => chosen = v)));
     await tester.tap(find.text('Updated'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Title (A–Z)'));
+    await tester.tap(find.text('Title A–Z'));
+    await tester.pumpAndSettle();
     expect(chosen, NoteSort.titleAZ);
   });
 }

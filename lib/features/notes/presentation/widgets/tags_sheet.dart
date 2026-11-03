@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/tag_colors.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 
 class TagsSheet extends StatefulWidget {
   final Set<String> allTags;
@@ -40,7 +42,7 @@ class _TagsSheetState extends State<TagsSheet> {
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,10 +52,11 @@ class _TagsSheetState extends State<TagsSheet> {
                 Expanded(
                   child: Text(
                     'Tags',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Close',
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close),
                 ),
@@ -66,10 +69,8 @@ class _TagsSheetState extends State<TagsSheet> {
                   child: TextField(
                     controller: _controller,
                     onSubmitted: (_) => _addNewTag(),
-                    decoration: const InputDecoration(
-                      hintText: 'New tag name',
-                      prefixIcon: Icon(Icons.add),
-                    ),
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(hintText: 'New tag'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -83,8 +84,8 @@ class _TagsSheetState extends State<TagsSheet> {
             const SizedBox(height: 16),
             if (_allTags.isEmpty)
               Text(
-                'No tags yet. Create one above.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: notely.text3),
+                'No tags yet. Type one above to create it.',
+                style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text2),
               )
             else
               Wrap(
@@ -92,6 +93,15 @@ class _TagsSheetState extends State<TagsSheet> {
                 runSpacing: 8,
                 children: _allTags.map((tag) {
                   return FilterChip(
+                    avatar: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: TagColors.resolve(tag, Theme.of(context).brightness).dot,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    showCheckmark: false,
                     label: Text(tag),
                     selected: _selected.contains(tag),
                     onSelected: (isSelected) {
@@ -107,13 +117,7 @@ class _TagsSheetState extends State<TagsSheet> {
                 }).toList(),
               ),
             const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(_selected),
-                child: const Text('Save'),
-              ),
-            ),
+            NotelyPrimaryButton(label: 'Save', onPressed: () => Navigator.of(context).pop(_selected)),
           ],
         ),
     );

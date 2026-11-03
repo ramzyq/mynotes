@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
-import 'package:mynotes/core/theme/widgets/notely_background.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:mynotes/features/lock/services/biometric_unlock_service.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -38,6 +37,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
   Timer? _ticker;
   bool _busy = false;
   String? _error;
+  final TextEditingController _pinController = TextEditingController();
 
   bool get _usesPin => widget.note.hasPinLock;
 
@@ -89,6 +89,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
   @override
   void dispose() {
     _ticker?.cancel();
+    _pinController.dispose();
     super.dispose();
   }
 
@@ -126,7 +127,8 @@ class _LockScreenState extends ConsumerState<LockScreen> {
       }
       final cooldown = await attempts.recordFailure(widget.note.id);
       if (!mounted) return;
-      setState(() => _error = cooldown > Duration.zero ? null : 'Wrong PIN.');
+      _pinController.clear();
+      setState(() => _error = cooldown > Duration.zero ? null : 'Wrong PIN');
       await _refreshCooldown();
     } catch (error, stack) {
       AppErrorHandler().handle(error, stack);
@@ -149,81 +151,93 @@ class _LockScreenState extends ConsumerState<LockScreen> {
     final notely = NotelyTheme.of(context);
     final coolingDown = _cooldown > Duration.zero;
 
-    return GlassPage(
-      background: const NotelyBackground(),
-      statusBarStyle: GlassStatusBarStyle.auto,
-      child: Scaffold(
-        appBar: GlassAppBar(
-          centerTitle: false,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(),
-            iconSize: 20,
-            visualDensity: VisualDensity.compact,
-          ),
-          title: Text(
-            'Locked Note',
-            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
-          ),
-        ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Icon(Icons.lock_outline, size: 64, color: notely.violet),
-                const SizedBox(height: 24),
-                Text(
-                  'This note is locked',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontFamily: 'Instrument Serif', fontSize: 28, color: notely.text),
-                ),
-                const SizedBox(height: 24),
-                if (_usesPin) ...[
-                  GlassPasswordField(
-                    placeholder: 'Enter PIN',
-                    onSubmitted: _verifyPin,
-                  ),
-                  if (_biometricEnabled) ...[
-                    const SizedBox(height: 12),
-                    TextButton.icon(
-                      onPressed: _busy ? null : _unlockWithBiometrics,
-                      icon: const Icon(Icons.fingerprint),
-                      label: const Text('Unlock with biometrics'),
+    return NotelyPage(
+      body: SafeArea(
+        top: false,
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: notely.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: notely.border),
+                      ),
+                      child: Icon(Icons.lock_outline, size: 22, color: notely.violet),
                     ),
-                  ],
-                ] else
-                  Center(
-                    child: GlassButton.custom(
-                      onTap: _authenticate,
-                      height: 54,
-                      glowColor: notely.violet,
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.fingerprint, size: 18, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            'Unlock with biometrics',
-                            style: TextStyle(fontFamily: 'Geist', fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.white),
-                          ),
-                        ],
+                  ),
+                  const SizedBox(height: 24),
+                  NotelyHeading(
+                    title: 'Locked note',
+                    subtitle: _usesPin
+                        ? 'This note is encrypted with its own PIN.'
+                        : 'Confirm it is you to open this note.',
+                  ),
+                  const SizedBox(height: 32),
+                  if (_usesPin) ...[
+                    TextField(
+                      controller: _pinController,
+                      autofocus: !_biometricEnabled,
+                      enabled: !_busy && !coolingDown,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: _verifyPin,
+                      style: const TextStyle(fontFamily: 'JetBrains Mono', fontSize: 20, letterSpacing: 6),
+                      decoration: InputDecoration(
+                        labelText: 'PIN',
+                        errorText: _error,
                       ),
                     ),
-                  ),
-                const SizedBox(height: 12),
-                if (_busy) const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                if (_error != null)
-                  Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
-                if (coolingDown)
-                  Text(
-                    'Too many attempts. Try again in ${_formatCooldown(_cooldown)}.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: notely.text3),
-                  ),
-              ],
+                    const SizedBox(height: 16),
+                    NotelyPrimaryButton(
+                      label: 'Unlock',
+                      loading: _busy,
+                      onPressed: coolingDown ? null : () => _verifyPin(_pinController.text),
+                    ),
+                    if (_biometricEnabled) ...[
+                      const SizedBox(height: 12),
+                      NotelySecondaryButton(
+                        label: 'Use biometrics',
+                        leading: Icon(Icons.fingerprint, size: 18, color: notely.text2),
+                        onPressed: _busy ? null : _unlockWithBiometrics,
+                      ),
+                    ],
+                  ] else ...[
+                    NotelyPrimaryButton(
+                      label: 'Unlock with biometrics',
+                      icon: Icons.fingerprint,
+                      loading: _busy,
+                      onPressed: _authenticate,
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(_error!, style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.danger)),
+                    ],
+                  ],
+                  if (coolingDown) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Too many attempts. Try again in ${_formatCooldown(_cooldown)}.',
+                      style: TextStyle(
+                        fontFamily: 'Geist',
+                        fontSize: 13,
+                        color: notely.text2,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ),

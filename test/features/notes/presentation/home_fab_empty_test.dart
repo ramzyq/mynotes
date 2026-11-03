@@ -14,12 +14,12 @@ void main() {
 
   testWidgets('EmptyState shows subtitle for no query', (tester) async {
     await tester.pumpWidget(_wrap(const EmptyState(query: '', activeTag: null)));
-    expect(find.text('A blank page awaits.'), findsOneWidget);
+    expect(find.text('A blank page'), findsOneWidget);
     expect(find.text('Start writing'), findsNothing);
   });
 
   testWidgets('EmptyState search variant shows no-match copy', (tester) async {
     await tester.pumpWidget(_wrap(const EmptyState(query: 'xyz', activeTag: null)));
-    expect(find.text('No notes match "xyz"'), findsOneWidget);
+    expect(find.text('Nothing matches “xyz”'), findsOneWidget);
   });
 }

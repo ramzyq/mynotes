@@ -31,14 +31,17 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('shows profile, sync, and menu rows', (tester) async {
+  testWidgets('shows profile, privacy line, and menu rows', (tester) async {
     await tester.pumpWidget(_wrap());
     await tester.pumpAndSettle();
     expect(find.text('Maya'), findsOneWidget);
-    expect(find.text('Synced to Firestore'), findsOneWidget);
+    expect(find.textContaining('encrypted on this device'), findsOneWidget);
     expect(find.text('Appearance'), findsOneWidget);
-    expect(find.text('Study cards'), findsOneWidget);
+    expect(find.text('Study'), findsOneWidget);
+    expect(find.text('2 due'), findsOneWidget);
     expect(find.text('Archive'), findsOneWidget);
+    expect(find.text('Trash'), findsOneWidget);
+    expect(find.text('Backup'), findsOneWidget);
     expect(find.text('Sign out'), findsOneWidget);
   });
 

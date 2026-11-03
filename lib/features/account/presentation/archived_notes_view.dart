@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:mynotes/core/error/error_handler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/core/format/dates.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
-import 'package:mynotes/core/theme/widgets/notely_background.dart';
-import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
+import 'package:mynotes/features/account/presentation/managed_note_row.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/data/note_sort.dart';
+import 'package:mynotes/features/notes/data/notes_service.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 class ArchivedNotesView extends ConsumerWidget {
@@ -21,87 +22,67 @@ class ArchivedNotesView extends ConsumerWidget {
     final uid = authUser?.uid ?? ref.read(authStateProvider).valueOrNull?.uid ?? '';
     final own = ref.watch(notesProvider(uid)).valueOrNull ?? const <Note>[];
     final shared = ref.watch(sharedNotesProvider(uid)).valueOrNull ?? const <Note>[];
-    final archived = [...own, ...shared].where((n) => n.isArchived && !n.isExpired).toList()
+    final archived = [...own, ...shared].where((n) => n.isArchived && !n.isExpired && !n.isTrashed).toList()
       ..sort(noteComparator(NoteSort.updated));
+    // Read lazily: building the screen must not create the service.
+    NotesService service() => ref.read(notesServiceProvider);
 
-    return GlassPage(
-      background: const NotelyBackground(),
-      statusBarStyle: GlassStatusBarStyle.auto,
-      child: Scaffold(
-        appBar: GlassAppBar(
-          centerTitle: false,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(),
-            iconSize: 20,
-            visualDensity: VisualDensity.compact,
-          ),
-          title: Text(
-            'Archive',
-            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
-          ),
-        ),
-        body: archived.isEmpty
-            ? Center(child: Text('No archived notes', style: TextStyle(color: notely.text3)))
-            : ListView.separated(
-                padding: const EdgeInsets.all(20),
-                itemCount: archived.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final note = archived[index];
-                  return Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(color: notely.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: notely.border)),
-                    child: Row(children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            try {
-                              await ref.read(notesServiceProvider).setArchived(uid: uid, note: note, archived: false);
-                            } catch (error, stack) {
-                              AppErrorHandler().handle(error, stack);
-                              messenger.showSnackBar(const SnackBar(content: Text('Could not restore the note.')));
-                            }
-                          },
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(note.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5)),
-                            const SizedBox(height: 2),
-                            Text('Tap to restore', style: TextStyle(fontSize: 12, color: notely.text3)),
-                          ]),
-                        ),
+    Future<bool> run(Future<void> Function() action, String failure) async {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await action();
+        return true;
+      } catch (error, stack) {
+        AppErrorHandler().handle(error, stack);
+        messenger.showSnackBar(SnackBar(content: Text(failure)));
+        return false;
+      }
+    }
+
+    return NotelyPage(
+      title: 'Archive',
+      body: archived.isEmpty
+          ? const ManagedEmpty(
+              icon: Icons.archive_outlined,
+              title: 'Nothing archived',
+              message: 'Swipe a note left on the home screen to archive it. It stays searchable here.',
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+              itemCount: archived.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final note = archived[index];
+                return ManagedNoteRow(
+                  note: note,
+                  caption: 'Edited ${formatDateTime(note.updatedAt)}',
+                  actions: [
+                    TextButton(
+                      onPressed: () => run(
+                        () => service().setArchived(uid: uid, note: note, archived: false),
+                        "Couldn't restore the note.",
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () async {
-                          final confirmed = await showNotelyDialog<bool>(
-                            context: context,
-                            title: 'Delete forever?',
-                            message: 'This cannot be undone.',
-                            actions: [
-                              NotelyDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(false)),
-                              NotelyDialogAction(label: 'Delete', isDestructive: true, onPressed: () => Navigator.of(context).pop(true)),
-                            ],
-                          );
-                          if (confirmed == true) {
-                            if (!context.mounted) return;
-                            final messenger = ScaffoldMessenger.of(context);
-                            try {
-                              await ref.read(notesServiceProvider).deleteNote(uid: uid, noteId: note.id);
-                            } catch (error, stack) {
-                              AppErrorHandler().handle(error, stack);
-                              messenger.showSnackBar(const SnackBar(content: Text('Could not delete the note.')));
-                            }
-                          }
-                        },
-                        iconSize: 20,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ]),
-                  );
-                },
-              ),
-      ),
+                      child: const Text('Restore'),
+                    ),
+                    IconButton(
+                      tooltip: 'Move to trash',
+                      icon: Icon(Icons.delete_outline, size: 20, color: notely.text3),
+                      onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        if (!await run(() => service().moveToTrash(uid: uid, notes: [note]), "Couldn't move the note to the trash.")) return;
+                        messenger.showSnackBar(SnackBar(
+                          content: const Text('Moved to trash'),
+                          action: SnackBarAction(
+                            label: 'Undo',
+                            onPressed: () => service().restoreFromTrash(uid: uid, notes: [note]),
+                          ),
+                        ));
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
     );
   }
 }

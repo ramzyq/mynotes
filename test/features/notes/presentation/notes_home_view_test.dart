@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -55,6 +54,7 @@ void main() {
   });
   setUp(() {
     when(() => notesService.deleteExpiredNotes(any())).thenAnswer((_) async {});
+    when(() => notesService.purgeTrash(any())).thenAnswer((_) async {});
     when(() => notesService.setArchived(uid: any(named: 'uid'), note: any(named: 'note'), archived: any(named: 'archived')))
         .thenAnswer((_) async {});
     when(() => shareService.ensureUserProfile(uid: any(named: 'uid'), email: any(named: 'email'), displayName: any(named: 'displayName')))
@@ -65,20 +65,22 @@ void main() {
         .thenAnswer((_) async {});
   });
 
-  testWidgets('renders personalized header and note cards', (tester) async {
+  testWidgets('renders the header and note cards', (tester) async {
     await tester.pumpWidget(_wrap(notesService, shareService: shareService, joinLinkProcessor: joinLinkProcessor));
     await tester.pumpAndSettle();
     expect(find.textContaining('Maya'), findsWidgets);
     expect(find.text('Alpha'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Beta'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('Beta'), findsOneWidget);
   });
 
   testWidgets('search filters the list', (tester) async {
     await tester.pumpWidget(_wrap(notesService, shareService: shareService, joinLinkProcessor: joinLinkProcessor));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(CupertinoTextField), 'Beta');
+    await tester.enterText(find.byType(TextField), 'Beta');
     await tester.pumpAndSettle();
     expect(find.widgetWithText(NoteCard, 'Alpha'), findsNothing);
+    await tester.scrollUntilVisible(find.widgetWithText(NoteCard, 'Beta'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.widgetWithText(NoteCard, 'Beta'), findsOneWidget);
   });
 
@@ -86,7 +88,7 @@ void main() {
     await tester.pumpWidget(_wrap(notesService, shareService: shareService, joinLinkProcessor: joinLinkProcessor));
     await tester.pumpAndSettle();
     final card = find.text('Beta');
-    await tester.ensureVisible(card);
+    await tester.scrollUntilVisible(card, 200, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     await tester.drag(card, const Offset(-300, 0));
     await tester.pumpAndSettle();

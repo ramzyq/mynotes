@@ -6,7 +6,11 @@ import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/providers/theme_mode_provider.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_avatar.dart';
+import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
+import 'package:mynotes/features/account/presentation/trash_view.dart';
+import 'package:mynotes/features/backup/backup_view.dart';
+import 'package:mynotes/features/reminders/reminder_providers.dart';
 import 'package:mynotes/features/account/presentation/archived_notes_view.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
@@ -22,14 +26,16 @@ class AccountSheet extends ConsumerWidget {
     final notely = NotelyTheme.of(context);
     final themeMode = ref.watch(themeModeProvider);
     final due = ref.watch(dueCountProvider(_uid(ref))).valueOrNull ?? 0;
-    final archivedCount = ref.watch(notesProvider(_uid(ref))).valueOrNull?.where((n) => n.isArchived).length ?? 0;
+    final notes = ref.watch(notesProvider(_uid(ref))).valueOrNull ?? const [];
+    final archivedCount = notes.where((n) => n.isArchived && !n.isTrashed).length;
+    final trashCount = notes.where((n) => n.isTrashed).length;
     final consent = ref.watch(consentStatusProvider).valueOrNull;
     final user = authUser ?? _currentUser(ref);
 
     String consentDetail() => switch (consent) {
           null => 'Not asked',
-          true => 'Analytics on',
-          false => 'Analytics off',
+          true => 'On',
+          false => 'Off',
         };
 
     String appearanceLabel() => switch (themeMode) {
@@ -45,44 +51,45 @@ class AccountSheet extends ConsumerWidget {
         children: [
           Row(
             children: [
-              NotelyAvatar(size: 48, initial: _initialOf(user)),
-              const SizedBox(width: 14),
+              NotelyAvatar(size: 44, initial: _initialOf(user)),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(user.displayName?.isNotEmpty == true ? user.displayName! : user.email.split('@').first, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.3, color: notely.text)),
-                    const SizedBox(height: 1),
-                    Text(user.email, style: TextStyle(fontSize: 13, color: notely.text3)),
+                    Text(
+                      user.displayName?.isNotEmpty == true ? user.displayName! : user.email.split('@').first,
+                      style: TextStyle(fontFamily: 'Geist', fontSize: 16, fontWeight: FontWeight.w500, color: notely.text),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(user.email, style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3)),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(color: notely.surface2, borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: notely.surface2,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Row(children: [
-              Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(color: const Color(0xFF10B981).withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
-                child: Icon(Icons.cloud_done_outlined, size: 15, color: const Color(0xFF059669)),
-              ),
+              Icon(Icons.lock_outline, size: 16, color: notely.text2),
               const SizedBox(width: 10),
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Synced to Firestore', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: notely.text)),
-                  const SizedBox(height: 1),
-                  Text('Last sync · just now', style: TextStyle(fontSize: 11.5, color: notely.text3)),
-                ]),
+                child: Text(
+                  'Your notes are encrypted on this device before they sync. Only you and the people you share with can read them.',
+                  style: TextStyle(fontFamily: 'Geist', fontSize: 13, height: 1.45, color: notely.text2),
+                ),
               ),
             ]),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           _JoinRequestsSection(uid: _uid(ref)),
           _SheetRow(
-            icon: Icons.brightness_6_outlined,
+            icon: Icons.contrast,
             label: 'Appearance',
             detail: appearanceLabel(),
             onTap: () {
@@ -91,29 +98,44 @@ class AccountSheet extends ConsumerWidget {
             },
           ),
           _SheetRow(
-            icon: Icons.school_outlined,
-            label: 'Study cards',
-            detail: '$due',
+            icon: Icons.style_outlined,
+            label: 'Study',
+            detail: due == 0 ? 'Nothing due' : '$due due',
             onTap: () => _push(context, (c) => ReviewView(authUser: user)),
           ),
           _SheetRow(
             icon: Icons.archive_outlined,
             label: 'Archive',
             detail: '$archivedCount',
-            onTap: () => _push(context, (c) => const ArchivedNotesView()),
+            onTap: () => _push(context, (c) => ArchivedNotesView(authUser: user)),
           ),
           _SheetRow(
-            icon: Icons.privacy_tip_outlined,
-            label: 'Analytics & privacy',
+            icon: Icons.delete_outline,
+            label: 'Trash',
+            detail: '$trashCount',
+            onTap: () => _push(context, (c) => TrashView(authUser: user)),
+          ),
+          _SheetRow(
+            icon: Icons.save_alt,
+            label: 'Backup',
+            detail: 'Export or import',
+            onTap: () => _push(context, (c) => BackupView(authUser: user)),
+          ),
+          _SheetRow(
+            icon: Icons.insights_outlined,
+            label: 'Usage analytics',
             detail: consentDetail(),
             onTap: () => _showConsentDialog(context, ref),
           ),
+          const SizedBox(height: 8),
           _SheetRow(
-            icon: Icons.logout_rounded,
+            icon: Icons.logout,
             label: 'Sign out',
             danger: true,
+            last: true,
             onTap: () {
               Navigator.of(context).pop();
+              ref.read(reminderServiceProvider).cancelAll();
               ref.read(authServiceProvider).logOut();
             },
           ),
@@ -123,7 +145,7 @@ class AccountSheet extends ConsumerWidget {
   }
 
   String _uid(WidgetRef ref) {
-    final u = _currentUser(ref);
+    final u = authUser ?? _currentUser(ref);
     return u.uid;
   }
 
@@ -146,25 +168,21 @@ class AccountSheet extends ConsumerWidget {
 Future<void> _showConsentDialog(BuildContext context, WidgetRef ref) async {
   final current = ref.read(consentStatusProvider).valueOrNull;
   final granting = current == true;
-  final decision = await showDialog<bool>(
+  final decision = await showNotelyDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(granting ? 'Turn off analytics?' : 'Allow analytics?'),
-      content: const Text(
-        'Allow anonymous usage data to help improve Notely? '
-        'This never includes your notes or anything you type.',
+    title: granting ? 'Turn off usage analytics?' : 'Allow usage analytics?',
+    message: 'Anonymous usage data helps improve Notely. It never includes your notes or anything you type.',
+    actions: [
+      NotelyDialogAction(
+        label: granting ? 'Keep on' : 'No thanks',
+        onPressed: () => Navigator.of(context).pop(!granting),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(!granting),
-          child: Text(granting ? 'Keep on' : 'No thanks'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(granting),
-          child: Text(granting ? 'Turn off' : 'Allow'),
-        ),
-      ],
-    ),
+      NotelyDialogAction(
+        label: granting ? 'Turn off' : 'Allow',
+        isPrimary: true,
+        onPressed: () => Navigator.of(context).pop(granting ? false : true),
+      ),
+    ],
   );
   if (decision == null) return;
   await ref.read(consentCoordinatorProvider).recordDecision(decision);
@@ -177,28 +195,43 @@ class _SheetRow extends StatelessWidget {
   final String? detail;
   final VoidCallback onTap;
   final bool danger;
+  final bool last;
 
-  const _SheetRow({required this.icon, required this.label, this.detail, required this.onTap, this.danger = false});
+  const _SheetRow({
+    required this.icon,
+    required this.label,
+    this.detail,
+    required this.onTap,
+    this.danger = false,
+    this.last = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
+    final color = danger ? notely.danger : notely.text;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: notely.border))),
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          border: last ? null : Border(bottom: BorderSide(color: notely.border)),
+        ),
         child: Row(children: [
-          Container(
-            width: 28, height: 28,
-            decoration: BoxDecoration(color: danger ? const Color(0xFFDC2626).withValues(alpha: 0.1) : notely.violetSoft, borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, size: 17, color: danger ? const Color(0xFFDC2626) : notely.violetInk),
-          ),
+          SizedBox(width: 20, child: Icon(icon, size: 18, color: danger ? notely.danger : notely.text2)),
           const SizedBox(width: 12),
-          Expanded(child: Text(label, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500, letterSpacing: -0.2, color: danger ? const Color(0xFFDC2626) : notely.text))),
-          if (detail != null) Text(detail!, style: TextStyle(fontSize: 13, color: notely.text3)),
-          Icon(Icons.chevron_right, size: 14, color: notely.text4),
+          Expanded(child: Text(label, style: TextStyle(fontFamily: 'Geist', fontSize: 15, color: color))),
+          if (detail != null)
+            Text(
+              detail!,
+              style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3, fontFeatures: const [FontFeature.tabularFigures()]),
+            ),
+          if (!danger) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 16, color: notely.text3),
+          ],
         ]),
       ),
     );
@@ -238,31 +271,29 @@ class _JoinRequestsSection extends ConsumerWidget {
           padding: const EdgeInsets.only(left: 4, bottom: 6),
           child: Text(
             'Join requests',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: notely.text3,
-                  fontWeight: FontWeight.w700,
-                ),
+            style: TextStyle(fontFamily: 'Geist', fontSize: 13, fontWeight: FontWeight.w500, color: notely.text2),
           ),
         ),
         ...requests.map(
           (request) => Container(
             margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             decoration: BoxDecoration(
-              color: notely.surface2,
-              borderRadius: BorderRadius.circular(12),
+              color: notely.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: notely.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '${request.recipientName.isEmpty ? request.recipientEmail : request.recipientName} wants to join',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w500, color: notely.text),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '"${titleOf(request.noteId)}"',
-                  style: TextStyle(fontSize: 12, color: notely.text3),
+                  titleOf(request.noteId),
+                  style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
@@ -276,7 +307,7 @@ class _JoinRequestsSection extends ConsumerWidget {
                               token: request.token,
                               recipientUid: request.recipientUid,
                             ),
-                        'Could not approve the request.',
+                        "Couldn't approve the request.",
                       ),
                       child: const Text('Approve'),
                     ),
@@ -287,12 +318,10 @@ class _JoinRequestsSection extends ConsumerWidget {
                               token: request.token,
                               recipientUid: request.recipientUid,
                             ),
-                        'Could not deny the request.',
+                        "Couldn't decline the request.",
                       ),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                      ),
-                      child: const Text('Deny'),
+                      style: TextButton.styleFrom(foregroundColor: notely.text2),
+                      child: const Text('Decline'),
                     ),
                   ],
                 ),

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:mynotes/core/theme/note_palette.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
-import 'package:mynotes/core/theme/tag_colors.dart';
+import 'package:mynotes/core/theme/widgets/tag_pill.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 
+/// A pinned note drawn as an index card: a header line, the colored rule an
+/// index card has under its heading, then the note. The rule takes the
+/// note's color label, so pinned notes read at a glance.
 class PinnedNoteCard extends StatelessWidget {
   final Note note;
   final String relativeTime;
@@ -28,166 +32,130 @@ class PinnedNoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    final brightness = Theme.of(context).brightness;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final tags = note.tags ?? const <String>[];
-    final tag = tags.isNotEmpty ? tags.first : null;
+    final rule = kNotePalette[note.colorIndex % kNotePalette.length];
 
-    final TagPalette palette;
-    final Color accent;
-    if (tag != null) {
-      palette = TagColors.resolve(tag, brightness);
-      accent = palette.dot;
-    } else {
-      palette = (fg: notely.text2, bg: notely.surface2, dot: notely.text3);
-      accent = notely.text3;
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: selectMode ? onSelect : onOpen,
+    return Container(
+      width: 280,
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: 280,
-          decoration: BoxDecoration(
-            color: notely.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? notely.violet : notely.border,
-              width: selected ? 2 : 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
+        boxShadow: dark
+            ? null
+            : const [BoxShadow(color: Color(0x0F000000), blurRadius: 2, offset: Offset(0, 1))],
+      ),
+      child: Material(
+        color: notely.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: selected ? notely.violet : notely.border, width: selected ? 1.5 : 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: selectMode ? onSelect : onOpen,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 40,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: tags.isEmpty
+                            ? Text(
+                                relativeTime,
+                                style: TextStyle(
+                                  fontFamily: 'JetBrains Mono',
+                                  fontSize: 12,
+                                  color: notely.text3,
+                                  fontFeatures: const [FontFeature.tabularFigures()],
+                                ),
+                              )
+                            : Align(
+                                alignment: Alignment.centerLeft,
+                                child: TagPill(name: tags.first, style: TagPillStyle.dot),
+                              ),
+                      ),
+                      if (selectMode)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: selected ? notely.violet : Colors.transparent,
+                              border: Border.all(color: selected ? notely.violet : notely.borderStrong, width: 1.5),
+                            ),
+                            child: selected ? Icon(Icons.check, size: 12, color: notely.surface) : null,
+                          ),
+                        )
+                      else
+                        PopupMenuButton<String>(
+                          tooltip: 'More',
+                          onSelected: (value) {
+                            if (value == 'unpin') onUnpin();
+                            if (value == 'archive') onArchive();
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(value: 'unpin', child: Text('Unpin')),
+                            PopupMenuItem(value: 'archive', child: Text('Archive')),
+                          ],
+                          icon: Icon(Icons.more_horiz, size: 18, color: notely.text3),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
+              Container(height: 1.5, color: rule.withValues(alpha: dark ? 0.7 : 0.55)),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _Pill(name: tag ?? 'General', fg: palette.fg, bg: palette.bg),
-                          ),
-                          if (selectMode)
-                            Container(
-                              width: 20,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: selected ? notely.violet : Colors.transparent,
-                                border: Border.all(
-                                  color: selected ? notely.violet : notely.borderStrong,
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: selected
-                                  ? Icon(Icons.check, size: 12, color: Colors.white)
-                                  : null,
-                            )
-                          else
-                            SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: PopupMenuButton<String>(
-                                onSelected: (value) {
-                                  if (value == 'unpin') onUnpin();
-                                  if (value == 'archive') onArchive();
-                                },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(value: 'unpin', child: Text('Unpin')),
-                                  PopupMenuItem(value: 'archive', child: Text('Archive')),
-                                ],
-                                icon: Icon(Icons.more_vert, size: 18, color: notely.text3),
-                                padding: EdgeInsets.zero,
-                                splashRadius: 16,
-                                constraints: const BoxConstraints(),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
                       Text(
                         note.displayTitle,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'Geist',
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
-                          height: 1.3,
-                          letterSpacing: -0.32,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          height: 1.33,
                           color: notely.text,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        note.previewText,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Geist',
-                          fontSize: 13,
-                          height: 1.45,
-                          letterSpacing: -0.15,
-                          color: notely.text3,
+                      Expanded(
+                        child: Text(
+                          note.previewText,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontFamily: 'Geist', fontSize: 13, height: 1.45, color: notely.text2),
                         ),
                       ),
-                      const Spacer(),
-                      const SizedBox(height: 12),
-                      Text(
-                        relativeTime,
-                        style: TextStyle(
-                          fontFamily: 'JetBrains Mono',
-                          fontSize: 11,
-                          color: notely.text4,
+                      if (tags.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          relativeTime,
+                          style: TextStyle(
+                            fontFamily: 'JetBrains Mono',
+                            fontSize: 12,
+                            color: notely.text3,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(height: 4, color: accent),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String name;
-  final Color fg;
-  final Color bg;
-
-  const _Pill({required this.name, required this.fg, required this.bg});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        name,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg, height: 1.2),
       ),
     );
   }

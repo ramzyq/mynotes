@@ -46,12 +46,12 @@ void main() {
     expect(find.text('Dev'), findsOneWidget);
     expect(find.text('Flutter state management'), findsOneWidget);
     expect(find.text('2d ago'), findsOneWidget);
-    expect(find.byIcon(Icons.more_vert), findsOneWidget);
+    expect(find.byIcon(Icons.more_horiz), findsOneWidget);
   });
 
-  testWidgets('untagged note shows a General pill', (tester) async {
+  testWidgets('untagged note shows its time in the header', (tester) async {
     await tester.pumpWidget(_wrap(_card(note: _note().copyWith(tags: null))));
-    expect(find.text('General'), findsOneWidget);
+    expect(find.text('2d ago'), findsOneWidget);
   });
 
   testWidgets('tap opens the note when not in select mode', (tester) async {
@@ -64,7 +64,7 @@ void main() {
   testWidgets('overflow menu can unpin', (tester) async {
     var unpinned = false;
     await tester.pumpWidget(_wrap(_card(onUnpin: () => unpinned = true)));
-    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.tap(find.byIcon(Icons.more_horiz));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Unpin'));
     expect(unpinned, true);
@@ -75,6 +75,6 @@ void main() {
     await tester.pumpWidget(_wrap(_card(selectMode: true, onSelect: () => selected = true)));
     await tester.tap(find.text('Flutter state management'));
     expect(selected, true);
-    expect(find.byIcon(Icons.more_vert), findsNothing);
+    expect(find.byIcon(Icons.more_horiz), findsNothing);
   });
 }

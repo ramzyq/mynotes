@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
-import 'package:mynotes/core/theme/widgets/notely_background.dart';
+import 'package:mynotes/core/theme/note_palette.dart';
+import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/notes/data/note.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 import 'package:mynotes/features/study/providers/study_providers.dart';
@@ -53,177 +53,151 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
   Widget build(BuildContext context) {
     final dueCards = ref.watch(dueCardsProvider(widget.authUser.uid));
     final notely = NotelyTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
 
-    return GlassPage(
-      background: const NotelyBackground(),
-      statusBarStyle: GlassStatusBarStyle.auto,
-      child: Scaffold(
-        appBar: GlassAppBar(
-          centerTitle: false,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(),
-            iconSize: 20,
-            visualDensity: VisualDensity.compact,
-          ),
-          title: Text(
-            'Study',
-            style: TextStyle(fontFamily: 'Geist', fontSize: 17, fontWeight: FontWeight.w700, color: notely.text),
-          ),
-        ),
-        body: dueCards.when(
+    return NotelyPage(
+      title: 'Study',
+      body: dueCards.when(
         data: (cards) {
           if (cards.isEmpty) {
             return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle_outline, size: 80, color: notely.text4),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'All caught up!',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'No cards due for review.',
-                    style: TextStyle(color: notely.text3),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_outline, size: 32, color: notely.text3),
+                    const SizedBox(height: 16),
+                    Text(
+                      _reviewed > 0 ? 'Done for today' : 'Nothing to review',
+                      style: textTheme.displayMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 300),
+                      child: Text(
+                        _reviewed > 0
+                            ? 'You reviewed $_reviewed ${_reviewed == 1 ? 'card' : 'cards'}. They come back when they are due.'
+                            : 'Turn a note into a flashcard from its ⋯ menu. The first line is the question, the rest is the answer.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontFamily: 'Geist', fontSize: 14, height: 1.45, color: notely.text2),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           }
 
           final note = cards.first;
           final parts = (note.content ?? '').split('\n');
-          final question = parts.isNotEmpty ? parts.first : note.displayTitle;
-          final answer = parts.length > 1 ? parts.sublist(1).join('\n') : '';
+          final question = parts.isNotEmpty && parts.first.trim().isNotEmpty ? parts.first : note.displayTitle;
+          final answer = parts.length > 1 ? parts.sublist(1).join('\n').trim() : '';
+          final total = _reviewed + cards.length;
+          final rule = kNotePalette[note.colorIndex % kNotePalette.length];
 
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Text(
-                  '${_reviewed + 1} of ${_reviewed + cards.length} cards',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: notely.text3,
+          return SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Card ${_reviewed + 1} of $total',
+                        style: TextStyle(
+                          fontFamily: 'Geist',
+                          fontSize: 13,
+                          color: notely.text2,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
-                ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: (_reviewed + 1) / (_reviewed + cards.length),
-                  backgroundColor: notely.surface2,
-                  valueColor: AlwaysStoppedAnimation<Color>(notely.violet),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _showAnswer = !_showAnswer),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: notely.surface,
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(color: notely.border),
+                      const Spacer(),
+                      Text(
+                        note.displayTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3),
                       ),
-                      padding: const EdgeInsets.all(24),
-                      child: SingleChildScrollView(
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(minHeight: 4, value: (_reviewed + 1) / total),
+                  ),
+                  const SizedBox(height: 24),
+                  // The card: an index card with its heading rule in the
+                  // note's color. Tap anywhere on it to turn it over.
+                  Expanded(
+                    child: Material(
+                      color: notely.surface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: notely.border),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => setState(() => _showAnswer = !_showAnswer),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text(
-                              'Question',
-                              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                    color: notely.violet,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
+                              child: Text(question, style: textTheme.displayMedium?.copyWith(fontSize: 28)),
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              question,
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                            Container(height: 1.5, color: rule.withValues(alpha: 0.55)),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(20),
+                                child: _showAnswer
+                                    ? Text(
+                                        answer.isEmpty ? 'This card has no answer lines yet.' : answer,
+                                        style: textTheme.bodyLarge?.copyWith(color: answer.isEmpty ? notely.text3 : notely.text),
+                                      )
+                                    : Text(
+                                        'Tap to show the answer',
+                                        style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text3),
+                                      ),
+                              ),
                             ),
-                            if (_showAnswer && answer.isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              Divider(color: notely.border),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Answer',
-                                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                      color: notely.success,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                answer,
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      color: notely.text2,
-                                      height: 1.5,
-                                    ),
-                              ),
-                            ],
-                            if (!_showAnswer)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 40),
-                                child: Center(
-                                  child: Text(
-                                    'Tap to reveal answer',
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          color: notely.text4,
-                                        ),
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                       ),
                     ),
                   ),
-                ),
-                if (_showAnswer) ...[
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      _RatingButton(
-                        label: 'Again',
-                        quality: 1,
-                        color: Colors.redAccent,
-                        onTap: () => _rateCard(note, 1),
-                      ),
-                      const SizedBox(width: 8),
-                      _RatingButton(
-                        label: 'Hard',
-                        quality: 2,
-                        color: Colors.orangeAccent,
-                        onTap: () => _rateCard(note, 2),
-                      ),
-                      const SizedBox(width: 8),
-                      _RatingButton(
-                        label: 'Good',
-                        quality: 3,
-                        color: const Color(0xFF8AA7FF),
-                        onTap: () => _rateCard(note, 3),
-                      ),
-                      const SizedBox(width: 8),
-                      _RatingButton(
-                        label: 'Easy',
-                        quality: 4,
-                        color: const Color(0xFF86E7C8),
-                        onTap: () => _rateCard(note, 4),
-                      ),
-                    ],
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 48,
+                    child: _showAnswer
+                        ? Row(
+                            children: [
+                              _RatingButton(label: 'Again', onTap: () => _rateCard(note, 1)),
+                              const SizedBox(width: 8),
+                              _RatingButton(label: 'Hard', onTap: () => _rateCard(note, 2)),
+                              const SizedBox(width: 8),
+                              _RatingButton(label: 'Good', primary: true, onTap: () => _rateCard(note, 3)),
+                              const SizedBox(width: 8),
+                              _RatingButton(label: 'Easy', onTap: () => _rateCard(note, 4)),
+                            ],
+                          )
+                        : NotelyPrimaryButton(
+                            label: 'Show answer',
+                            onPressed: () => setState(() => _showAnswer = true),
+                          ),
                   ),
                 ],
-              ],
+              ),
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-      ),
+        loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        error: (e, _) => Center(
+          child: Text("Couldn't load your cards.", style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text2)),
+        ),
       ),
     );
   }
@@ -231,36 +205,35 @@ class _ReviewViewState extends ConsumerState<ReviewView> {
 
 class _RatingButton extends StatelessWidget {
   final String label;
-  final int quality;
-  final Color color;
   final VoidCallback onTap;
+  final bool primary;
 
-  const _RatingButton({
-    required this.label,
-    required this.quality,
-    required this.color,
-    required this.onTap,
-  });
+  const _RatingButton({required this.label, required this.onTap, this.primary = false});
 
   @override
   Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
-      child: FilledButton(
-        onPressed: onTap,
-        style: FilledButton.styleFrom(
-          backgroundColor: color.withValues(alpha: 0.2),
-          foregroundColor: color,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: color.withValues(alpha: 0.4)),
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontFamily: 'Geist', fontWeight: FontWeight.w700),
-        ),
-      ),
+      child: primary
+          ? FilledButton(
+              onPressed: onTap,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                padding: EdgeInsets.zero,
+                foregroundColor: dark ? notely.bg : Colors.white,
+              ),
+              child: Text(label),
+            )
+          : OutlinedButton(
+              onPressed: onTap,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                padding: EdgeInsets.zero,
+                backgroundColor: notely.surface,
+              ),
+              child: Text(label),
+            ),
     );
   }
 }

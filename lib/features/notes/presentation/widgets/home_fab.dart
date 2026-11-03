@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mynotes/core/theme/notely_tokens.dart';
 
+/// The one primary action on the home screen. Ink fill, no glow.
 class HomeFab extends StatelessWidget {
   final VoidCallback? onPressed;
 
@@ -8,42 +9,29 @@ class HomeFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final notely = NotelyTheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Positioned(
       left: 0,
       right: 0,
-      bottom: 36,
+      bottom: 32,
       child: Center(
-        child: GlassButton.custom(
-          onTap: onPressed ?? () {},
-          enabled: onPressed != null,
-          width: 224,
-          height: 54,
-          shape: const LiquidRoundedSuperellipse(borderRadius: 22),
-          style: GlassButtonStyle.prominent,
-          useOwnLayer: true,
-          settings: const LiquidGlassSettings(
-            glassColor: Color(0xFF7C5CF5),
-            backerColor: Color(0xFF7C5CF5),
-            thickness: 60,
-            blur: 5,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: dark ? null : const [BoxShadow(color: Color(0x1A000000), blurRadius: 12, offset: Offset(0, 4))],
           ),
-          glowColor: const Color(0xFF7C5CF5),
-          glowRadius: 1.4,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), shape: BoxShape.circle),
-                child: const Icon(Icons.add, size: 14, color: Colors.white),
-              ),
-              const SizedBox(width: 9),
-              const Text(
-                'Start writing',
-                style: TextStyle(color: Colors.white, fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: -0.25),
-              ),
-            ],
+          child: FilledButton.icon(
+            onPressed: onPressed,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(200, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              backgroundColor: notely.violet,
+              foregroundColor: dark ? notely.bg : Colors.white,
+            ),
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: const Text('Start writing'),
           ),
         ),
       ),
