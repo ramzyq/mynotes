@@ -45,6 +45,8 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   StreamSubscription<Uri>? _uriSub;
   StreamSubscription<List<JoinRequest>>? _requestSub;
+  Timer? _expiryTimer;
+  DateTime? _scheduledExpiry;
 
   @override
   void initState() {
@@ -60,9 +62,37 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
       } catch (error, stack) {
         AppErrorHandler().handle(error, stack);
       }
+      _deleteExpired();
       _maybeAskAnalyticsConsent();
       _watchOwnerRequests();
       _listenForLinks();
+    });
+  }
+
+  void _deleteExpired() {
+    ref
+        .read(notesServiceProvider)
+        .deleteExpiredNotes(widget.authUser.uid)
+        .catchError(AppErrorHandler().handle);
+  }
+
+  /// Arm a single timer for the next self-destruct among the visible notes.
+  /// When it fires the list is rebuilt (hiding the note, shared ones too) and
+  /// this user's expired notes are deleted. Re-armed on every build; a no-op
+  /// when the next expiry has not changed.
+  void _scheduleExpiry(List<Note> notes) {
+    final next = Note.nextExpiry(notes);
+    if (next == _scheduledExpiry) return;
+    _expiryTimer?.cancel();
+    _scheduledExpiry = next;
+    if (next == null) return;
+    // A second of slack so the note is past due (not equal) when we look.
+    final delay = next.difference(DateTime.now()) + const Duration(seconds: 1);
+    _expiryTimer = Timer(delay.isNegative ? Duration.zero : delay, () {
+      _scheduledExpiry = null;
+      if (!mounted) return;
+      setState(() {});
+      _deleteExpired();
     });
   }
 
@@ -124,6 +154,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   void dispose() {
     _uriSub?.cancel();
     _requestSub?.cancel();
+    _expiryTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -315,7 +346,10 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     });
     final own = ref.watch(notesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
     final shared = ref.watch(sharedNotesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
-    final notes = [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)];
+    final notes = [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)]
+        .where((n) => !n.isExpired)
+        .toList();
+    _scheduleExpiry(notes);
     final visible = _visible(notes);
     final pinned = visible.where((n) => n.isPinned).toList();
     final rest = visible.where((n) => !n.isPinned).toList();

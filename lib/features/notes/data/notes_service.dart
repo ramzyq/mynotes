@@ -565,13 +565,14 @@ class NotesService {
     _decrypted.remove(ref.path);
   }
 
+  /// Delete this user's expired notes, up to 50 per call (the hourly server
+  /// job catches any remainder). Notes are deleted concurrently.
   Future<void> deleteExpiredNotes(String uid) async {
     final snapshot = await _notesCollection(uid)
         .where(NoteFields.selfDestructAt, isLessThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
+        .limit(50)
         .get();
-    for (final doc in snapshot.docs) {
-      await deleteNote(uid: uid, noteId: doc.id);
-    }
+    await Future.wait(snapshot.docs.map((doc) => deleteNote(uid: uid, noteId: doc.id)));
   }
 
   Future<void> deleteMany({required String uid, required List<Note> notes}) async {

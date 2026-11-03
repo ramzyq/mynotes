@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/encryption/presentation/key_setup_gate.dart';
@@ -53,20 +52,18 @@ class AuthenticationWrapper extends ConsumerStatefulWidget {
 
 class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
     with WidgetsBindingObserver {
-  Timer? _cleanupTimer;
+  // Expired notes are deleted when the app returns to the foreground, at the
+  // exact expiry time while the notes list is open (NotesHomeView), and
+  // hourly by the server job (.github/workflows/expire-notes.yml). No polling.
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _cleanupTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      _cleanupExpiredNotes();
-    });
   }
 
   @override
   void dispose() {
-    _cleanupTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
