@@ -54,7 +54,8 @@ service cloud.firestore {
           'wrappedKey', 'pinWrappedKey', 'pinSalt', 'keyGen', 'keyHistory',
           'collaborators', 'encryptedKeys', 'sharedBy', 'sharedAt',
           'versionCounter', 'lastVersionAt',
-          'studyDueAt', 'studyInterval', 'studyEaseFactor', 'studyRepetitions'])
+          'studyDueAt', 'studyInterval', 'studyEaseFactor', 'studyRepetitions',
+          'deletedAt'])
         && optional(data, 'colorIndex', 'int')
         && optional(data, 'isPinned', 'bool')
         && optional(data, 'isArchived', 'bool')
@@ -64,6 +65,7 @@ service cloud.firestore {
         && optional(data, 'selfDestructAt', 'timestamp')
         && optional(data, 'createdAt', 'timestamp')
         && optional(data, 'updatedAt', 'timestamp')
+        && optional(data, 'deletedAt', 'timestamp')
         && optional(data, 'encryptedTitle', 'string')
         && optional(data, 'encryptedContent', 'string')
         && optional(data, 'encryptedMeta', 'string')

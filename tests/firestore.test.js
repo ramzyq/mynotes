@@ -73,6 +73,15 @@ describe('Firestore rules', () => {
     }));
   });
 
+  it('lets the owner move a note to the trash and back', async () => {
+    const db = as('owner');
+    await assertSucceeds(db.doc('users/owner/notes/t1').set(validNote()));
+    await assertSucceeds(db.doc('users/owner/notes/t1').update({ deletedAt: new Date() }));
+    await assertSucceeds(db.doc('users/owner/notes/t1').update({ deletedAt: null }));
+    await assertFails(db.doc('users/owner/notes/t1').update({ deletedAt: 'yesterday' }));
+    await assertFails(as('collab').doc('users/owner/notes/t1').update({ deletedAt: new Date() }));
+  });
+
   it('refuses plaintext, unknown fields and wrong types on notes', async () => {
     const db = as('owner');
     await assertFails(db.doc('users/owner/notes/a').set({ ...validNote(), title: 'Plaintext!' }));
