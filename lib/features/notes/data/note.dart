@@ -160,6 +160,11 @@ class Note {
   bool get isSealed => encryptionVersion >= 1 && (encryptedTitle != null || encryptedContent != null);
 
   /// PIN-locked notes need the PIN to unwrap their key.
+  /// Past its self-destruct time and only waiting to be deleted. Hidden from
+  /// every list; collaborators can no longer open it (see firestore.rules).
+  bool get isExpired =>
+      selfDestructAt != null && !selfDestructAt!.isAfter(DateTime.now());
+
   bool get hasPinLock => pinWrappedKey != null || pinHash != null;
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {

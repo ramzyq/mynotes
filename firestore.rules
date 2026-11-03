@@ -14,10 +14,22 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(ownerId)/notes/$(noteId)).data;
     }
 
+    // A note whose selfDestructAt has passed is only waiting to be deleted
+    // (by the owner's app or the scheduled expire job); collaborators lose
+    // access at once rather than when the deletion happens.
+    function notExpired(data) {
+      return data.get('selfDestructAt', null) == null
+        || data.selfDestructAt > request.time;
+    }
+
+    function isCollaborator(data) {
+      return signedIn() && data.get('collaborators', []).hasAny([request.auth.uid]);
+    }
+
     function canAccessNote(ownerId, noteId) {
       return isUser(ownerId)
-        || (signedIn()
-            && noteData(ownerId, noteId).get('collaborators', []).hasAny([request.auth.uid]));
+        || (isCollaborator(noteData(ownerId, noteId))
+            && notExpired(noteData(ownerId, noteId)));
     }
 
     // User profile (public key, display name). Readable one document at a
@@ -36,8 +48,11 @@ service cloud.firestore {
 
     // Notes: owner has full access, collaborators may read.
     match /users/{ownerId}/notes/{noteId} {
-      allow read: if isUser(ownerId)
-        || (signedIn() && resource.data.get('collaborators', []).hasAny([request.auth.uid]));
+      allow get: if isUser(ownerId)
+        || (isCollaborator(resource.data) && notExpired(resource.data));
+      // Queries cannot be limited by expiry in rules (the feed query has no
+      // selfDestructAt filter), so the app hides expired notes from lists.
+      allow list: if isUser(ownerId) || isCollaborator(resource.data);
       allow create, update, delete: if isUser(ownerId);
 
       // Version history is owner-only.
@@ -57,9 +72,11 @@ service cloud.firestore {
       }
     }
 
-    // Collection group: shared notes appear in a collaborator's feed.
+    // Collection group: shared notes appear in a collaborator's feed. Only
+    // `list`: this also matches single-note gets, which must go through the
+    // expiry check above.
     match /{path=**}/notes/{noteId} {
-      allow read: if signedIn()
+      allow list: if signedIn()
         && resource.data.collaborators.hasAny([request.auth.uid]);
     }
 

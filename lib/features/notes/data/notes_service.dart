@@ -217,9 +217,11 @@ class NotesService {
         .orderBy(NoteFields.updatedAt, descending: true)
         .snapshots()
         .asyncMap((snapshot) async {
-      final notes = await Future.wait(
+      final notes = (await Future.wait(
         snapshot.docs.map((doc) => _decryptCached(doc, (n) => _decryptOwn(uid, n))),
-      );
+      ))
+          .where((note) => !note.isExpired)
+          .toList();
       _ownNotes = notes;
       final sorted = [...notes]..sort((left, right) {
           if (left.isPinned != right.isPinned) return left.isPinned ? -1 : 1;
@@ -235,9 +237,11 @@ class NotesService {
         .where(NoteFields.studyDueAt, isLessThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
         .orderBy(NoteFields.studyDueAt, descending: false)
         .snapshots()
-        .asyncMap((snapshot) => Future.wait(
+        .asyncMap((snapshot) async => (await Future.wait(
               snapshot.docs.map((doc) => _decryptCached(doc, (n) => _decryptOwn(uid, n))),
-            ));
+            ))
+                .where((note) => !note.isExpired)
+                .toList());
   }
 
   Stream<List<Note>> getSharedNotes(String uid) {
@@ -257,6 +261,7 @@ class NotesService {
           }
         }),
       ));
+      decrypted.removeWhere((note) => note.isExpired);
       decrypted.sort((left, right) {
         if (left.isPinned != right.isPinned) return left.isPinned ? -1 : 1;
         return right.updatedAt.compareTo(left.updatedAt);

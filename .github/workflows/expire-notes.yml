@@ -1,0 +1,55 @@
+name: Delete expired notes
+
+# Server-side self-destruct on the free Spark plan (no TTL, no Cloud
+# Functions). Deletes notes whose selfDestructAt has passed, with their
+# versions, comments and share links. See functions/scripts/expire.js.
+#
+# Needs the repository secret FIREBASE_SERVICE_ACCOUNT: the JSON key of a
+# service account with the "Cloud Datastore User" role on ramzyqnotes.
+
+on:
+  schedule:
+    - cron: '17 * * * *' # hourly
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only count expired notes, delete nothing'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: expire-notes
+  cancel-in-progress: false
+
+jobs:
+  expire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - run: npm ci --omit=dev
+        working-directory: functions
+
+      - name: Delete expired notes
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          if [ -z "$SERVICE_ACCOUNT" ]; then
+            echo "::error::Repository secret FIREBASE_SERVICE_ACCOUNT is not set."
+            exit 1
+          fi
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          printf '%s' "$SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          node functions/scripts/expire.js --project ramzyqnotes $DRY_RUN

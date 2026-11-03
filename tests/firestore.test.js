@@ -56,6 +56,29 @@ describe('Firestore rules', () => {
     await assertSucceeds(dbCollab.collection('users/owner/notes').doc('shared').get());
   });
 
+  it('cuts collaborators off from an expired note but not its owner', async () => {
+    const past = new Date(Date.now() - 60_000);
+    const future = new Date(Date.now() + 3_600_000);
+    await seed('users/owner/notes/expired', { collaborators: ['collab'], selfDestructAt: past });
+    await seed('users/owner/notes/later', { collaborators: ['collab'], selfDestructAt: future });
+    await seed('users/owner/notes/never', { collaborators: ['collab'], selfDestructAt: null });
+    await assertFails(as('collab').doc('users/owner/notes/expired').get());
+    await assertSucceeds(as('collab').doc('users/owner/notes/later').get());
+    await assertSucceeds(as('collab').doc('users/owner/notes/never').get());
+    await assertSucceeds(as('owner').doc('users/owner/notes/expired').get());
+    // Comments on an expired note are closed to collaborators too.
+    await assertFails(as('collab').doc('users/owner/notes/expired/comments/c1').set({ authorUid: 'collab', encryptedContent: 'x' }));
+    await assertSucceeds(as('collab').doc('users/owner/notes/later/comments/c1').set({ authorUid: 'collab', encryptedContent: 'x' }));
+  });
+
+  it('still serves the shared-notes feed query', async () => {
+    await seed('users/owner/notes/n1', { collaborators: ['collab'], updatedAt: new Date() });
+    const snap = await assertSucceeds(as('collab').collectionGroup('notes')
+      .where('collaborators', 'array-contains', 'collab').get());
+    if (snap.size !== 1) throw new Error(`expected 1 shared note, got ${snap.size}`);
+    await assertFails(as('stranger').collectionGroup('notes').get());
+  });
+
   it('denies collaborator from writing to shared note', async () => {
     const dbOwner = testEnv.authenticatedContext('owner').firestore();
     const dbCollab = testEnv.authenticatedContext('collab').firestore();
