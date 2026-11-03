@@ -1,60 +1,81 @@
 import 'package:flutter/material.dart';
 
+/// One scale for the app: 12 meta, 13 captions, 15 body, 16 titles,
+/// 32/40 serif display. Weights 400 and 500; 600 only for the wordmark.
+/// No negative tracking below display sizes.
 TextTheme buildNotelyTextTheme(Brightness brightness) {
-  final displayColor = brightness == Brightness.dark ? const Color(0xFFF5F2FB) : const Color(0xFF1B1427);
-  final bodyColor = brightness == Brightness.dark ? const Color(0xFFF5F2FB) : const Color(0xFF1B1427);
+  final dark = brightness == Brightness.dark;
+  final primary = dark ? const Color(0xFFEFE9DE) : const Color(0xFF1F1B16);
+  final secondary = dark ? const Color(0xFFAAA398) : const Color(0xFF5E554A);
+  final muted = dark ? const Color(0xFF8A847A) : const Color(0xFF7B7266);
 
   return TextTheme(
     displayLarge: TextStyle(
       fontFamily: 'Instrument Serif',
-      fontSize: 42,
-      height: 1.02,
-      letterSpacing: -1.2,
-      color: displayColor,
+      fontSize: 40,
+      height: 1.05,
+      letterSpacing: -0.8,
+      color: primary,
     ),
     displayMedium: TextStyle(
       fontFamily: 'Instrument Serif',
-      fontSize: 30,
+      fontSize: 32,
       height: 1.1,
-      letterSpacing: -0.6,
-      color: displayColor,
+      letterSpacing: -0.5,
+      color: primary,
     ),
     headlineSmall: TextStyle(
       fontFamily: 'Geist',
       fontSize: 20,
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.4,
-      color: bodyColor,
+      fontWeight: FontWeight.w500,
+      color: primary,
     ),
     titleLarge: TextStyle(
       fontFamily: 'Geist',
-      fontSize: 17,
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.3,
-      color: bodyColor,
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
+      color: primary,
+    ),
+    titleMedium: TextStyle(
+      fontFamily: 'Geist',
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
+      color: primary,
+    ),
+    bodyLarge: TextStyle(
+      fontFamily: 'Geist',
+      fontSize: 16,
+      height: 1.6,
+      color: primary,
     ),
     bodyMedium: TextStyle(
       fontFamily: 'Geist',
       fontSize: 15,
       height: 1.5,
-      color: bodyColor,
+      color: primary,
     ),
     bodySmall: TextStyle(
       fontFamily: 'Geist',
       fontSize: 13,
-      color: brightness == Brightness.dark ? const Color(0xFFB8B0C2) : const Color(0xFF5A5166),
+      height: 1.45,
+      color: secondary,
+    ),
+    labelLarge: TextStyle(
+      fontFamily: 'Geist',
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+      color: primary,
     ),
     labelMedium: TextStyle(
       fontFamily: 'Geist',
       fontSize: 13,
-      fontWeight: FontWeight.w600,
-      letterSpacing: -0.1,
-      color: bodyColor,
+      fontWeight: FontWeight.w500,
+      color: primary,
     ),
     labelSmall: TextStyle(
       fontFamily: 'JetBrains Mono',
-      fontSize: 11,
-      color: brightness == Brightness.dark ? const Color(0xFF8A8394) : const Color(0xFF7A7186),
+      fontSize: 12,
+      color: muted,
     ),
   );
 }

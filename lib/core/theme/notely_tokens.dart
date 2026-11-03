@@ -17,6 +17,7 @@ class NotelyTheme extends ThemeExtension<NotelyTheme> {
   final Color violetSoft;
   final Color violetSoft2;
   final Color success;
+  final Color danger;
 
   const NotelyTheme({
     required this.bg,
@@ -34,42 +35,48 @@ class NotelyTheme extends ThemeExtension<NotelyTheme> {
     required this.violetSoft,
     required this.violetSoft2,
     required this.success,
+    required this.danger,
   });
 
+  // Paper and ink. Surfaces are a warm neutral ramp; the one accent is
+  // fountain-pen ink. Field names keep "violet" for the accent so call sites
+  // did not churn; read them as "ink".
   static const NotelyTheme light = NotelyTheme(
-    bg: Color(0xFFFAF8F5),
-    surface: Color(0xFFFFFFFF),
-    surface2: Color(0xFFF3F0EB),
-    border: Color(0x12141C28),
-    borderStrong: Color(0x1E141C28),
-    text: Color(0xFF1B1427),
-    text2: Color(0xAD1B1427),
-    text3: Color(0x701B1427),
-    text4: Color(0x471B1427),
-    violet: Color(0xFFA78BFA),
-    violetDeep: Color(0xFF7C5CF5),
-    violetInk: Color(0xFF4C1D95),
-    violetSoft: Color(0x1EA78BFA),
-    violetSoft2: Color(0x33A78BFA),
-    success: Color(0xFF10B981),
+    bg: Color(0xFFF7F4EE),
+    surface: Color(0xFFFDFBF7),
+    surface2: Color(0xFFEFE9DF),
+    border: Color(0x141F1B16),
+    borderStrong: Color(0x241F1B16),
+    text: Color(0xFF1F1B16),
+    text2: Color(0xFF5E554A),
+    text3: Color(0xFF7B7266),
+    text4: Color(0xFF9A9184),
+    violet: Color(0xFF2F4AA0),
+    violetDeep: Color(0xFF263C85),
+    violetInk: Color(0xFF22357A),
+    violetSoft: Color(0x142F4AA0),
+    violetSoft2: Color(0x242F4AA0),
+    success: Color(0xFF16A34A),
+    danger: Color(0xFFDC2626),
   );
 
   static const NotelyTheme dark = NotelyTheme(
-    bg: Color(0xFF0E0B14),
-    surface: Color(0xFF17131F),
-    surface2: Color(0xFF1E1928),
-    border: Color(0x14FFFFFF),
-    borderStrong: Color(0x23FFFFFF),
-    text: Color(0xFFF5F2FB),
-    text2: Color(0xB7F5F2FB),
-    text3: Color(0x7AF5F2FB),
-    text4: Color(0x47F5F2FB),
-    violet: Color(0xFFA78BFA),
-    violetDeep: Color(0xFF7C5CF5),
-    violetInk: Color(0xFFD7C6FF),
-    violetSoft: Color(0x23A78BFA),
-    violetSoft2: Color(0x38A78BFA),
-    success: Color(0xFF10B981),
+    bg: Color(0xFF161513),
+    surface: Color(0xFF1C1A18),
+    surface2: Color(0xFF262421),
+    border: Color(0x14EFE9DE),
+    borderStrong: Color(0x24EFE9DE),
+    text: Color(0xFFEFE9DE),
+    text2: Color(0xFFAAA398),
+    text3: Color(0xFF8A847A),
+    text4: Color(0xFF6E685F),
+    violet: Color(0xFF8FA6E8),
+    violetDeep: Color(0xFF6F88D6),
+    violetInk: Color(0xFFB9C8F2),
+    violetSoft: Color(0x1A8FA6E8),
+    violetSoft2: Color(0x2B8FA6E8),
+    success: Color(0xFF4CC38A),
+    danger: Color(0xFFE5484D),
   );
 
   static NotelyTheme of(BuildContext context) {
@@ -105,6 +112,7 @@ class NotelyTheme extends ThemeExtension<NotelyTheme> {
     Color? violetSoft,
     Color? violetSoft2,
     Color? success,
+    Color? danger,
   }) {
     return NotelyTheme(
       bg: bg ?? this.bg,
@@ -122,6 +130,7 @@ class NotelyTheme extends ThemeExtension<NotelyTheme> {
       violetSoft: violetSoft ?? this.violetSoft,
       violetSoft2: violetSoft2 ?? this.violetSoft2,
       success: success ?? this.success,
+      danger: danger ?? this.danger,
     );
   }
 
@@ -144,6 +153,7 @@ class NotelyTheme extends ThemeExtension<NotelyTheme> {
       violetSoft: Color.lerp(violetSoft, other.violetSoft, t)!,
       violetSoft2: Color.lerp(violetSoft2, other.violetSoft2, t)!,
       success: Color.lerp(success, other.success, t)!,
+      danger: Color.lerp(danger, other.danger, t)!,
     );
   }
 }

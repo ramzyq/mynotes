@@ -11,8 +11,10 @@ class NotelySheet extends StatelessWidget {
     final notely = NotelyTheme.of(context);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(18, 12, 18, 30),
+      child: SafeArea(
+        top: false,
+        child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -21,13 +23,14 @@ class NotelySheet extends StatelessWidget {
               child: Container(
                 width: 36,
                 height: 4,
-                decoration: BoxDecoration(color: notely.border, borderRadius: BorderRadius.circular(3)),
+                decoration: BoxDecoration(color: notely.borderStrong, borderRadius: BorderRadius.circular(2)),
               ),
             ),
             const SizedBox(height: 16),
             child,
           ],
         ),
+      ),
       ),
     );
   }

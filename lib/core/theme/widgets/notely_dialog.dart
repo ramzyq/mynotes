@@ -21,34 +21,35 @@ Future<T?> showNotelyDialog<T>({
   String? message,
   Widget? content,
   required List<NotelyDialogAction> actions,
+  bool barrierDismissible = true,
 }) {
   return showDialog<T>(
     context: context,
+    barrierDismissible: barrierDismissible,
     builder: (context) {
       final notely = NotelyTheme.of(context);
       return AlertDialog(
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: Text(title),
         content: content ?? (message != null ? Text(message) : null),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           for (final action in actions)
             if (action.isPrimary)
               FilledButton(
                 onPressed: action.onPressed,
                 style: FilledButton.styleFrom(
-                  backgroundColor: notely.violet,
-                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  minimumSize: const Size(0, 40),
                 ),
                 child: Text(action.label),
               )
             else
               TextButton(
                 onPressed: action.onPressed,
-                style: action.isDestructive
-                    ? TextButton.styleFrom(foregroundColor: Colors.redAccent)
-                    : null,
+                style: TextButton.styleFrom(
+                  foregroundColor: action.isDestructive ? notely.danger : notely.text2,
+                  minimumSize: const Size(0, 40),
+                ),
                 child: Text(action.label),
               ),
         ],

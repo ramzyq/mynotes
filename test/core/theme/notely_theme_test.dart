@@ -6,15 +6,15 @@ import 'package:mynotes/core/theme/notely_tokens.dart';
 
 void main() {
   test('NotelyTheme.light uses design light tokens', () {
-    expect(NotelyTheme.light.bg, const Color(0xFFFAF8F5));
-    expect(NotelyTheme.light.surface, const Color(0xFFFFFFFF));
-    expect(NotelyTheme.light.violet, const Color(0xFFA78BFA));
-    expect(NotelyTheme.light.violetDeep, const Color(0xFF7C5CF5));
+    expect(NotelyTheme.light.bg, const Color(0xFFF7F4EE));
+    expect(NotelyTheme.light.surface, const Color(0xFFFDFBF7));
+    expect(NotelyTheme.light.violet, const Color(0xFF2F4AA0));
+    expect(NotelyTheme.light.violetDeep, const Color(0xFF263C85));
   });
 
   test('NotelyTheme.dark uses design dark tokens', () {
-    expect(NotelyTheme.dark.bg, const Color(0xFF0E0B14));
-    expect(NotelyTheme.dark.surface, const Color(0xFF17131F));
+    expect(NotelyTheme.dark.bg, const Color(0xFF161513));
+    expect(NotelyTheme.dark.surface, const Color(0xFF1C1A18));
   });
 
   test('buildNotelyTheme wires the extension', () {
