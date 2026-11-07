@@ -31,7 +31,9 @@ sealed class IncomingLink {
     return switch (uri.queryParameters['mode']) {
       'resetPassword' => PasswordResetIncomingLink(uri),
       'verifyEmail' => VerifyEmailIncomingLink(code),
-      _ => const UnsupportedEmailActionIncomingLink(),
+      'recoverEmail' => RecoverEmailIncomingLink(code),
+      'verifyAndChangeEmail' => const ChangeEmailIncomingLink(),
+      _ => UnsupportedEmailActionIncomingLink(uri),
     };
   }
 
@@ -62,8 +64,23 @@ class VerifyEmailIncomingLink extends IncomingLink {
   final String code;
 }
 
-/// Any other email action (recover or change email). The app has no screen
-/// for these; the web page handles them.
+/// "This wasn't me": undo a change of the account's email. Applied in the
+/// app after the user confirms.
+class RecoverEmailIncomingLink extends IncomingLink {
+  const RecoverEmailIncomingLink(this.code);
+  final String code;
+}
+
+/// A change of the account's email. Never applied: the email salts the
+/// password derivation (PasswordSecretDeriver), so changing it outside a
+/// flow that re-derives both secrets would lock password accounts out.
+class ChangeEmailIncomingLink extends IncomingLink {
+  const ChangeEmailIncomingLink();
+}
+
+/// Any other email action. The app has no screen for it; the user can copy
+/// the link and open it in a browser.
 class UnsupportedEmailActionIncomingLink extends IncomingLink {
-  const UnsupportedEmailActionIncomingLink();
+  const UnsupportedEmailActionIncomingLink(this.uri);
+  final Uri uri;
 }

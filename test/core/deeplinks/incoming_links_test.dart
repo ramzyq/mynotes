@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/auth/models/email_action_info.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:mynotes/core/auth/services/auth_service.dart';
@@ -26,6 +27,10 @@ class _FakeAuth implements AuthProvider {
   int reloads = 0;
   Object? failApply;
   AuthUser? user;
+  String? linkEmail = 'maya@example.com';
+
+  @override
+  Future<EmailActionInfo> checkActionCode(String code) async => EmailActionInfo(email: linkEmail);
 
   @override
   Future<void> applyActionCode(String code) async {
@@ -66,7 +71,9 @@ void main() {
       expect(parse('$base?mode=resetPassword&oobCode=xyz&apiKey=k'), isA<PasswordResetIncomingLink>());
       expect(parse('$base?mode=verifyEmail&oobCode=xyz'),
           isA<VerifyEmailIncomingLink>().having((l) => l.code, 'code', 'xyz'));
-      expect(parse('$base?mode=recoverEmail&oobCode=xyz'), isA<UnsupportedEmailActionIncomingLink>());
+      expect(parse('$base?mode=recoverEmail&oobCode=xyz'), isA<RecoverEmailIncomingLink>());
+      expect(parse('$base?mode=verifyAndChangeEmail&oobCode=xyz'), isA<ChangeEmailIncomingLink>());
+      expect(parse('$base?mode=revertSecondFactorAddition&oobCode=xyz'), isA<UnsupportedEmailActionIncomingLink>());
       expect(parse('$base?mode=resetPassword'), isNull, reason: 'no code');
       expect(parse('https://ramzyqnotes.firebaseapp.com/join/$_token'), isNull, reason: 'only the auth path');
       expect(parse('https://ramzyqnotes.firebaseapp.com/__/auth/handler?mode=verifyEmail&oobCode=x'), isNull);
@@ -168,7 +175,42 @@ void main() {
 
       expect(auth.applied, ['abc']);
       expect(auth.reloads, 0, reason: 'signed out: nothing to reload');
-      expect(find.text('Email verified.'), findsOneWidget);
+      expect(find.text('Email verified. Sign in to continue.'), findsOneWidget);
+    });
+
+    testWidgets('a verification link for another account says which account', (tester) async {
+      auth
+        ..user = const AuthUser(uid: 'u1', email: 'maya@example.com', isEmailVerified: false)
+        ..linkEmail = 'sam@example.com';
+      await pumpApp(tester);
+      links.add(Uri.parse('https://ramzyqnotes.firebaseapp.com/__/auth/action?mode=verifyEmail&oobCode=abc'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Verified sam@example.com'), findsOneWidget);
+      expect(auth.reloads, 0, reason: "reloading maya's account would change nothing");
+    });
+
+    testWidgets("undoing an email change asks first, then applies", (tester) async {
+      auth.linkEmail = 'old@example.com';
+      await pumpApp(tester);
+      links.add(Uri.parse('https://ramzyqnotes.firebaseapp.com/__/auth/action?mode=recoverEmail&oobCode=r1'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('goes back to old@example.com'), findsOneWidget);
+      expect(auth.applied, isEmpty, reason: 'nothing happens before confirming');
+      await tester.tap(find.text('Undo change'));
+      await tester.pumpAndSettle();
+      expect(auth.applied, ['r1']);
+      expect(find.textContaining('email change was undone'), findsOneWidget);
+    });
+
+    testWidgets('a change-email link is never applied', (tester) async {
+      await pumpApp(tester);
+      links.add(Uri.parse('https://ramzyqnotes.firebaseapp.com/__/auth/action?mode=verifyAndChangeEmail&oobCode=c1'));
+      await tester.pumpAndSettle();
+
+      expect(auth.applied, isEmpty);
+      expect(find.textContaining("doesn't support changing your account email"), findsOneWidget);
     });
 
     testWidgets('an expired verification link says what to do', (tester) async {
@@ -189,12 +231,14 @@ void main() {
       expect(find.textContaining('For maya@example.com'), findsOneWidget);
     });
 
-    testWidgets('a link for an action the app has no screen for says so', (tester) async {
+    testWidgets('a link for an action the app has no screen for offers to copy it', (tester) async {
       await pumpApp(tester);
-      links.add(Uri.parse('https://ramzyqnotes.firebaseapp.com/__/auth/action?mode=recoverEmail&oobCode=x'));
+      links.add(Uri.parse(
+          'https://ramzyqnotes.firebaseapp.com/__/auth/action?mode=revertSecondFactorAddition&oobCode=x'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Open it on a computer'), findsOneWidget);
+      expect(find.textContaining('Copy it and open it in a browser'), findsOneWidget);
+      expect(find.text('Copy link'), findsOneWidget);
     });
 
     testWidgets('unrelated links are ignored', (tester) async {

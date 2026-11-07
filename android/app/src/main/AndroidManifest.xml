@@ -56,6 +56,14 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="ramzyqnotes.web.app" android:pathPrefix="/join/"/>
                 <data android:scheme="https" android:host="ramzyqnotes.web.app" android:path="/auth/action"/>
+            </intent-filter>
+            <!-- Its own filter: on Android 11 and below verification is
+                 all-or-nothing per filter, so a problem with this domain must
+                 not stop the share links above from opening the app. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="ramzyqnotes.firebaseapp.com" android:path="/__/auth/action"/>
             </intent-filter>
             <!-- notely:// from the hosted pages' "Open in Notely" button: works

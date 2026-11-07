@@ -1,4 +1,5 @@
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/auth/models/email_action_info.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, InvalidResetCodeAuthException, NetworkAuthException, InvalidActionCodeAuthException;
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' show EmailAuthProvider, FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
@@ -127,6 +128,10 @@ class FirebaseAuthProvider implements AuthProvider {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await user.reload();
+      // reload() doesn't refresh the ID token, so its email_verified claim
+      // (which the rules check) would stay false until the next hourly
+      // refresh. Force it now.
+      await user.getIdToken(true);
     } else {
       throw UserNotLoggedInAuthException();
     }
@@ -265,14 +270,31 @@ class FirebaseAuthProvider implements AuthProvider {
     try {
       await FirebaseAuth.instance.applyActionCode(code);
     } on FirebaseAuthException catch (e) {
-      throw switch (e.code) {
-        'expired-action-code' || 'invalid-action-code' => InvalidActionCodeAuthException(),
+      throw _actionCodeException(e);
+    }
+  }
+
+  @override
+  Future<EmailActionInfo> checkActionCode(String code) async {
+    try {
+      final info = await FirebaseAuth.instance.checkActionCode(code);
+      return EmailActionInfo(
+        email: info.data['email'] as String?,
+        previousEmail: info.data['previousEmail'] as String?,
+      );
+    } on FirebaseAuthException catch (e) {
+      throw _actionCodeException(e);
+    }
+  }
+
+  static Exception _actionCodeException(FirebaseAuthException e) => switch (e.code) {
+        // A retry can't help with any of these: the link itself is unusable.
+        'expired-action-code' || 'invalid-action-code' || 'user-disabled' || 'user-not-found' =>
+          InvalidActionCodeAuthException(),
         'network-request-failed' => NetworkAuthException(),
         'too-many-requests' => TooManyRequestsAuthException(),
         _ => GenericAuthException(),
       };
-    }
-  }
 
   static bool _googleReady = false;
 

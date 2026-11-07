@@ -1,15 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
+import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/core/deeplinks/incoming_links.dart';
 import 'package:mynotes/core/encryption/presentation/key_setup_gate.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/providers/theme_mode_provider.dart';
 import 'package:mynotes/core/theme/notely_theme.dart';
+import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/features/auth/presentation/forgot_password_view.dart';
 import 'package:mynotes/features/auth/presentation/login_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
@@ -103,8 +105,21 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
         await ref.read(joinLinkProcessorProvider).handleUri(uri).catchError(AppErrorHandler().handle);
       case VerifyEmailIncomingLink(:final code):
         await _verifyEmail(code);
-      case UnsupportedEmailActionIncomingLink():
-        _tell("Notely can't open this link. Open it on a computer to finish.");
+      case RecoverEmailIncomingLink(:final code):
+        await _recoverEmail(code);
+      case ChangeEmailIncomingLink():
+        _tell("Notely doesn't support changing your account email yet, so this link wasn't used.");
+      case UnsupportedEmailActionIncomingLink(:final uri):
+        // Lasts until dismissed: copying the link is the only way forward.
+        appMessengerKey.currentState?.showSnackBar(SnackBar(
+          content: const Text("Notely can't handle this link. Copy it and open it in a browser."),
+          duration: const Duration(days: 1),
+          showCloseIcon: true,
+          action: SnackBarAction(
+            label: 'Copy link',
+            onPressed: () => Clipboard.setData(ClipboardData(text: uri.toString())),
+          ),
+        ));
       case null:
         break;
     }
@@ -113,31 +128,103 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
   void _tell(String message) =>
       appMessengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
 
-  /// Apply a verification link. If this device is signed in, reload the
-  /// account so the verify screen moves on by itself (userChanges).
-  Future<void> _verifyEmail(String code) async {
-    final auth = ref.read(authServiceProvider);
+  /// Sign-in state restored, so `currentUser` is meaningful. A link that
+  /// launched the app can arrive before that.
+  Future<void> _authReady() async {
     try {
+      await ref.read(authStateProvider.future).timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Proceed without it; the verify screen's own check catches up.
+    }
+  }
+
+  static bool _sameEmail(String? a, String? b) =>
+      a != null && b != null && a.trim().toLowerCase() == b.trim().toLowerCase();
+
+  String _linkErrorMessage(Object error) => switch (error) {
+        InvalidActionCodeAuthException() =>
+          "This link has expired or was already used. If you still need it, request a new one from Notely.",
+        NetworkAuthException() => "You're offline. Open the link again once you're connected.",
+        TooManyRequestsAuthException() => 'Too many attempts. Try the link again in a few minutes.',
+        _ => "That didn't work. Try the link again.",
+      };
+
+  /// Apply a verification link. The link may be for another account than
+  /// the one signed in here, so check first and say what actually happened.
+  Future<void> _verifyEmail(String code) async {
+    await _authReady();
+    final auth = ref.read(authServiceProvider);
+    final current = auth.currentUser;
+    String? linkEmail;
+    try {
+      linkEmail = (await auth.checkActionCode(code)).email;
       await auth.applyActionCode(code);
     } on InvalidActionCodeAuthException {
       // Often a second tap on a link that already worked.
-      final verified = auth.currentUser?.isEmailVerified ?? false;
-      _tell(verified
+      final mine = linkEmail == null || _sameEmail(linkEmail, current?.email);
+      _tell(mine && (current?.isEmailVerified ?? false)
           ? 'Your email is already verified.'
-          : "This link has expired or was already used. Send a new one from Notely's verify screen.");
-      return;
-    } on NetworkAuthException {
-      _tell("You're offline. Open the link again once you're connected.");
+          : _linkErrorMessage(InvalidActionCodeAuthException()));
       return;
     } catch (error, stack) {
       AppErrorHandler().handle(error, stack);
-      _tell("Couldn't verify your email. Try the link again.");
+      _tell(_linkErrorMessage(error));
       return;
     }
-    if (auth.currentUser != null) {
-      await auth.reloadCurrentUser().catchError(AppErrorHandler().handle);
+
+    if (current == null) {
+      _tell('Email verified. Sign in to continue.');
+      return;
     }
-    _tell('Email verified.');
+    if (linkEmail != null && !_sameEmail(linkEmail, current.email)) {
+      _tell('Verified $linkEmail. Sign in with that account to use it.');
+      return;
+    }
+    try {
+      await auth.reloadCurrentUser();
+      _tell('Email verified.');
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      _tell('Email verified. Notely continues as soon as it reconnects.');
+    }
+  }
+
+  /// "This wasn't me": restore the account's previous email after the user
+  /// confirms, since it changes which address signs in.
+  Future<void> _recoverEmail(String code) async {
+    await _authReady();
+    final auth = ref.read(authServiceProvider);
+    final String? restored;
+    try {
+      restored = (await auth.checkActionCode(code)).email;
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      _tell(_linkErrorMessage(error));
+      return;
+    }
+    await WidgetsBinding.instance.endOfFrame;
+    final context = appNavigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    final confirmed = await showNotelyDialog<bool>(
+      context: context,
+      title: 'Undo the email change?',
+      message: restored == null
+          ? "Your account's email goes back to what it was before."
+          : "Your account's email goes back to $restored.",
+      actions: [
+        NotelyDialogAction(label: 'Cancel', onPressed: () => Navigator.of(context).pop(false)),
+        NotelyDialogAction(label: 'Undo change', isPrimary: true, onPressed: () => Navigator.of(context).pop(true)),
+      ],
+    );
+    if (confirmed != true) return;
+    try {
+      await auth.applyActionCode(code);
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      _tell(_linkErrorMessage(error));
+      return;
+    }
+    _tell("Your email change was undone. If you didn't make it, reset your password now.");
   }
 
   @override

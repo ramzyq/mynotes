@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mynotes/core/auth/models/email_action_info.dart';
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/auth/services/auth_provider.dart';
@@ -62,6 +63,9 @@ class _RecordingAuth implements AuthProvider {
 
   @override
   Future<void> applyActionCode(String code) async {}
+
+  @override
+  Future<EmailActionInfo> checkActionCode(String code) async => const EmailActionInfo();
 }
 
 void main() {
