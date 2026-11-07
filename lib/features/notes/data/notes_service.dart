@@ -629,7 +629,9 @@ class NotesService {
         .where('noteId', isEqualTo: noteId)
         .get();
     for (final link in links.docs) {
-      await _deleteAll(link.reference.collection('requests'));
+      // Filtered by owner: the rules only allow listing requests a query
+      // proves are the caller's, so an unfiltered list is refused.
+      await _deleteAll(link.reference.collection('requests').where('ownerUid', isEqualTo: uid));
       await committed(link.reference.delete());
     }
     await committed(ref.delete());
