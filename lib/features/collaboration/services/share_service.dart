@@ -159,24 +159,28 @@ class ShareService {
     return collaboratorUid;
   }
 
-  /// Add one collaborator. Uses field-level writes so concurrent shares
-  /// cannot overwrite each other.
+  /// Add one collaborator. Field-level writes so concurrent shares cannot
+  /// overwrite each other, inside a transaction so the key wrapped for them
+  /// is the note's current one even if the key is rotated meanwhile.
   Future<void> _grantAccess({
     required String ownerUid,
     required String noteId,
     required String recipientUid,
     required List<int> recipientPublicKey,
   }) async {
-    final noteKey = await notesService.ownNoteKey(ownerUid, noteId);
-    final wrapped = await keyManager.wrapNoteKeyForCollaborator(
-      noteKey: noteKey,
-      recipientPublicKey: recipientPublicKey,
-    );
-    await _noteRef(ownerUid, noteId).update({
-      NoteFields.collaborators: FieldValue.arrayUnion([recipientUid]),
-      '${NoteFields.encryptedKeys}.$recipientUid': wrapped,
-      NoteFields.sharedBy: ownerUid,
-      NoteFields.sharedAt: Timestamp.fromDate(DateTime.now()),
+    final ref = _noteRef(ownerUid, noteId);
+    await firestore.runTransaction((tx) async {
+      final note = Note.fromFirestore(await tx.get(ref));
+      final wrapped = await keyManager.wrapNoteKeyForCollaborator(
+        noteKey: await notesService.ownNoteKeyOf(note),
+        recipientPublicKey: recipientPublicKey,
+      );
+      tx.update(ref, {
+        NoteFields.collaborators: FieldValue.arrayUnion([recipientUid]),
+        '${NoteFields.encryptedKeys}.$recipientUid': wrapped,
+        NoteFields.sharedBy: ownerUid,
+        NoteFields.sharedAt: Timestamp.fromDate(DateTime.now()),
+      });
     });
   }
 

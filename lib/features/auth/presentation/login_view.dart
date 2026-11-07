@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/encryption/password_secrets.dart';
+import 'package:mynotes/features/auth/presentation/forgot_password_view.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/auth/presentation/register_view.dart';
@@ -69,6 +71,19 @@ class _LoginViewState extends ConsumerState<LoginView> {
     }
   }
 
+  Future<void> _forgotPassword() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final email = await Navigator.of(context).push<String>(MaterialPageRoute(
+      builder: (_) => ForgotPasswordView(initialEmail: _email.text.trim()),
+    ));
+    if (email == null || !mounted) return;
+    _email.text = email;
+    _password.clear();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Password changed. Sign in with your new password.')),
+    );
+  }
+
   Future<void> _handleLogin() async {
     final email = _email.text.trim();
     final password = _password.text;
@@ -88,23 +103,27 @@ class _LoginViewState extends ConsumerState<LoginView> {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < PasswordSecretDeriver.minLength) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters')),
+        const SnackBar(content: Text('Password must be at least ${PasswordSecretDeriver.minLength} characters')),
       );
       return;
     }
 
     setState(() => _isLoading = true);
 
-    // Held in memory only; the key setup gate uses it to open the encrypted
-    // key backup, then clears it.
-    ref.read(pendingPasswordProvider.notifier).state = password;
+    // Firebase gets only the auth secret; the backup key stays in memory
+    // until the key setup gate has used it, then is cleared.
+    final secrets = await ref
+        .read(passwordSecretDeriverProvider)
+        .derive(email: email, password: password);
+    if (!mounted) return;
+    ref.read(pendingPasswordKeyProvider.notifier).state = secrets.backupKey;
     var signedIn = false;
     try {
       final user = await ref.read(authServiceProvider).logIn(
         email: email,
-        password: password,
+        password: secrets.authSecret,
       );
       signedIn = true;
       if (!mounted) return;
@@ -137,7 +156,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
         const SnackBar(content: Text('Login failed. Please try again.')),
       );
     } finally {
-      if (!signedIn && mounted) ref.read(pendingPasswordProvider.notifier).state = null;
+      if (!signedIn && mounted) ref.read(pendingPasswordKeyProvider.notifier).state = null;
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -181,7 +200,14 @@ class _LoginViewState extends ConsumerState<LoginView> {
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) => _handleLogin(),
                     ),
-                    const SizedBox(height: 24),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _isLoading ? null : _forgotPassword,
+                        child: const Text('Forgot password?'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     NotelyPrimaryButton(label: 'Sign in', loading: _isLoading, onPressed: _handleLogin),
                     const SizedBox(height: 24),
                     Row(

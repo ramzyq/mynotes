@@ -2,7 +2,8 @@ name: Delete expired notes
 
 # Server-side self-destruct on the free Spark plan (no TTL, no Cloud
 # Functions). Deletes notes whose selfDestructAt has passed, with their
-# versions, comments and share links. See functions/scripts/expire.js.
+# versions, comments and share links, and purges notes that have been in
+# the trash for over 30 days. See functions/scripts/expire.js.
 #
 # Needs the repository secret FIREBASE_SERVICE_ACCOUNT: the JSON key of a
 # service account with the "Cloud Datastore User" role on ramzyqnotes.

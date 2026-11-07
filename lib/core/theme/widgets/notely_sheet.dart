@@ -27,7 +27,9 @@ class NotelySheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            child,
+            // Scrolls once the content is taller than the space the sheet
+            // gets (short phones, large text, the keyboard).
+            Flexible(child: SingleChildScrollView(child: child)),
           ],
         ),
       ),

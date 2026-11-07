@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/features/account/presentation/change_password_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
@@ -121,6 +122,12 @@ class AccountSheet extends ConsumerWidget {
             detail: 'Export or import',
             onTap: () => _push(context, (c) => BackupView(authUser: user)),
           ),
+          if (user.hasPassword)
+            _SheetRow(
+              icon: Icons.password_outlined,
+              label: 'Change password',
+              onTap: () => _push(context, (c) => ChangePasswordView(authUser: user)),
+            ),
           _SheetRow(
             icon: Icons.insights_outlined,
             label: 'Usage analytics',

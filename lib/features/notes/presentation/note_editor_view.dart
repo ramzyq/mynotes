@@ -46,7 +46,8 @@ class NoteEditorView extends ConsumerStatefulWidget {
   ConsumerState<NoteEditorView> createState() => _NoteEditorViewState();
 }
 
-class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
+class _NoteEditorViewState extends ConsumerState<NoteEditorView>
+    with WidgetsBindingObserver {
   /// Latest known state of the note. Updated after lock/share operations so
   /// later actions never act on the stale copy the editor was opened with.
   Note? _note;
@@ -119,7 +120,18 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     if (note != null) {
       _loadBacklinks();
     }
+    WidgetsBinding.instance.addObserver(this);
+  }
 
+  /// The OS may kill a backgrounded app without warning, so pending edits
+  /// are written as soon as the app leaves the foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      if (_isDirty) _persist(quiet: true);
+    }
   }
 
   void _onContentChanged() {
@@ -374,6 +386,11 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Removed without going through _close (sign-out, a replaced route...):
+    // write what the autosave timer would have written. Best effort, as
+    // nothing is left on screen to report a failure to.
+    if (_autosaveTimer?.isActive ?? false) _persist(quiet: true);
     final note = widget.note;
     if (note != null) {
       if (_destroysOnClose) {
@@ -477,9 +494,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
     try {
       final current = _note;
       if (current == null) {
-        final created = await ref
-            .read(notesServiceProvider)
-            .createNote(
+        // _notesService, not ref: this also runs after dispose.
+        final created = await _notesService.createNote(
               uid: widget.authUser.uid,
               title: storedTitle,
               content: content,
@@ -517,9 +533,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView> {
           tags: _tags,
           reminderAt: _reminderAt,
         );
-        await ref
-            .read(notesServiceProvider)
-            .updateNote(uid: widget.authUser.uid, note: updated);
+        await _notesService.updateNote(uid: widget.authUser.uid, note: updated);
         _note = updated;
       }
       _savedFingerprint = fingerprint;

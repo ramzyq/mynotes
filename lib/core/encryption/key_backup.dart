@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/key_manager.dart';
+import 'package:mynotes/core/encryption/password_secrets.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 
 /// Where the encrypted master-key backup lives. Abstracted for tests.
 abstract class KeyBackupStore {
@@ -50,31 +53,45 @@ class KeySetupNeedsRecoveryCode extends KeySetupResult {
 /// Backs the master key up so it survives reinstalls and new devices.
 ///
 /// The backup document holds the master key encrypted under two independent
-/// "slots": one keyed from the account password (PBKDF2) for seamless sign-in
-/// on new devices, and one keyed from a random recovery code (HKDF) for
-/// Google sign-in users and password resets. The server never sees either
-/// secret, so it cannot decrypt the backup.
+/// "slots": one keyed from the account password for seamless sign-in on new
+/// devices, and one keyed from a random recovery code (HKDF) for Google
+/// sign-in users and lost passwords. The password slot is opened with the
+/// backup key from [PasswordSecretDeriver], which the sign-in server never
+/// receives (it only gets the separate auth secret), so the server cannot
+/// decrypt the backup.
 class KeyBackupService {
   KeyBackupService({
     required this.keyManager,
     required this.store,
     CryptoService? crypto,
-    this.passwordIterations = 210000,
+    this.publishedPublicKey,
   }) : _crypto = crypto ?? CryptoService();
 
   final KeyManager keyManager;
   final KeyBackupStore store;
+
+  /// The base64 sharing public key on the user's profile, if any. Used to
+  /// tell whether a legacy unscoped key on this device is this user's.
+  final Future<String?> Function(String uid)? publishedPublicKey;
   final CryptoService _crypto;
-  final int passwordIterations;
 
-  static const _formatVersion = 1;
+  static const _formatVersion = 2;
 
-  /// Make the master key available on this device for [uid].
-  Future<KeySetupResult> prepare({required String uid, String? password}) async {
+  /// Make the master key available on this device for [uid]. [passwordKey]
+  /// is the backup key derived at password sign-in (null for Google).
+  Future<KeySetupResult> prepare({required String uid, List<int>? passwordKey}) async {
     keyManager.setActiveUser(uid);
-    final local = await keyManager.loadMasterKey();
+    var local = await keyManager.loadMasterKey();
     final backup = await store.read(uid);
     final slots = _slots(backup);
+
+    if (local == null) {
+      final legacy = await keyManager.readLegacyMasterKey();
+      if (legacy != null && await _legacyKeyBelongsTo(uid, legacy)) {
+        await keyManager.adoptLegacyMasterKey(legacy);
+        local = await keyManager.loadMasterKey();
+      }
+    }
 
     if (local != null) {
       final masterBytes = await local.extractBytes();
@@ -82,20 +99,26 @@ class KeyBackupService {
         final code = generateRecoveryCode();
         await _writeSlots(uid, {
           'recovery': await _recoverySlot(uid, masterBytes, code),
-          if (password != null) 'password': await _passwordSlot(uid, masterBytes, password),
+          if (passwordKey != null) 'password': await _passwordSlot(uid, masterBytes, passwordKey),
         });
         return KeySetupShowRecoveryCode(code);
       }
-      if (password != null && !await _passwordSlotOpens(uid, slots['password'], password, masterBytes)) {
+      // A slot written by a newer app version (another KDF) is left alone:
+      // re-wrapping it here would downgrade it for every device.
+      final passwordSlot = slots['password'];
+      final newerSlot = passwordSlot != null && passwordSlot['kdf'] != PasswordSecretDeriver.kdfVersion;
+      if (passwordKey != null &&
+          !newerSlot &&
+          !await _passwordSlotOpens(uid, passwordSlot, passwordKey, masterBytes)) {
         // Missing, or the password changed since it was written: re-wrap.
-        await _writeSlots(uid, {'password': await _passwordSlot(uid, masterBytes, password)});
+        await _writeSlots(uid, {'password': await _passwordSlot(uid, masterBytes, passwordKey)});
       }
       return const KeySetupReady();
     }
 
     if (backup != null && slots.isNotEmpty) {
-      if (password != null && slots['password'] != null) {
-        final bytes = await _tryOpenPasswordSlot(uid, slots['password']!, password);
+      if (passwordKey != null && slots['password'] != null) {
+        final bytes = await _tryOpenPasswordSlot(uid, slots['password']!, passwordKey);
         if (bytes != null) {
           await keyManager.storeMasterKey(bytes);
           return const KeySetupReady();
@@ -109,17 +132,28 @@ class KeyBackupService {
     final code = generateRecoveryCode();
     await _writeSlots(uid, {
       'recovery': await _recoverySlot(uid, masterBytes, code),
-      if (password != null) 'password': await _passwordSlot(uid, masterBytes, password),
+      if (passwordKey != null) 'password': await _passwordSlot(uid, masterBytes, passwordKey),
     });
     return KeySetupShowRecoveryCode(code);
   }
 
+  /// An older app version kept one unscoped key per device, so on a shared
+  /// device it may be another account's. Adopt it only if it derives the
+  /// public key published on this user's profile. Without a published key
+  /// there is no proof (a brand-new account has none yet either), so the
+  /// key is left for its owner and this account gets its own.
+  Future<bool> _legacyKeyBelongsTo(String uid, List<int> legacy) async {
+    final published = await publishedPublicKey?.call(uid);
+    if (published == null) return false;
+    return base64Encode(await keyManager.publicKeyForMasterKey(legacy)) == published;
+  }
+
   /// Restore the master key from the recovery code. Returns false if the
-  /// code is wrong. Re-wraps the password slot when [password] is known.
+  /// code is wrong. Re-wraps the password slot when [passwordKey] is known.
   Future<bool> recoverWithCode({
     required String uid,
     required String code,
-    String? password,
+    List<int>? passwordKey,
   }) async {
     keyManager.setActiveUser(uid);
     final slot = _slots(await store.read(uid))['recovery'];
@@ -132,8 +166,8 @@ class KeyBackupService {
         aad: _aad(uid, 'recovery'),
       );
       await keyManager.storeMasterKey(bytes);
-      if (password != null) {
-        await _writeSlots(uid, {'password': await _passwordSlot(uid, bytes, password)});
+      if (passwordKey != null) {
+        await _writeSlots(uid, {'password': await _passwordSlot(uid, bytes, passwordKey)});
       }
       return true;
     } on SecretBoxAuthenticationError {
@@ -141,6 +175,16 @@ class KeyBackupService {
     } on FormatException {
       return false;
     }
+  }
+
+  /// Re-wrap the password slot for a new password (after a password change
+  /// on a device that holds the master key). The recovery slot is untouched.
+  Future<void> setPasswordSlot({required String uid, required List<int> passwordKey}) async {
+    keyManager.setActiveUser(uid);
+    final master = await keyManager.requireMasterKey();
+    await _writeSlots(uid, {
+      'password': await _passwordSlot(uid, await master.extractBytes(), passwordKey),
+    });
   }
 
   /// Replace the recovery code (e.g. if the user lost the old one while
@@ -232,30 +276,28 @@ class KeyBackupService {
     };
   }
 
-  Future<Map<String, dynamic>> _passwordSlot(String uid, List<int> master, String password) async {
-    final salt = _crypto.generateSalt();
-    final kek = await _crypto.deriveKey(
-      password: password,
-      salt: salt,
-      iterations: passwordIterations,
-    );
+  Future<Map<String, dynamic>> _passwordSlot(String uid, List<int> master, List<int> passwordKey) async {
     return {
-      'kdf': 'pbkdf2-sha256',
-      'iterations': passwordIterations,
-      'salt': base64Encode(salt),
-      'wrapped': await _crypto.seal(key: kek, data: master, aad: _aad(uid, 'password')),
+      // The key is derived on the client (see PasswordSecretDeriver), so the
+      // slot carries no salt or iteration count of its own.
+      'kdf': PasswordSecretDeriver.kdfVersion,
+      'wrapped': await _crypto.seal(key: SecretKey(passwordKey), data: master, aad: _aad(uid, 'password')),
     };
   }
 
-  Future<List<int>?> _tryOpenPasswordSlot(String uid, Map<String, dynamic> slot, String password) async {
-    try {
-      final kek = await _crypto.deriveKey(
-        password: password,
-        salt: base64Decode(slot['salt'] as String),
-        iterations: (slot['iterations'] as num?)?.toInt() ?? passwordIterations,
+  Future<List<int>?> _tryOpenPasswordSlot(String uid, Map<String, dynamic> slot, List<int> passwordKey) async {
+    // A slot from another derivation can't open with this key. Don't try:
+    // the caller falls back to the recovery code, as for a wrong password.
+    if (slot['kdf'] != PasswordSecretDeriver.kdfVersion) {
+      AppErrorHandler().handle(
+        StateError('Password slot uses unsupported KDF ${slot['kdf']}'),
+        StackTrace.current,
       );
+      return null;
+    }
+    try {
       return await _crypto.open(
-        key: kek,
+        key: SecretKey(passwordKey),
         sealed: slot['wrapped'] as String,
         aad: _aad(uid, 'password'),
       );
@@ -269,15 +311,12 @@ class KeyBackupService {
   Future<bool> _passwordSlotOpens(
     String uid,
     Map<String, dynamic>? slot,
-    String password,
+    List<int> passwordKey,
     List<int> expected,
   ) async {
     if (slot == null) return false;
-    final bytes = await _tryOpenPasswordSlot(uid, slot, password);
-    if (bytes == null || bytes.length != expected.length) return false;
-    for (var i = 0; i < bytes.length; i++) {
-      if (bytes[i] != expected[i]) return false;
-    }
-    return true;
+    final bytes = await _tryOpenPasswordSlot(uid, slot, passwordKey);
+    // Already authenticated by AES-GCM, so no need for a constant-time compare.
+    return bytes != null && listEquals(bytes, expected);
   }
 }

@@ -35,6 +35,25 @@ class _MockAuthProvider implements AuthProvider {
   Future<AuthUser> signInWithGoogle() {
     throw UnimplementedError();
   }
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {}
+  @override
+  Future<String> verifyPasswordResetCode(String code) => throw UnimplementedError();
+  @override
+  Future<void> confirmPasswordReset({required String code, required String newPassword}) =>
+      throw UnimplementedError();
+  @override
+  Future<void> changePassword({required String currentPassword, required String newPassword}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> replacePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) =>
+      throw UnimplementedError();
 }
 
 void main() {

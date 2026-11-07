@@ -7,6 +7,7 @@ import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
+import 'package:mynotes/core/encryption/password_secrets.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 
 class RegisterView extends ConsumerStatefulWidget {
@@ -71,9 +72,9 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < PasswordSecretDeriver.minLength) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters')),
+        const SnackBar(content: Text('Password must be at least ${PasswordSecretDeriver.minLength} characters')),
       );
       return;
     }
@@ -87,12 +88,18 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
 
     setState(() => _isLoading = true);
 
-    ref.read(pendingPasswordProvider.notifier).state = password;
+    // Firebase gets only the auth secret; the backup key stays in memory
+    // until the key setup gate has used it, then is cleared.
+    final secrets = await ref
+        .read(passwordSecretDeriverProvider)
+        .derive(email: email, password: password);
+    if (!mounted) return;
+    ref.read(pendingPasswordKeyProvider.notifier).state = secrets.backupKey;
     var signedIn = false;
     try {
       await ref.read(authServiceProvider).createUser(
         email: email,
-        password: password,
+        password: secrets.authSecret,
         displayName: firstName,
       );
       signedIn = true;
@@ -106,7 +113,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     } on WeakPasswordAuthException {
       if (!mounted) return;
       messenger.showSnackBar(
-        const SnackBar(content: Text('Password must be at least 6 characters.')),
+        const SnackBar(content: Text('Password must be at least ${PasswordSecretDeriver.minLength} characters.')),
       );
     } on UserAlreadyExistsAuthException {
       if (!mounted) return;
@@ -124,7 +131,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
         const SnackBar(content: Text('Registration failed. Please try again.')),
       );
     } finally {
-      if (!signedIn && mounted) ref.read(pendingPasswordProvider.notifier).state = null;
+      if (!signedIn && mounted) ref.read(pendingPasswordKeyProvider.notifier).state = null;
       if (mounted) {
         setState(() => _isLoading = false);
       }

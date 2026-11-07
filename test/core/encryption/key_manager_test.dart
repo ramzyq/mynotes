@@ -35,14 +35,17 @@ void main() {
     expect(await (await keyManager.requireMasterKey()).extractBytes(), aliceKey);
   });
 
-  test('a legacy unscoped key is adopted by the signed-in user', () async {
+  test('a legacy unscoped key is never adopted implicitly', () async {
     FlutterSecureStorage.setMockInitialValues({
       'master_key': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     });
     final keyManager = KeyManager()..setActiveUser('u1');
-    expect(await keyManager.hasMasterKey(), isTrue);
-    keyManager.setActiveUser('u2');
     expect(await keyManager.hasMasterKey(), isFalse);
+    expect(await keyManager.readLegacyMasterKey(), hasLength(32));
+
+    await keyManager.adoptLegacyMasterKey((await keyManager.readLegacyMasterKey())!);
+    expect(await keyManager.hasMasterKey(), isTrue);
+    expect(await keyManager.readLegacyMasterKey(), isNull);
   });
 
   test('derives 256-bit key from password', () async {
