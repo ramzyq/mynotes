@@ -5,7 +5,7 @@
 const assert = require('assert');
 const { initializeApp, deleteApp } = require('firebase-admin/app');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
-const { deleteExpiredNotes } = require('../scripts/expire');
+const { deleteExpiredNotes, TRASH_RETENTION_DAYS } = require('../scripts/expire');
 
 const quiet = () => {};
 let app;
@@ -46,11 +46,11 @@ describe('deleteExpiredNotes', function () {
     await db.doc('users/u2/notes/gone').set({ selfDestructAt: at(-5) });
 
     const dry = await deleteExpiredNotes(db, { apply: false, now, log: quiet });
-    assert.deepStrictEqual(dry, { deleted: 2, failed: 0 });
+    assert.deepStrictEqual(dry, { deleted: 2, purged: 0, failed: 0 });
     assert.ok((await notes.doc('expired').get()).exists, 'dry run deletes nothing');
 
     const result = await deleteExpiredNotes(db, { now, log: quiet });
-    assert.deepStrictEqual(result, { deleted: 2, failed: 0 });
+    assert.deepStrictEqual(result, { deleted: 2, purged: 0, failed: 0 });
     assert.strictEqual((await notes.doc('expired').get()).exists, false);
     assert.strictEqual((await notes.doc('expired').collection('versions').get()).size, 0);
     assert.strictEqual((await notes.doc('expired').collection('comments').get()).size, 0);
@@ -58,6 +58,30 @@ describe('deleteExpiredNotes', function () {
     assert.strictEqual((await db.collection('shareLinks/tok/requests').get()).size, 0);
     assert.strictEqual((await db.doc('users/u2/notes/gone').get()).exists, false);
     for (const id of ['future', 'never', 'legacy']) {
+      assert.ok((await notes.doc(id).get()).exists, `${id} is kept`);
+    }
+  });
+
+  it('purges notes trashed longer than the retention period', async () => {
+    const day = 24 * 60 * 60 * 1000;
+    const notes = db.collection('users').doc('u1').collection('notes');
+    await notes.doc('old').set({ deletedAt: at(-(TRASH_RETENTION_DAYS + 1) * day) });
+    await notes.doc('old').collection('versions').doc('v').set({ x: 1 });
+    await notes.doc('recent').set({ deletedAt: at(-1 * day) });
+    await notes.doc('live').set({ deletedAt: null });
+    // Both expired and long trashed: deleted once, counted as expired.
+    await notes.doc('both').set({ deletedAt: at(-40 * day), selfDestructAt: at(-1000) });
+
+    const dry = await deleteExpiredNotes(db, { apply: false, now, log: quiet });
+    assert.deepStrictEqual(dry, { deleted: 1, purged: 1, failed: 0 });
+
+    const result = await deleteExpiredNotes(db, { now, log: quiet });
+    assert.deepStrictEqual(result, { deleted: 1, purged: 1, failed: 0 });
+    for (const id of ['old', 'both']) {
+      assert.strictEqual((await notes.doc(id).get()).exists, false, `${id} is deleted`);
+    }
+    assert.strictEqual((await notes.doc('old').collection('versions').get()).size, 0);
+    for (const id of ['recent', 'live']) {
       assert.ok((await notes.doc(id).get()).exists, `${id} is kept`);
     }
   });

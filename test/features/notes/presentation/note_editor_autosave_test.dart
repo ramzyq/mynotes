@@ -162,6 +162,42 @@ void main() {
     expect(find.text('open'), findsOneWidget);
   });
 
+  testWidgets('backgrounding the app saves pending edits at once', (tester) async {
+    await open(tester, note: _note());
+
+    await tester.enterText(_bodyField(), 'eggs, flour');
+    await tester.pump(const Duration(milliseconds: 200));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+
+    final saved = verify(() => service.updateNote(uid: 'u1', note: captureAny(named: 'note')))
+        .captured
+        .single as Note;
+    expect(saved.content, 'eggs, flour');
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('an editor removed without closing still saves pending edits', (tester) async {
+    await open(tester, note: _note());
+
+    await tester.enterText(_bodyField(), 'eggs, salt');
+    await tester.pump(const Duration(milliseconds: 200));
+    // e.g. sign-out replaces the whole tree before the autosave fires.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+
+    final saved = verify(() => service.updateNote(uid: 'u1', note: captureAny(named: 'note')))
+        .captured
+        .single as Note;
+    expect(saved.content, 'eggs, salt');
+  });
+
   testWidgets('a failed save on close asks before discarding', (tester) async {
     when(() => service.updateNote(uid: any(named: 'uid'), note: any(named: 'note')))
         .thenThrow(Exception('offline'));

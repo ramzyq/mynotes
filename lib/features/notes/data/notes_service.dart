@@ -96,11 +96,9 @@ class NotesService {
     return key;
   }
 
-  /// Current key for [noteId] owned by [uid] (used when sharing).
-  Future<SecretKey> ownNoteKey(String uid, String noteId) async {
-    final snap = await _noteRef(uid, noteId).get();
-    return _requireOwnNoteKey(Note.fromFirestore(snap));
-  }
+  /// Current key of one of the user's own notes, read from [note] as given
+  /// (e.g. a snapshot taken inside a transaction).
+  Future<SecretKey> ownNoteKeyOf(Note note) => _requireOwnNoteKey(note);
 
   Future<List<int>?> publicKeyOf(String uid) async {
     final cached = _publicKeys[uid];
@@ -199,7 +197,12 @@ class NotesService {
     }
     try {
       final key = await _ownNoteKey(note);
-      if (key == null) return note; // PIN-locked; stays sealed until unlocked.
+      if (key == null) {
+        if (note.hasPinLock) return note; // Stays sealed until unlocked.
+        // Encrypted but no key at all: must never look like an empty,
+        // editable note, or saving it would overwrite the ciphertext.
+        return note.copyWith(decryptionFailed: true);
+      }
       final decrypted = await note.decryptNote(key, crypto);
       if (note.encryptionVersion < Note.currentEncryptionVersion || note.hasLegacyPlaintext) {
         _scheduleUpgrade(uid, decrypted, key);
@@ -427,6 +430,11 @@ class NotesService {
       var key = await _ownNoteKey(existing);
       if (key == null) {
         if (existing.hasPinLock) throw const NoteException('Unlock this note first.');
+        // Only a never-encrypted (v0) note may get its first key here; a
+        // sealed note without a key would lose its contents.
+        if (existing.isSealed) {
+          throw const NoteException("This note can't be decrypted on this device.");
+        }
         key = keyManager.generateNoteKey();
         updates[NoteFields.wrappedKey] = await keyManager.wrapNoteKey(key);
         updates[NoteFields.keyGen] = 1;
@@ -678,19 +686,25 @@ class NotesService {
 
   Future<void> lockWithPin({required String uid, required Note note, required String pin}) async {
     final ref = _noteRef(uid, note.id);
-    final existing = Note.fromFirestore(await ref.get());
-    final key = await _requireOwnNoteKey(existing);
     final salt = crypto.generateSalt();
     final kek = await _pinKek(note.id, pin, salt);
-    await ref.update({
-      NoteFields.isLocked: true,
-      NoteFields.pinWrappedKey: await keyManager.wrapKeyWith(wrappingKey: kek, key: key, aad: _pinAad(note.id)),
-      NoteFields.pinSalt: base64Encode(salt),
-      NoteFields.wrappedKey: FieldValue.delete(),
-      NoteFields.pinHash: FieldValue.delete(),
+    // In a transaction so a concurrent key rotation can't leave the PIN
+    // wrapping an older key generation.
+    late ({int gen, SecretKey key}) locked;
+    await firestore.runTransaction((tx) async {
+      final existing = Note.fromFirestore(await tx.get(ref));
+      final key = await _requireOwnNoteKey(existing);
+      tx.update(ref, {
+        NoteFields.isLocked: true,
+        NoteFields.pinWrappedKey: await keyManager.wrapKeyWith(wrappingKey: kek, key: key, aad: _pinAad(note.id)),
+        NoteFields.pinSalt: base64Encode(salt),
+        NoteFields.wrappedKey: FieldValue.delete(),
+        NoteFields.pinHash: FieldValue.delete(),
+      });
+      locked = (gen: existing.keyGen, key: key);
     });
     _pinKeks[note.id] = kek;
-    _noteKeys[note.id] = (gen: existing.keyGen, key: key);
+    _noteKeys[note.id] = locked;
   }
 
   /// Raw bytes of the PIN-derived key for a note unlocked in this session,
@@ -776,7 +790,7 @@ class NotesService {
     _pinKeks.remove(note.id);
   }
 
-  /// Forget an unlocked PIN note's key (editor closed / app backgrounded).
+  /// Forget an unlocked PIN note's key (called when its editor closes).
   void relock(String noteId) {
     if (_pinKeks.remove(noteId) != null) {
       _noteKeys.remove(noteId);
@@ -831,9 +845,14 @@ class NotesService {
         );
       }
 
-      final encryptedKeys = <String, String>{};
+      // Per-field writes, with an explicit delete for everyone removed, so
+      // a removed collaborator's wrapped key can never survive a rotation.
+      final keyUpdates = <String, dynamic>{
+        for (final removed in (sealed.encryptedKeys?.keys ?? const <String>[]))
+          if (!publicKeys.containsKey(removed)) '${NoteFields.encryptedKeys}.$removed': FieldValue.delete(),
+      };
       for (final entry in publicKeys.entries) {
-        encryptedKeys[entry.key] = await keyManager.wrapNoteKeyForCollaborator(
+        keyUpdates['${NoteFields.encryptedKeys}.${entry.key}'] = await keyManager.wrapNoteKeyForCollaborator(
           noteKey: newKey,
           recipientPublicKey: entry.value,
         );
@@ -844,7 +863,7 @@ class NotesService {
         NoteFields.keyGen: newGen,
         NoteFields.keyHistory: history,
         NoteFields.collaborators: publicKeys.keys.toList(),
-        NoteFields.encryptedKeys: encryptedKeys,
+        ...keyUpdates,
       };
       final kek = _pinKeks[noteId];
       if (sealed.pinWrappedKey != null) {

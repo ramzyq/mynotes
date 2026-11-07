@@ -12,7 +12,12 @@ import 'package:timezone/timezone.dart' as tz;
 /// Reminder times live in each note's encrypted metadata, so every signed-in
 /// device learns about them when notes sync, and [sync] makes the scheduled
 /// notifications on this device match. Nothing about reminders is sent to a
-/// server. Notifications show the note title unless the note is locked.
+/// server.
+///
+/// Notifications never contain note text: the OS stores scheduled
+/// notifications in plaintext and shows them on the lock screen, so a title
+/// there would leave the end-to-end encrypted part of the app. Tapping one
+/// opens the note, which goes through the usual unlock.
 class ReminderService {
   ReminderService({FlutterLocalNotificationsPlugin? plugin})
       : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
@@ -21,7 +26,12 @@ class ReminderService {
   bool _initialized = false;
 
   /// Notification ids currently scheduled by [sync], by note id.
-  final Map<String, ({int id, DateTime at, String title})> _scheduled = {};
+  final Map<String, ({int id, DateTime at})> _scheduled = {};
+
+  /// What a reminder notification shows. Deliberately the same for every
+  /// note (see the class comment).
+  static const notificationTitle = 'Notely reminder';
+  static const notificationBody = 'Tap to open your note.';
 
   static const _channel = AndroidNotificationDetails(
     'note_reminders',
@@ -114,14 +124,10 @@ class ReminderService {
   Future<void> sync(Iterable<Note> notes, {DateTime? now}) async {
     if (!_initialized) return;
     final at = now ?? DateTime.now();
-    final wanted = <String, ({int id, DateTime at, String title})>{
+    final wanted = <String, ({int id, DateTime at})>{
       for (final note in notes)
         if (note.reminderAt != null && note.reminderAt!.isAfter(at) && !note.isTrashed && !note.isExpired)
-          note.id: (
-            id: idFor(note.id),
-            at: note.reminderAt!,
-            title: note.isLocked ? 'Locked note' : note.displayTitle,
-          ),
+          note.id: (id: idFor(note.id), at: note.reminderAt!),
     };
     try {
       for (final entry in _scheduled.entries.toList()) {
@@ -134,8 +140,8 @@ class ReminderService {
         if (_scheduled[entry.key] == entry.value) continue;
         await _plugin.zonedSchedule(
           entry.value.id,
-          entry.value.title,
-          'Reminder from Notely',
+          notificationTitle,
+          notificationBody,
           tz.TZDateTime.from(entry.value.at.toUtc(), tz.UTC),
           const NotificationDetails(
             android: _channel,

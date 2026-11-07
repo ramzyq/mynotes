@@ -104,4 +104,22 @@ void main() {
     });
     expect(await service.watchNotes(uid).first, isEmpty);
   });
+
+  test('an encrypted note whose key is missing is never overwritten', () async {
+    final (service, db) = await _service();
+    final created = await service.createNote(uid: uid, title: 'keep', content: 'me', colorIndex: 0);
+    await _notes(db).doc(created.id).update({NoteFields.wrappedKey: FieldValue.delete()});
+    service.clearCaches();
+    final before = (await _notes(db).doc(created.id).get()).data()![NoteFields.encryptedContent];
+
+    final listed = (await service.watchNotes(uid).first).single;
+    expect(listed.decryptionFailed, isTrue);
+
+    await expectLater(
+      service.updateNote(uid: uid, note: created.copyWith(content: 'overwrite')),
+      throwsA(isA<NoteException>()),
+    );
+    final after = (await _notes(db).doc(created.id).get()).data()![NoteFields.encryptedContent];
+    expect(after, before);
+  });
 }
