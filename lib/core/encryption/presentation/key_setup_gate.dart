@@ -47,10 +47,10 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
   Future<void> _prepare() async {
     setState(() => _phase = _Phase.loading);
     try {
-      final password = ref.read(pendingPasswordProvider);
+      final passwordKey = ref.read(pendingPasswordKeyProvider);
       final result = await ref
           .read(keyBackupServiceProvider)
-          .prepare(uid: widget.authUser.uid, password: password);
+          .prepare(uid: widget.authUser.uid, passwordKey: passwordKey);
       if (!mounted) return;
       switch (result) {
         case KeySetupReady():
@@ -63,7 +63,7 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
             _phase = _Phase.showCode;
           });
         case KeySetupNeedsRecoveryCode():
-          // Keep the password: recovery re-wraps the password slot with it.
+          // Keep the password key: recovery re-wraps the password slot with it.
           setState(() => _phase = _Phase.enterCode);
       }
     } catch (error, stack) {
@@ -73,7 +73,7 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
   }
 
   void _clearPassword() {
-    ref.read(pendingPasswordProvider.notifier).state = null;
+    ref.read(pendingPasswordKeyProvider.notifier).state = null;
   }
 
   Future<void> _submitCode() async {
@@ -85,7 +85,7 @@ class _KeySetupGateState extends ConsumerState<KeySetupGate> {
       final ok = await ref.read(keyBackupServiceProvider).recoverWithCode(
             uid: widget.authUser.uid,
             code: _codeController.text,
-            password: ref.read(pendingPasswordProvider),
+            passwordKey: ref.read(pendingPasswordKeyProvider),
           );
       if (!mounted) return;
       if (ok) {

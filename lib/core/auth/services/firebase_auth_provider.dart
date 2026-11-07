@@ -1,7 +1,7 @@
 import 'package:mynotes/core/auth/models/auth_user.dart';
-import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException;
+import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, InvalidResetCodeAuthException;
 import 'package:mynotes/core/auth/services/auth_provider.dart';
-import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
+import 'package:firebase_auth/firebase_auth.dart' show EmailAuthProvider, FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 
@@ -79,7 +79,9 @@ class FirebaseAuthProvider implements AuthProvider {
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found') {
         throw UserNotFoundAuthException();
-      } else if (e.code == 'wrong-password') {
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        // invalid-credential is what Firebase reports for a wrong password
+        // when email enumeration protection is on.
         throw WrongPasswordAuthException();
       } else if (e.code == 'too-many-requests') {
         throw TooManyRequestsAuthException();
@@ -123,6 +125,62 @@ class FirebaseAuthProvider implements AuthProvider {
       await user.reload();
     } else {
       throw UserNotLoggedInAuthException();
+    }
+  }
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'invalid-email') throw InvalidCredentialAuthException();
+      if (e.code == 'too-many-requests') throw TooManyRequestsAuthException();
+      // user-not-found is not reported, so the screen can't be used to
+      // find out which emails have accounts.
+      if (e.code == 'user-not-found') return;
+      throw GenericAuthException();
+    }
+  }
+
+  @override
+  Future<String> verifyPasswordResetCode(String code) async {
+    try {
+      return await FirebaseAuth.instance.verifyPasswordResetCode(code);
+    } on FirebaseAuthException catch (e) {
+      throw _resetException(e);
+    }
+  }
+
+  @override
+  Future<void> confirmPasswordReset({required String code, required String newPassword}) async {
+    try {
+      await FirebaseAuth.instance.confirmPasswordReset(code: code, newPassword: newPassword);
+    } on FirebaseAuthException catch (e) {
+      throw _resetException(e);
+    }
+  }
+
+  static Exception _resetException(FirebaseAuthException e) => switch (e.code) {
+        'expired-action-code' || 'invalid-action-code' || 'user-not-found' || 'user-disabled' =>
+          InvalidResetCodeAuthException(),
+        'too-many-requests' => TooManyRequestsAuthException(),
+        _ => GenericAuthException(),
+      };
+
+  @override
+  Future<void> changePassword({required String currentPassword, required String newPassword}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) throw UserNotLoggedInAuthException();
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: currentPassword),
+      );
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') throw WrongPasswordAuthException();
+      if (e.code == 'too-many-requests') throw TooManyRequestsAuthException();
+      throw GenericAuthException();
     }
   }
 

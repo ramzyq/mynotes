@@ -86,7 +86,7 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
       if (previousUid == uid) return;
       ref.read(keyManagerProvider).setActiveUser(uid);
       ref.read(notesServiceProvider).clearCaches();
-      if (uid == null) ref.read(pendingPasswordProvider.notifier).state = null;
+      if (uid == null) ref.read(pendingPasswordKeyProvider.notifier).state = null;
     });
     final authState = ref.watch(authStateProvider);
     return authState.when(

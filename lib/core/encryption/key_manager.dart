@@ -61,27 +61,35 @@ class KeyManager {
     return uid;
   }
 
-  /// Load this user's master key from secure storage, adopting a key stored
-  /// by an older app version (which kept a single unscoped key) if present.
+  /// Load this user's master key from secure storage.
   Future<SecretKey?> loadMasterKey() async {
     if (_cachedMasterKey != null) return _cachedMasterKey;
     final uid = _uid;
     if (uid == null) return null;
-
-    var stored = await _storage.read(key: _masterKeyKey(uid));
-    if (stored == null) {
-      final legacy = await _storage.read(key: _legacyMasterKeyKey);
-      if (legacy != null) {
-        await _storage.write(key: _masterKeyKey(uid), value: legacy);
-        await _storage.delete(key: _legacyMasterKeyKey);
-        await _storage.delete(key: _legacySaltKey);
-        stored = legacy;
-      }
-    }
+    final stored = await _storage.read(key: _masterKeyKey(uid));
     if (stored == null) return null;
     _cachedMasterKey = SecretKey(base64Decode(stored));
     return _cachedMasterKey;
   }
+
+  /// The single unscoped key kept by older app versions, if still present.
+  /// It is not tied to any account, so it is only adopted (see
+  /// [adoptLegacyMasterKey]) once the caller has shown it is this user's.
+  Future<List<int>?> readLegacyMasterKey() async {
+    final legacy = await _storage.read(key: _legacyMasterKeyKey);
+    return legacy == null ? null : base64Decode(legacy);
+  }
+
+  /// Make the legacy key this user's master key and remove the legacy copy.
+  Future<void> adoptLegacyMasterKey(List<int> bytes) async {
+    await storeMasterKey(bytes);
+    await _storage.delete(key: _legacyMasterKeyKey);
+    await _storage.delete(key: _legacySaltKey);
+  }
+
+  /// The sharing public key that [masterKeyBytes] derives.
+  Future<List<int>> publicKeyForMasterKey(List<int> masterKeyBytes) async =>
+      _sharing.publicKeyOf(await _sharing.keyPairFromMasterKey(masterKeyBytes));
 
   Future<bool> hasMasterKey() async => await loadMasterKey() != null;
 

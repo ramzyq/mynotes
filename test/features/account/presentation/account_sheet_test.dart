@@ -16,14 +16,14 @@ Note _n(String id, {bool archived = false}) => Note(
       id: id, title: 'T$id', content: 'c', colorIndex: 0, isPinned: false,
       isArchived: archived, createdAt: DateTime(2024, 1, 1), updatedAt: DateTime(2024, 1, 1));
 
-Widget _wrap() => ProviderScope(
+Widget _wrap({AuthUser? user}) => ProviderScope(
       overrides: [
         authStateProvider.overrideWith((ref) => Stream.value(_user())),
         notesProvider.overrideWith((ref, uid) => Stream.value([_n('a'), _n('b', archived: true)])),
         sharedNotesProvider.overrideWith((ref, uid) => Stream.value(const <Note>[])),
         dueCountProvider.overrideWith((ref, uid) => Stream.value(2)),
       ],
-      child: MaterialApp(theme: buildNotelyTheme(Brightness.light), home: Scaffold(body: AccountSheet(authUser: _user()))),
+      child: MaterialApp(theme: buildNotelyTheme(Brightness.light), home: Scaffold(body: AccountSheet(authUser: user ?? _user()))),
     );
 
 void main() {
@@ -43,6 +43,18 @@ void main() {
     expect(find.text('Trash'), findsOneWidget);
     expect(find.text('Backup'), findsOneWidget);
     expect(find.text('Sign out'), findsOneWidget);
+  });
+
+  testWidgets('change password is offered only to password accounts', (tester) async {
+    await tester.pumpWidget(_wrap());
+    await tester.pumpAndSettle();
+    expect(find.text('Change password'), findsNothing, reason: 'Google-only account');
+
+    await tester.pumpWidget(_wrap(
+      user: const AuthUser(uid: 'u1', email: 'maya@example.com', isEmailVerified: true, hasPassword: true),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Change password'), findsOneWidget);
   });
 
   testWidgets('appearance row toggles theme mode', (tester) async {
