@@ -37,9 +37,12 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // TODO(release signing): replace with an upload key before
+            // publishing (see README, "Launch checklist"). Debug keys for now,
+            // so release builds run and App Links verify against the debug
+            // fingerprint in hosting/public/.well-known/assetlinks.json.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }

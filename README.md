@@ -54,11 +54,12 @@ Notely is designed with privacy as a default, not an afterthought.
 
 ### Prerequisites
 
-- Flutter SDK 3.10+
-- A Firebase project with Firestore, Auth, and Storage enabled
-- Google Services configuration files:
-  - Android: `android/app/google-services.json`
-  - iOS: `ios/Runner/GoogleService-Info.plist`
+- Flutter SDK 3.10+ (CI uses 3.41)
+- The `ramzyqnotes` Firebase project (Firestore, Auth, Hosting). Firebase is
+  configured from `lib/firebase_options.dart`; Android also reads
+  `android/app/google-services.json`. iOS needs no `GoogleService-Info.plist`:
+  the Google Sign-In client is set in `ios/Runner/Info.plist`.
+- iOS 15.5+ (Firebase and ML Kit), Android 7.0+ (API 24).
 
 ### Setup
 
@@ -74,9 +75,27 @@ flutter pub get
 flutter run
 ```
 
-### Password reset email
+### Hosting, share links and email links
 
-In the Firebase console, open **Authentication → Templates → Password reset** and edit the message so it tells people to **copy the link into Notely instead of opening it** (for example: "Copy this link and paste it into Notely's *Reset password* screen. Don't set your password on the web page."). The app completes the reset itself; a password set on Firebase's hosted page is stored as typed and has to be replaced from the app afterwards.
+`hosting/public` is deployed to **https://ramzyqnotes.web.app**:
+
+| Path | What it does |
+|---|---|
+| `/join/<token>` | Share link landing page with an *Open in Notely* button (`notely://join/<token>`). |
+| `/auth/action` | Firebase Auth email action handler. Password reset opens the app (no password field, ever); email verification and recovery are applied on the page. |
+| `/.well-known/assetlinks.json` | Android App Links verification, so `/join/...` and `/auth/action` open the app directly. |
+
+```bash
+firebase deploy --only hosting
+```
+
+In the Firebase console, open **Authentication → Templates**, choose any
+template, click the pencil, then **Customize action URL**, and set it to
+`https://ramzyqnotes.web.app/auth/action`. This applies to every email
+template. Without it, reset emails link to Firebase's own page, which asks for
+the new password on the web; the app can repair such an account afterwards
+(*Already set a new password on the web page?*), but the action URL avoids
+the problem.
 
 ### Firebase Rules, Indexes, and Functions
 
@@ -127,6 +146,34 @@ cd tests
 npm install
 firebase emulators:exec --only firestore 'npm test'
 ```
+
+## Launch checklist
+
+Done in the repo: release builds (R8 rules, Crashlytics plugin), App Links,
+the `notely://` scheme, iOS deployment target and Podfile, iOS Google Sign-In,
+backup exclusion, hosting with security headers.
+
+Still needed, outside the repo:
+
+- [ ] **Email action URL** in the Firebase console (see *Hosting, share links and email links*).
+- [ ] **Release signing (Android).** Create an upload key, add a `signingConfigs`
+      block in `android/app/build.gradle.kts`, and add the upload key's and
+      Play App Signing's SHA-256 fingerprints to
+      `hosting/public/.well-known/assetlinks.json` (and their SHA-1 to the
+      Firebase Android app for Google Sign-In). Until then release builds are
+      signed with the debug key.
+- [ ] **Application ID.** `com.flutter.mynotes` (Android) / `com.flutter.mynotes`
+      (iOS) is permanent once published. To change it, register the new ID as a
+      Firebase app and regenerate `firebase_options.dart` with `flutterfire configure`.
+- [ ] **Apple Team ID (iOS Universal Links).** Set `DEVELOPMENT_TEAM`, add the
+      Associated Domains capability (`applinks:ramzyqnotes.web.app`), and add
+      `hosting/public/.well-known/apple-app-site-association` with
+      `<TEAMID>.com.flutter.mynotes`. Until then iOS opens links through the
+      *Open in Notely* button.
+- [ ] **App Check** (Play Integrity / App Attest) once the app is signed for release.
+- [ ] Manual test on real devices against production: register, verify email,
+      sign out/in, change password, reset password from the email link, share by
+      email and by link, biometric unlock.
 
 ## Project Structure
 

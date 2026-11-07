@@ -63,6 +63,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '86066851116',
     projectId: 'ramzyqnotes',
     storageBucket: 'ramzyqnotes.firebasestorage.app',
+    iosClientId: '86066851116-vcvsj1lcqh7fc8m4e7jtolclgluaact3.apps.googleusercontent.com',
     iosBundleId: 'com.flutter.mynotes',
   );
 }

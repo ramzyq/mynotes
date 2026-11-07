@@ -1,0 +1,68 @@
+@font-face { font-family: 'Geist'; src: url('/fonts/Geist-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Geist'; src: url('/fonts/Geist-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Instrument Serif'; src: url('/fonts/InstrumentSerif-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+
+/* The app's paper-and-ink palette (lib/core/theme/notely_tokens.dart). */
+:root {
+  --bg: #F7F4EE;
+  --surface: #FDFBF7;
+  --surface-2: #EFE9DF;
+  --border: rgba(31, 27, 22, 0.08);
+  --border-strong: rgba(31, 27, 22, 0.14);
+  --text: #1F1B16;
+  --text-2: #5E554A;
+  --text-3: #7B7266;
+  --ink: #2F4AA0;
+  --ink-deep: #263C85;
+  --on-ink: #FFFFFF;
+  --danger: #DC2626;
+  --success: #16A34A;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161513;
+    --surface: #1C1A18;
+    --surface-2: #262421;
+    --border: rgba(239, 233, 222, 0.08);
+    --border-strong: rgba(239, 233, 222, 0.14);
+    --text: #EFE9DE;
+    --text-2: #AAA398;
+    --text-3: #8A847A;
+    --ink: #8FA6E8;
+    --ink-deep: #6F88D6;
+    --on-ink: #161513;
+    --danger: #E5484D;
+    --success: #4CC38A;
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 16px/1.5 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  display: flex;
+  justify-content: center;
+}
+main { width: 100%; max-width: 440px; padding: 48px 16px 32px; }
+.wordmark { font: 400 20px/1 'Instrument Serif', Georgia, serif; font-style: italic; margin: 0 0 48px; }
+h1 { font: 400 34px/1.15 'Instrument Serif', Georgia, serif; margin: 0 0 12px; letter-spacing: -0.01em; }
+p { margin: 0 0 16px; color: var(--text-2); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin: 24px 0; }
+.card p:last-child { margin-bottom: 0; }
+.button {
+  display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px;
+  border-radius: 10px; border: 0; background: var(--ink); color: var(--on-ink);
+  font: 500 15px/1 'Geist', system-ui, sans-serif; text-decoration: none; cursor: pointer;
+}
+.button:hover { background: var(--ink-deep); }
+.button.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); margin-top: 12px; }
+.button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.small { font-size: 13px; color: var(--text-3); }
+.status { font-weight: 500; color: var(--text); }
+.status.ok { color: var(--success); }
+.status.error { color: var(--danger); }
+[hidden] { display: none !important; }

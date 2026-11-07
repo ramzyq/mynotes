@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Notely account</title>
+  <link rel="stylesheet" href="/assets/site.css">
+  <script src="/assets/auth-action.js" defer></script>
+</head>
+<body>
+  <main>
+    <p class="wordmark">Notely</p>
+
+    <!-- Password reset: never asks for a password here (see auth-action.js). -->
+    <section id="reset" hidden>
+      <h1>Choose your new password in the app</h1>
+      <p>Your notes are end-to-end encrypted, and your password is part of that, so it's set in Notely, not on this page.</p>
+      <a id="open-reset" class="button" href="#">Open in Notely</a>
+      <button id="copy-reset" class="button secondary" type="button">Copy link</button>
+      <div class="card">
+        <p>Reading this on a computer? Open the email on your phone, or copy this link into Notely's <em>Reset password</em> screen.</p>
+        <p id="copied" class="small" hidden>Link copied.</p>
+      </div>
+    </section>
+
+    <!-- Email verification and email recovery: applied right here. -->
+    <section id="apply" hidden>
+      <h1 id="apply-title">One moment…</h1>
+      <p id="apply-status" class="status" role="status" aria-live="polite"></p>
+      <p id="apply-next"></p>
+    </section>
+
+    <section id="unknown" hidden>
+      <h1>This link isn't valid</h1>
+      <p>It may be incomplete or for something Notely doesn't handle. Request a new email from the app.</p>
+    </section>
+  </main>
+</body>
+</html>
