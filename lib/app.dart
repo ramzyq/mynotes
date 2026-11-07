@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/theme/widgets/async_states.dart';
+import 'package:mynotes/core/deeplinks/incoming_links.dart';
 import 'package:mynotes/core/encryption/presentation/key_setup_gate.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/providers/theme_mode_provider.dart';
 import 'package:mynotes/core/theme/notely_theme.dart';
+import 'package:mynotes/features/auth/presentation/forgot_password_view.dart';
 import 'package:mynotes/features/auth/presentation/login_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
@@ -13,6 +17,11 @@ import 'package:mynotes/features/notes/presentation/notes_home_view.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 
 export 'package:mynotes/core/theme/notely_theme.dart';
+
+/// Lets links that arrive at any time open a screen or show a message,
+/// whatever is on screen.
+final appNavigatorKey = GlobalKey<NavigatorState>();
+final appMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
@@ -28,6 +37,8 @@ class _MyAppState extends ConsumerState<MyApp> {
     final themeMode = ref.watch(themeModeProvider);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: appNavigatorKey,
+      scaffoldMessengerKey: appMessengerKey,
       title: 'Notely',
       theme: buildNotelyTheme(Brightness.light),
       darkTheme: buildNotelyTheme(Brightness.dark),
@@ -50,14 +61,53 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
   // exact expiry time while the notes list is open (NotesHomeView), and
   // hourly by the server job (.github/workflows/expire-notes.yml). No polling.
 
+  StreamSubscription<Uri>? _links;
+
+  /// A reset screen opened from a link is showing: further links (e.g. the
+  /// same one twice) don't stack more screens.
+  bool _resetFromLinkOpen = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Listened to here, above sign-in, so a link that arrives (or launches
+    // the app) while signed out is not lost: share links are kept until
+    // sign-in, and reset links are for signed-out users anyway.
+    _links = ref.read(incomingLinksProvider).listen(_openLink, onError: AppErrorHandler().handle);
+  }
+
+  Future<void> _openLink(Uri uri) async {
+    switch (IncomingLink.parse(uri)) {
+      case PasswordResetIncomingLink(:final uri):
+        if (_resetFromLinkOpen) return;
+        _resetFromLinkOpen = true;
+        // A link that launched the app can arrive before the first frame,
+        // when there is no navigator to push onto yet.
+        await WidgetsBinding.instance.endOfFrame;
+        final String? email;
+        try {
+          email = await appNavigatorKey.currentState?.push<String>(MaterialPageRoute(
+            builder: (_) => ForgotPasswordView(initialLink: uri.toString()),
+          ));
+        } finally {
+          _resetFromLinkOpen = false;
+        }
+        if (email != null) {
+          appMessengerKey.currentState?.showSnackBar(
+            const SnackBar(content: Text('Password changed. Sign in with your new password.')),
+          );
+        }
+      case JoinIncomingLink(:final uri):
+        await ref.read(joinLinkProcessorProvider).handleUri(uri).catchError(AppErrorHandler().handle);
+      case null:
+        break;
+    }
   }
 
   @override
   void dispose() {
+    _links?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

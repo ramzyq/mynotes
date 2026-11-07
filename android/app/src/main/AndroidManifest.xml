@@ -6,10 +6,17 @@
     <!-- Note reminders (flutter_local_notifications). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Auto Backup would restore flutter_secure_storage's encrypted
+         preferences without the Keystore key that decrypts them (keys never
+         leave the device), leaving the master key unreadable after a restore.
+         Notes are already backed up, encrypted, in Firestore. -->
     <application
         android:label="Notely"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <!-- Crash reports are off until the user opts in (ConsentCoordinator). -->
         <meta-data
             android:name="firebase_crashlytics_collection_enabled"
@@ -27,6 +34,8 @@
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
                  to determine the Window background behind the Flutter UI. -->
+            <!-- Links are handled by app_links, not Flutter's router. -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -34,6 +43,23 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Share links and password reset links on the app's domain open
+                 the app directly once Android verifies assetlinks.json. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="ramzyqnotes.web.app" android:pathPrefix="/join/"/>
+                <data android:scheme="https" android:host="ramzyqnotes.web.app" android:path="/auth/action"/>
+            </intent-filter>
+            <!-- notely:// from the hosted pages' "Open in Notely" button: works
+                 even before (or without) domain verification. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="notely"/>
             </intent-filter>
             <!-- Quick capture: "Share > Notely" from other apps opens a new
                  note with the shared text (see MainActivity). -->

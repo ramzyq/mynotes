@@ -44,7 +44,7 @@ void main() {
     await tester.tap(find.text('Send reset link'));
     await tester.pumpAndSettle();
     verify(() => service.sendResetEmail('Maya@Example.com')).called(1);
-    expect(find.textContaining("Don't set a password on the web page"), findsOneWidget);
+    expect(find.textContaining("If a web page asks you for a new password, don't enter it there"), findsOneWidget);
 
     await tester.enterText(_field('Reset link from the email'), 'https://x/?mode=resetPassword&oobCode=abc');
     await tester.enterText(_field('New password'), 'brand new password');

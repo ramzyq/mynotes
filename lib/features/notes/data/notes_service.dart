@@ -48,6 +48,24 @@ class NotesService {
   });
 
   static const versionInterval = Duration(minutes: 5);
+
+  /// How long a write waits for the server before the app moves on.
+  static Duration ackWait = const Duration(seconds: 3);
+
+  /// Firestore applies a write to the local cache at once and, while
+  /// offline, queues it for the server; the returned Future only completes
+  /// when the server acknowledges it, which offline means "when the
+  /// connection is back". Awaiting it directly made every tap wait for the
+  /// network. This waits up to [ackWait], so quick failures (a rules
+  /// rejection) still reach the caller, then returns: the change is saved
+  /// on this device and syncs later. Later failures are still reported.
+  static Future<void> committed(Future<void> write) async {
+    try {
+      await write.timeout(ackWait);
+    } on TimeoutException {
+      unawaited(write.catchError((Object error, StackTrace stack) => AppErrorHandler().handle(error, stack)));
+    }
+  }
   static const maxVersions = 50;
   static const _pinIterations = 100000;
   static const _legacyPinIterations = 10000;
@@ -431,13 +449,14 @@ class NotesService {
       encryptionVersion: Note.currentEncryptionVersion,
     );
 
-    await document.set({
+    final data = {
       ...plainNote.plainFields(),
       ...await plainNote.encryptedFields(noteKey, crypto),
       NoteFields.wrappedKey: await keyManager.wrapNoteKey(noteKey),
       NoteFields.keyGen: 1,
       NoteFields.versionCounter: 0,
-    });
+    };
+    await committed(document.set(data));
     _noteKeys[document.id] = (gen: 1, key: noteKey);
     return plainNote;
   }
@@ -454,7 +473,13 @@ class NotesService {
 
   /// Save the note body and editable fields. Writes only the fields the
   /// editor owns — never collaborators, keys, or lock state — and snapshots
-  /// the previous body into version history in the same transaction.
+  /// the previous body into version history in the same batch.
+  ///
+  /// A batch, not a transaction: transactions need the server, so editing
+  /// offline failed every time. The read comes from the cache when offline.
+  /// Only the owner writes a note's body, so the lost isolation only matters
+  /// for the same person saving on two devices in the same instant, where
+  /// the worst case is one extra history entry.
   Future<void> updateNote({
     required String uid,
     required Note note,
@@ -462,50 +487,50 @@ class NotesService {
   }) async {
     final ref = _noteRef(uid, note.id);
     final versionsRef = ref.collection('versions');
-    await firestore.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      final data = snap.data();
-      if (data == null) throw const NoteException('This note no longer exists.');
-      final existing = Note.fromFirestore(snap);
-      final now = DateTime.now();
-      final updates = <String, dynamic>{};
+    final snap = await ref.get();
+    final data = snap.data();
+    if (data == null) throw const NoteException('This note no longer exists.');
+    final existing = Note.fromFirestore(snap);
+    final now = DateTime.now();
+    final updates = <String, dynamic>{};
+    final batch = firestore.batch();
 
-      var key = await _ownNoteKey(existing);
-      if (key == null) {
-        if (existing.hasPinLock) throw const NoteException('Unlock this note first.');
-        // Only a never-encrypted (v0) note may get its first key here; a
-        // sealed note without a key would lose its contents.
-        if (existing.isSealed) {
-          throw const NoteException("This note can't be decrypted on this device.");
-        }
-        key = keyManager.generateNoteKey();
-        updates[NoteFields.wrappedKey] = await keyManager.wrapNoteKey(key);
-        updates[NoteFields.keyGen] = 1;
-        _noteKeys[note.id] = (gen: 1, key: key);
+    var key = await _ownNoteKey(existing);
+    if (key == null) {
+      if (existing.hasPinLock) throw const NoteException('Unlock this note first.');
+      // Only a never-encrypted (v0) note may get its first key here; a
+      // sealed note without a key would lose its contents.
+      if (existing.isSealed) {
+        throw const NoteException("This note can't be decrypted on this device.");
       }
+      key = keyManager.generateNoteKey();
+      updates[NoteFields.wrappedKey] = await keyManager.wrapNoteKey(key);
+      updates[NoteFields.keyGen] = 1;
+      _noteKeys[note.id] = (gen: 1, key: key);
+    }
 
-      final lastVersionAt = (data[NoteFields.lastVersionAt] as Timestamp?)?.toDate();
-      final dueForVersion = lastVersionAt == null || now.difference(lastVersionAt) >= versionInterval;
-      if (existing.isSealed && (forceVersion || dueForVersion)) {
-        final number = ((data[NoteFields.versionCounter] as num?)?.toInt() ?? 0) + 1;
-        tx.set(versionsRef.doc(), _versionData(data, number, now));
-        updates[NoteFields.versionCounter] = number;
-        updates[NoteFields.lastVersionAt] = Timestamp.fromDate(now);
-      }
+    final lastVersionAt = (data[NoteFields.lastVersionAt] as Timestamp?)?.toDate();
+    final dueForVersion = lastVersionAt == null || now.difference(lastVersionAt) >= versionInterval;
+    if (existing.isSealed && (forceVersion || dueForVersion)) {
+      final number = ((data[NoteFields.versionCounter] as num?)?.toInt() ?? 0) + 1;
+      batch.set(versionsRef.doc(), _versionData(data, number, now));
+      updates[NoteFields.versionCounter] = number;
+      updates[NoteFields.lastVersionAt] = Timestamp.fromDate(now);
+    }
 
-      final plain = note.copyWith(
-        updatedAt: now,
-        createdAt: existing.createdAt,
-        links: resolveLinks(note.content ?? '', selfId: note.id),
-      );
-      updates
-        ..addAll(plain.plainFields())
-        ..addAll(await plain.encryptedFields(key, crypto));
-      for (final field in NoteFields.legacyPlaintext) {
-        updates[field] = FieldValue.delete();
-      }
-      tx.update(ref, updates);
-    });
+    final plain = note.copyWith(
+      updatedAt: now,
+      createdAt: existing.createdAt,
+      links: resolveLinks(note.content ?? '', selfId: note.id),
+    );
+    updates
+      ..addAll(plain.plainFields())
+      ..addAll(await plain.encryptedFields(key, crypto));
+    for (final field in NoteFields.legacyPlaintext) {
+      updates[field] = FieldValue.delete();
+    }
+    batch.update(ref, updates);
+    await committed(batch.commit());
     await _pruneVersions(uid, note.id);
   }
 
@@ -520,7 +545,7 @@ class NotesService {
       for (final doc in versions.docs.skip(maxVersions)) {
         batch.delete(doc.reference);
       }
-      await batch.commit();
+      await committed(batch.commit());
     } catch (error, stack) {
       AppErrorHandler().handle(error, stack);
     }
@@ -585,7 +610,7 @@ class NotesService {
       for (final doc in snapshot.docs) {
         batch.delete(doc.reference);
       }
-      await batch.commit();
+      await committed(batch.commit());
       if (snapshot.docs.length < 400) return;
     }
   }
@@ -605,9 +630,9 @@ class NotesService {
         .get();
     for (final link in links.docs) {
       await _deleteAll(link.reference.collection('requests'));
-      await link.reference.delete();
+      await committed(link.reference.delete());
     }
-    await ref.delete();
+    await committed(ref.delete());
     _noteKeys.remove(noteId);
     _pinKeks.remove(noteId);
     _decrypted.remove(ref.path);
@@ -637,7 +662,7 @@ class NotesService {
     for (final note in notes) {
       batch.update(_noteRef(uid, note.id), {NoteFields.deletedAt: now});
     }
-    await batch.commit();
+    await committed(batch.commit());
   }
 
   Future<void> restoreFromTrash({required String uid, required List<Note> notes}) async {
@@ -645,7 +670,7 @@ class NotesService {
     for (final note in notes) {
       batch.update(_noteRef(uid, note.id), {NoteFields.deletedAt: FieldValue.delete()});
     }
-    await batch.commit();
+    await committed(batch.commit());
   }
 
   /// Delete notes that have been in the trash longer than the retention
@@ -671,20 +696,20 @@ class NotesService {
     required int studyRepetitions,
     required DateTime studyDueAt,
   }) async {
-    await _noteRef(uid, noteId).update({
+    await committed(_noteRef(uid, noteId).update({
       NoteFields.studyInterval: studyInterval,
       NoteFields.studyEaseFactor: studyEaseFactor,
       NoteFields.studyRepetitions: studyRepetitions,
       NoteFields.studyDueAt: Timestamp.fromDate(studyDueAt),
-    });
+    }));
   }
 
   Future<void> togglePin({required String uid, required Note note}) async {
-    await _noteRef(uid, note.id).update({NoteFields.isPinned: !note.isPinned});
+    await committed(_noteRef(uid, note.id).update({NoteFields.isPinned: !note.isPinned}));
   }
 
   Future<void> setArchived({required String uid, required Note note, required bool archived}) async {
-    await _noteRef(uid, note.id).update({NoteFields.isArchived: archived});
+    await committed(_noteRef(uid, note.id).update({NoteFields.isArchived: archived}));
   }
 
   Future<void> archiveMany({required String uid, required List<Note> notes}) async {
@@ -692,7 +717,7 @@ class NotesService {
     for (final note in notes) {
       batch.update(_noteRef(uid, note.id), {NoteFields.isArchived: true});
     }
-    await batch.commit();
+    await committed(batch.commit());
   }
 
   Future<void> setPinnedMany({required String uid, required List<Note> notes, required bool pinned}) async {
@@ -700,7 +725,7 @@ class NotesService {
     for (final note in notes) {
       batch.update(_noteRef(uid, note.id), {NoteFields.isPinned: pinned});
     }
-    await batch.commit();
+    await committed(batch.commit());
   }
 
   // ==================================================================== locks
@@ -838,7 +863,7 @@ class NotesService {
       if (cached == null) throw const NoteException('Unlock this note first.');
       updates[NoteFields.wrappedKey] = await keyManager.wrapNoteKey(cached.key);
     }
-    await _noteRef(uid, note.id).update(updates);
+    await committed(_noteRef(uid, note.id).update(updates));
     _pinKeks.remove(note.id);
   }
 
@@ -950,7 +975,7 @@ class NotesService {
     final note = Note.fromFirestore(await _noteRef(noteOwnerId, noteId).get());
     final key = await noteKeyFor(note, authorUid);
     final doc = _commentsCollection(noteOwnerId, noteId).doc();
-    await doc.set(await Comment.encryptedMap(
+    await committed(doc.set(await Comment.encryptedMap(
       noteId: noteId,
       commentId: doc.id,
       authorUid: authorUid,
@@ -959,7 +984,7 @@ class NotesService {
       noteKey: key,
       keyGen: note.keyGen,
       crypto: crypto,
-    ));
+    )));
   }
 
   Stream<List<Comment>> watchComments(String noteOwnerId, String noteId, String viewerUid) {

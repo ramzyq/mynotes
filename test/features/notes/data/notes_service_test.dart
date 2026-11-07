@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -151,5 +152,31 @@ void main() {
     expect(emissions.first, isEmpty, reason: 'not due yet when first loaded');
     expect(emissions.last, [card.id], reason: 'due now, found by the recheck');
     expect(emissions.where((e) => e.isNotEmpty), hasLength(1), reason: 'no repeat emissions');
+  });
+
+  group('committed (offline writes)', () {
+    setUp(() => NotesService.ackWait = const Duration(milliseconds: 50));
+    tearDown(() => NotesService.ackWait = const Duration(seconds: 3));
+
+    test("a write the server hasn't acknowledged yet doesn't block the caller", () async {
+      final neverAcked = Completer<void>();
+      final watch = Stopwatch()..start();
+      await NotesService.committed(neverAcked.future);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+    });
+
+    test('a quick rejection still reaches the caller', () async {
+      await expectLater(
+        NotesService.committed(Future<void>.error(FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'))),
+        throwsA(isA<FirebaseException>()),
+      );
+    });
+
+    test('a rejection after the wait is reported, not thrown', () async {
+      final late = Completer<void>();
+      await NotesService.committed(late.future);
+      late.completeError(StateError('rejected later'));
+      await Future<void>.delayed(Duration.zero); // No unhandled error escapes.
+    });
   });
 }

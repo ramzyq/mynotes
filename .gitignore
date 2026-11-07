@@ -62,3 +62,5 @@ replay_pid*
 
 # Generated code
 *.g.dart
+/android/.kotlin/
+/.firebase/

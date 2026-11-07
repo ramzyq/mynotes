@@ -84,6 +84,15 @@ class PasswordAccountService {
     return RegExp(r'^[A-Za-z0-9_-]{20,}$').hasMatch(text) ? text : null;
   }
 
+  /// The account a reset link (or code) is for. Shown before the user
+  /// types a password: a `notely://` link can come from anywhere, including
+  /// someone else's reset email. Throws [InvalidResetCodeAuthException].
+  Future<String> emailForReset(String linkOrCode) async {
+    final code = resetCodeFrom(linkOrCode);
+    if (code == null) throw InvalidResetCodeAuthException();
+    return auth.verifyPasswordResetCode(code);
+  }
+
   /// Set a new password from a reset link. Returns the account email, so
   /// the sign-in screen can be filled in. The password slot of the key
   /// backup is re-wrapped on the next sign-in: on a device that still has

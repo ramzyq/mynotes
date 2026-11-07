@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Mynotes</string>
+	<string>Notely</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>mynotes</string>
+	<string>Notely</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -48,16 +48,43 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Mynotes uses the camera to scan and extract text from documents and photos.</string>
+	<string>Notely uses the camera to scan and extract text from documents and photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mynotes uses the microphone to record voice notes and transcribe them to text.</string>
+	<string>Notely uses the microphone to record voice notes and transcribe them to text.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Mynotes uses your photo library to select images and extract text from them.</string>
+	<string>Notely uses your photo library to select images and extract text from them.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Mynotes uses Face ID to unlock notes you have locked.</string>
+	<string>Notely uses Face ID to unlock notes you have locked.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Mynotes uses your location to tag notes with place names.</string>
+	<string>Notely uses your location to tag notes with place names.</string>
+	<!-- Links are handled by app_links, not Flutter's router. -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
+	<!-- Google Sign-In: the iOS OAuth client of the ramzyqnotes Firebase app. -->
+	<key>GIDClientID</key>
+	<string>86066851116-vcvsj1lcqh7fc8m4e7jtolclgluaact3.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.86066851116-vcvsj1lcqh7fc8m4e7jtolclgluaact3</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.flutter.mynotes.links</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>notely</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Mynotes uses speech recognition to transcribe your voice notes into text.</string>
+	<string>Notely uses speech recognition to transcribe your voice notes into text.</string>
 </dict>
 </plist>

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:app_links/app_links.dart';
 import 'package:mynotes/core/analytics/analytics_consent_store.dart';
 import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
@@ -45,7 +44,6 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
   bool _selectMode = false;
   final Set<String> _selected = {};
 
-  StreamSubscription<Uri>? _uriSub;
   final QuickCaptureService _quickCapture = QuickCaptureService();
   StreamSubscription<List<JoinRequest>>? _requestSub;
   Timer? _expiryTimer;
@@ -71,7 +69,6 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
       unawaited(_quickCapture.start((text) => _openEditor(initialContent: text)));
       unawaited(_maybeAskAnalyticsConsent());
       _watchOwnerRequests();
-      _listenForLinks();
     });
   }
 
@@ -127,12 +124,6 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     });
   }
 
-  void _listenForLinks() {
-    _uriSub = AppLinks().uriLinkStream.listen((uri) {
-      ref.read(joinLinkProcessorProvider).handleUri(uri).catchError(AppErrorHandler().handle);
-    }, onError: AppErrorHandler().handle);
-  }
-
   void _watchOwnerRequests() {
     _requestSub =
         ref.read(shareServiceProvider).watchOwnerJoinRequests(widget.authUser.uid).listen((requests) async {
@@ -183,7 +174,6 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   @override
   void dispose() {
-    _uriSub?.cancel();
     _requestSub?.cancel();
     _expiryTimer?.cancel();
     _quickCapture.stop();
