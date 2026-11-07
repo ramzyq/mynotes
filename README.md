@@ -34,7 +34,7 @@ Notely is designed with privacy as a default, not an afterthought.
 | Location | Opt-in per note, captured once, stored encrypted |
 | Collaboration | X25519 + HKDF key wrapping per collaborator; key rotation on removal |
 | Comments | Encrypted with the note key |
-| Authentication | Firebase Auth (email/password + Google Sign-In). Firebase never receives your password, only a secret derived from it (see below). |
+| Authentication | Firebase Auth (email/password, Google Sign-In, and Sign in with Apple on iOS). Firebase never receives your password, only a secret derived from it (see below). Google and Apple accounts unlock their key backup with the recovery code. |
 | File storage | Firebase Storage, access controlled by security rules |
 
 **What is not encrypted:** timestamps, color, pin/archive/lock flags, study scheduling fields, self-destruct time (needed for server queries), collaborator uids, and your profile (display name, email and sharing public key). A profile can be read by any signed-in user who knows your account id, which in practice means people you share notes with; profiles can't be listed or searched. Share-by-email also reveals whether an email has a Notely account.
@@ -201,6 +201,14 @@ Still needed, outside the repo:
 - [ ] **Application ID.** `com.flutter.mynotes` (Android) / `com.flutter.mynotes`
       (iOS) is permanent once published. To change it, register the new ID as a
       Firebase app and regenerate `firebase_options.dart` with `flutterfire configure`.
+- [ ] **Sign in with Apple (iOS).** In the Firebase console, enable **Authentication →
+      Sign-in method → Apple** (the native iOS flow needs no Services ID). The app
+      already declares the capability (`ios/Runner/Runner.entitlements`); with
+      automatic signing, Xcode/App Store Connect enables it for the App ID. App
+      Store guideline 4.8 requires it because the app offers Google sign-in.
+      With *Hide My Email*, the account's address is an `@privaterelay.appleid.com`
+      relay, so other people can't find that account through share-by-email; they
+      can still be invited with a share link.
 - [ ] **Apple Team ID (iOS Universal Links).** Set `DEVELOPMENT_TEAM`, add the
       Associated Domains capability (`applinks:ramzyqnotes.web.app`), and add
       `hosting/public/.well-known/apple-app-site-association` with

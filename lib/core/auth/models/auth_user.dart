@@ -12,12 +12,16 @@ class AuthUser {
   /// change it), as opposed to Google only.
   final bool hasPassword;
 
+  /// Signs in with Apple (re-authentication and deletion go through Apple).
+  final bool usesApple;
+
   const AuthUser({
     required this.uid,
     required this.email,
     this.displayName,
     required this.isEmailVerified,
     this.hasPassword = false,
+    this.usesApple = false,
   });
 
   factory AuthUser.fromFirebase(User user) => AuthUser(
@@ -26,5 +30,6 @@ class AuthUser {
     displayName: user.displayName,
     isEmailVerified: user.emailVerified,
     hasPassword: user.providerData.any((p) => p.providerId == 'password'),
+    usesApple: user.providerData.any((p) => p.providerId == 'apple.com'),
   );
 }

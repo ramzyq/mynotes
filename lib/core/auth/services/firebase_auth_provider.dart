@@ -1,8 +1,8 @@
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/auth/models/email_action_info.dart';
-import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, InvalidResetCodeAuthException, NetworkAuthException, InvalidActionCodeAuthException;
+import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, AppleSignInCancelledException, InvalidResetCodeAuthException, NetworkAuthException, InvalidActionCodeAuthException;
 import 'package:mynotes/core/auth/services/auth_provider.dart';
-import 'package:firebase_auth/firebase_auth.dart' show EmailAuthProvider, FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
+import 'package:firebase_auth/firebase_auth.dart' show AppleAuthProvider, EmailAuthProvider, FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
 import 'package:firebase_core/firebase_core.dart' show Firebase, FirebaseApp, FirebaseException;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mynotes/core/error/error_handler.dart';
@@ -104,6 +104,7 @@ class FirebaseAuthProvider implements AuthProvider {
   @override
   Future<void> logOut() async {
     final user = FirebaseAuth.instance.currentUser;
+    _appleAuthorizationCode = null;
     if (user != null) {
       await FirebaseAuth.instance.signOut();
       // Forget the Google account too, so the next sign-in offers the picker.
@@ -235,6 +236,21 @@ class FirebaseAuthProvider implements AuthProvider {
         );
         return;
       }
+      if (user.providerData.any((p) => p.providerId == 'apple.com')) {
+        final credential = await user.reauthenticateWithProvider(_appleProvider());
+        // Kept for deleteCurrentUser: Apple requires apps to revoke the
+        // user's tokens when the account is deleted.
+        _appleAuthorizationCode = credential.additionalUserInfo?.authorizationCode;
+        if (_appleAuthorizationCode == null) {
+          // Deletion would then go ahead without revoking the Apple tokens,
+          // which Apple requires. Make that visible instead of silent.
+          AppErrorHandler().handle(
+            StateError('Apple re-authentication returned no authorization code; tokens cannot be revoked'),
+            StackTrace.current,
+          );
+        }
+        return;
+      }
       await _ensureGoogleReady();
       final account = await GoogleSignIn.instance.authenticate();
       final idToken = account.authentication.idToken;
@@ -244,6 +260,7 @@ class FirebaseAuthProvider implements AuthProvider {
       if (e.code == GoogleSignInExceptionCode.canceled) throw GoogleSignInCancelledException();
       throw GenericAuthException();
     } on FirebaseAuthException catch (e) {
+      if (_appleCancelled(e)) throw AppleSignInCancelledException();
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') throw WrongPasswordAuthException();
       if (e.code == 'too-many-requests') throw TooManyRequestsAuthException();
       if (e.code == 'user-mismatch') throw WrongPasswordAuthException();
@@ -257,11 +274,22 @@ class FirebaseAuthProvider implements AuthProvider {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw UserNotLoggedInAuthException();
     try {
+      // Apple requires revoking the user's Apple tokens on deletion. A
+      // failure here mustn't block the deletion itself. The code is
+      // single-use, so it's dropped whatever happens (see finally).
+      final appleCode = _appleAuthorizationCode;
+      if (appleCode != null) {
+        await FirebaseAuth.instance
+            .revokeTokenWithAuthorizationCode(appleCode)
+            .catchError((Object error, StackTrace stack) => AppErrorHandler().handle(error, stack));
+      }
       await user.delete();
       if (_googleReady) await GoogleSignIn.instance.signOut().catchError((_) {});
     } on FirebaseAuthException catch (e) {
       if (e.code == 'network-request-failed') throw NetworkAuthException();
       throw GenericAuthException();
+    } finally {
+      _appleAuthorizationCode = null;
     }
   }
 
@@ -295,6 +323,48 @@ class FirebaseAuthProvider implements AuthProvider {
         'too-many-requests' => TooManyRequestsAuthException(),
         _ => GenericAuthException(),
       };
+
+  /// From the last Apple re-authentication, for token revocation on delete.
+  String? _appleAuthorizationCode;
+
+  static AppleAuthProvider _appleProvider() => AppleAuthProvider()
+    ..addScope('email')
+    ..addScope('name');
+
+  // Codes FlutterFire uses for a user closing the Apple sheet; the message
+  // check covers the native ASAuthorizationError.canceled (1001). Verify on
+  // a device when the Apple account is set up.
+  static bool _appleCancelled(FirebaseAuthException e) =>
+      const {'canceled', 'cancelled', 'user-cancelled', 'web-context-canceled', 'web-context-cancelled',
+              'popup-closed-by-user'}.contains(e.code) ||
+      (e.message ?? '').contains('AuthorizationError error 1001');
+
+  @override
+  Future<AuthUser> signInWithApple() async {
+    try {
+      final credential = await FirebaseAuth.instance.signInWithProvider(_appleProvider());
+      // Apple shares the name only on the very first sign-in.
+      final user = credential.user;
+      final name = credential.additionalUserInfo?.profile?['name'];
+      if (user != null && (user.displayName ?? '').isEmpty && name is Map) {
+        final full = [name['firstName'], name['lastName']].whereType<String>().join(' ').trim();
+        if (full.isNotEmpty) {
+          await user.updateDisplayName(full).catchError((_) {});
+          // userChanges (which the app follows) fires on reload, so the
+          // name reaches every screen even though sign-in fired first.
+          await user.reload().catchError((_) {});
+        }
+      }
+      final current = currentUser;
+      if (current == null) throw UserNotLoggedInAuthException();
+      return current;
+    } on FirebaseAuthException catch (e) {
+      if (_appleCancelled(e)) throw AppleSignInCancelledException();
+      if (e.code == 'network-request-failed') throw NetworkAuthException();
+      if (e.code == 'account-exists-with-different-credential') throw UserAlreadyExistsAuthException();
+      throw GenericAuthException();
+    }
+  }
 
   static bool _googleReady = false;
 

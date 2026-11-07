@@ -50,6 +50,7 @@ class _DeleteAccountViewState extends ConsumerState<DeleteAccountView> {
       case AccountDeletionStage.verifying:
         if (cause is WrongPasswordAuthException) return "That password isn't right. Nothing was deleted.";
         if (cause is GoogleSignInCancelledException) return 'Confirm with Google to delete your account.';
+        if (cause is AppleSignInCancelledException) return 'Confirm with Apple to delete your account.';
         if (cause is TooManyRequestsAuthException) return 'Too many attempts. Try again later. Nothing was deleted.';
         if (_offline(cause)) return "You're offline. Deleting your account needs a connection. Nothing was deleted.";
         return "Couldn't confirm it's you. Nothing was deleted.";
@@ -89,6 +90,11 @@ class _DeleteAccountViewState extends ConsumerState<DeleteAccountView> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  String get _buttonLabel {
+    if (widget.authUser.hasPassword) return 'Delete my account';
+    return widget.authUser.usesApple ? 'Confirm with Apple and delete' : 'Confirm with Google and delete';
   }
 
   @override
@@ -133,7 +139,7 @@ class _DeleteAccountViewState extends ConsumerState<DeleteAccountView> {
             ],
             const SizedBox(height: 16),
             NotelyPrimaryButton(
-              label: widget.authUser.hasPassword ? 'Delete my account' : 'Confirm with Google and delete',
+              label: _buttonLabel,
               danger: true,
               loading: _busy,
               onPressed: _confirmed ? _delete : null,

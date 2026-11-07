@@ -32,6 +32,9 @@ class AuthService implements AuthProvider {
   }
 
   @override
+  Future<AuthUser> signInWithApple() => provider.signInWithApple();
+
+  @override
   Future<void> logOut() {
     return provider.logOut();
   }

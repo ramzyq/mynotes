@@ -19,6 +19,10 @@ abstract class AuthProvider {
 
   Future<AuthUser> signInWithGoogle();
 
+  /// Sign in with Apple (iOS). Required by App Store guideline 4.8 because
+  /// the app also offers Google sign-in.
+  Future<AuthUser> signInWithApple();
+
   Future<void> logOut();
 
   Future<void> sendEmailVerification();
@@ -51,7 +55,7 @@ abstract class AuthProvider {
 
   /// Confirm it's really the signed-in user, as Firebase requires before
   /// deleting an account: with [password] (an auth secret) for password
-  /// accounts, or through Google again when it is null.
+  /// accounts, or through Apple or Google again when it is null.
   Future<void> reauthenticate({String? password});
 
   /// Delete the signed-in Firebase account. Call [reauthenticate] first.

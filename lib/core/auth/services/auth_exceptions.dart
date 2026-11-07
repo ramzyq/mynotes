@@ -15,6 +15,7 @@ class InvalidActionCodeAuthException implements Exception {}
 class NetworkAuthException implements Exception {}
 class UserNotLoggedInAuthException implements Exception {}
 class GoogleSignInCancelledException implements Exception {}
+class AppleSignInCancelledException implements Exception {}
 // Password reset
 /// The reset link is malformed, expired, or was already used.
 class InvalidResetCodeAuthException implements Exception {}
