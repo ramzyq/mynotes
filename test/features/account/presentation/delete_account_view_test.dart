@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,7 +45,7 @@ void main() {
 
   testWidgets('a wrong password keeps the screen open and says so', (tester) async {
     when(() => deletion.deleteAccount(user: any(named: 'user'), password: any(named: 'password')))
-        .thenThrow(WrongPasswordAuthException());
+        .thenThrow(AccountDeletionException(AccountDeletionStage.verifying, WrongPasswordAuthException()));
     await open(tester);
     await tester.enterText(find.widgetWithText(TextField, 'Your password'), 'not it');
     await tester.enterText(find.widgetWithText(TextField, 'Type DELETE to confirm'), 'DELETE');
@@ -53,8 +54,22 @@ void main() {
     await tester.tap(find.text('Delete my account'));
     await tester.pumpAndSettle();
 
-    expect(find.text("That password isn't right."), findsOneWidget);
+    expect(find.text("That password isn't right. Nothing was deleted."), findsOneWidget);
     expect(find.text('Delete your account?'), findsOneWidget);
     verify(() => deletion.deleteAccount(user: _user, password: 'not it')).called(1);
+  });
+
+  testWidgets('a dropped connection while deleting says some notes may be gone', (tester) async {
+    when(() => deletion.deleteAccount(user: any(named: 'user'), password: any(named: 'password'))).thenThrow(
+        AccountDeletionException(AccountDeletionStage.deletingData, FirebaseException(plugin: 'p', code: 'unavailable')));
+    await open(tester);
+    await tester.enterText(find.widgetWithText(TextField, 'Your password'), 'pw');
+    await tester.enterText(find.widgetWithText(TextField, 'Type DELETE to confirm'), 'DELETE');
+    await tester.pump();
+    await tester.ensureVisible(find.text('Delete my account'));
+    await tester.tap(find.text('Delete my account'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('The connection dropped while deleting'), findsOneWidget);
   });
 }

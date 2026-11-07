@@ -1,5 +1,5 @@
 import 'package:mynotes/core/auth/models/auth_user.dart';
-import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, InvalidResetCodeAuthException;
+import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, InvalidResetCodeAuthException, NetworkAuthException;
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' show EmailAuthProvider, FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
 import 'package:firebase_core/firebase_core.dart' show Firebase, FirebaseApp, FirebaseException;
@@ -239,6 +239,7 @@ class FirebaseAuthProvider implements AuthProvider {
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') throw WrongPasswordAuthException();
       if (e.code == 'too-many-requests') throw TooManyRequestsAuthException();
       if (e.code == 'user-mismatch') throw WrongPasswordAuthException();
+      if (e.code == 'network-request-failed') throw NetworkAuthException();
       throw GenericAuthException();
     }
   }
@@ -250,7 +251,8 @@ class FirebaseAuthProvider implements AuthProvider {
     try {
       await user.delete();
       if (_googleReady) await GoogleSignIn.instance.signOut().catchError((_) {});
-    } on FirebaseAuthException {
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'network-request-failed') throw NetworkAuthException();
       throw GenericAuthException();
     }
   }

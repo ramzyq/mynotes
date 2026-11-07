@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +15,7 @@ import 'package:mynotes/features/account/services/account_deletion_service.dart'
 class _RecordingAuth implements AuthProvider {
   final calls = <String>[];
   bool failReauth = false;
+  bool failDelete = false;
 
   @override
   Future<void> reauthenticate({String? password}) async {
@@ -20,7 +24,10 @@ class _RecordingAuth implements AuthProvider {
   }
 
   @override
-  Future<void> deleteCurrentUser() async => calls.add('deleteCurrentUser');
+  Future<void> deleteCurrentUser() async {
+    calls.add('deleteCurrentUser');
+    if (failDelete) throw GenericAuthException();
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
@@ -59,6 +66,7 @@ void main() {
   late KeyManager keys;
   late AccountDeletionService service;
   final cleaned = <String>[];
+  Future<void> Function() pendingWrites = () async {};
 
   setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
@@ -68,14 +76,21 @@ void main() {
     keys = KeyManager()..setActiveUser('me');
     await keys.generateMasterKey();
     cleaned.clear();
+    pendingWrites = () async {};
     service = AccountDeletionService(
       firestore: db,
       auth: auth,
       deriver: PasswordSecretDeriver(iterations: 1000),
       keyManager: keys,
       onDeviceCleanup: (uid) async => cleaned.add(uid),
+      waitForPendingWrites: () => pendingWrites(),
+      writeTimeout: const Duration(milliseconds: 100),
     );
   });
+
+  Matcher failsAt(AccountDeletionStage stage, Matcher cause) => throwsA(isA<AccountDeletionException>()
+      .having((e) => e.stage, 'stage', stage)
+      .having((e) => e.cause, 'cause', cause));
 
   Future<bool> exists(String path) async => (await db.doc(path).get()).exists;
 
@@ -107,7 +122,8 @@ void main() {
 
   test('a failed re-authentication deletes nothing', () async {
     auth.failReauth = true;
-    await expectLater(service.deleteAccount(user: _me, password: 'wrong'), throwsA(isA<WrongPasswordAuthException>()));
+    await expectLater(service.deleteAccount(user: _me, password: 'wrong'),
+        failsAt(AccountDeletionStage.verifying, isA<WrongPasswordAuthException>()));
 
     expect(await exists('users/me/notes/n1'), isTrue);
     expect(await exists('users/me'), isTrue);
@@ -125,5 +141,28 @@ void main() {
     await db.doc('emailIndex/me@example.com').set({'uid': 'someoneElse'});
     await service.deleteData(uid: 'me', email: 'me@example.com');
     expect(await exists('emailIndex/me@example.com'), isTrue);
+  });
+
+  test("offline, it fails as offline instead of waiting forever, before deleting anything", () async {
+    pendingWrites = () => Completer<void>().future; // Queued writes never reach the server.
+    await expectLater(
+      service.deleteAccount(user: _me, password: 'my password'),
+      failsAt(AccountDeletionStage.deletingData,
+          isA<FirebaseException>().having((e) => e.code, 'code', 'unavailable')),
+    );
+    expect(await exists('users/me/notes/n1'), isTrue);
+    expect(auth.calls, ['reauthenticate:password']);
+  });
+
+  test('if the Firebase account is not deleted, the data is gone and a retry finishes', () async {
+    auth.failDelete = true;
+    await expectLater(service.deleteAccount(user: _me, password: 'my password'),
+        failsAt(AccountDeletionStage.deletingAccount, isA<GenericAuthException>()));
+    expect(await exists('users/me/notes/n1'), isFalse);
+    expect(await keys.hasMasterKey(), isTrue, reason: 'the account still exists: keep its key');
+
+    auth.failDelete = false;
+    await service.deleteAccount(user: _me, password: 'my password');
+    expect(await keys.hasMasterKey(), isFalse);
   });
 }
