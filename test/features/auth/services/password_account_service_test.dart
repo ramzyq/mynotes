@@ -15,6 +15,9 @@ class _FakeFirebase implements AuthProvider {
   final String email;
   String password;
   bool signedIn = false;
+
+  /// Make the next app sign-in fail as if the connection dropped.
+  bool failNextSignIn = false;
   final resetCodes = <String>{};
   final received = <String>[];
 
@@ -22,6 +25,10 @@ class _FakeFirebase implements AuthProvider {
   Future<AuthUser> logIn({required String email, required String password}) async {
     received.add(password);
     appSignIns.add(password);
+    if (failNextSignIn) {
+      failNextSignIn = false;
+      throw GenericAuthException();
+    }
     if (email != this.email || password != this.password) throw WrongPasswordAuthException();
     signedIn = true;
     return AuthUser(uid: 'u1', email: email, isEmailVerified: true, hasPassword: true);
@@ -223,6 +230,24 @@ void main() {
       // The app's session (and so key setup) only ever saw the new secret.
       expect(firebase.appSignIns, [next.authSecret]);
       expectNeverSent('chosen in the app');
+    });
+
+    test('a failed sign-in after the swap says the new password now works', () async {
+      firebase.password = 'typed on the web page';
+      firebase.failNextSignIn = true;
+      List<int>? held = [1];
+      await expectLater(
+        service.repairWebReset(
+          email: _email,
+          webPassword: 'typed on the web page',
+          newPassword: 'chosen in the app',
+          holdPasswordKey: (key) => held = key,
+        ),
+        throwsA(isA<PasswordReplacedNotSignedInException>()),
+      );
+      expect(held, isNull);
+      final next = await _deriver.derive(email: _email, password: 'chosen in the app');
+      expect(firebase.password, next.authSecret, reason: 'the swap already happened');
     });
 
     test('a wrong web password leaves nothing behind', () async {

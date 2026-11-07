@@ -59,6 +59,20 @@ void main() {
         isA<KeySetupNeedsRecoveryCode>());
   });
 
+  test("a device holding the key doesn't downgrade a newer password slot", () async {
+    final store = _MemoryStore();
+    final device = _device(store);
+    await device.prepare(uid: 'u1', passwordKey: _k('pw-1'));
+    final slot = (store.docs['u1']!['slots'] as Map)['password'] as Map;
+    slot['kdf'] = 'notely-account-v9'; // as a future app version would write it
+    final wrapped = slot['wrapped'];
+
+    expect(await device.prepare(uid: 'u1', passwordKey: _k('pw-1')), isA<KeySetupReady>());
+    final after = (store.docs['u1']!['slots'] as Map)['password'] as Map;
+    expect(after['kdf'], 'notely-account-v9');
+    expect(after['wrapped'], wrapped);
+  });
+
   test('what the sign-in server receives cannot open the backup', () async {
     final store = _MemoryStore();
     final secrets = await PasswordSecretDeriver(iterations: 1000)

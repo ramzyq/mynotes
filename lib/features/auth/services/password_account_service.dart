@@ -13,6 +13,11 @@ class PasswordTooShortException implements Exception {}
 /// a new device needs the recovery code.
 class PasswordBackupNotUpdatedException implements Exception {}
 
+/// The web-page password was replaced with the new one, but signing in
+/// afterwards failed (e.g. the connection dropped). Only the new password
+/// works now.
+class PasswordReplacedNotSignedInException implements Exception {}
+
 /// Password reset and change for accounts whose password is split by
 /// [PasswordSecretDeriver]. Every flow sends Firebase only auth secrets, so
 /// they must all run in the app: Firebase's hosted reset page would store
@@ -112,9 +117,11 @@ class PasswordAccountService {
     holdPasswordKey(next.backupKey);
     try {
       await auth.logIn(email: email, password: next.authSecret);
-    } catch (_) {
+    } catch (error, stack) {
       holdPasswordKey(null);
-      rethrow;
+      // The password has already changed: the web one no longer works.
+      AppErrorHandler().handle(error, stack);
+      throw PasswordReplacedNotSignedInException();
     }
   }
 }

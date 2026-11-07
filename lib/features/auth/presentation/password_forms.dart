@@ -17,6 +17,9 @@ String passwordErrorMessage(Object error) => switch (error) {
         "Your password was changed, but your key backup couldn't be updated. "
             'Sign out and back in on this device to finish. Until then, a new '
             'device will need your recovery code, not the new password.',
+      PasswordReplacedNotSignedInException() =>
+        "Your password was replaced, but we couldn't sign you in. "
+            'Sign in with your new password; the one from the web page no longer works.',
       _ => 'Something went wrong. Please try again.',
     };
 

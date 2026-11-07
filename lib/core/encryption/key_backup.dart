@@ -103,7 +103,13 @@ class KeyBackupService {
         });
         return KeySetupShowRecoveryCode(code);
       }
-      if (passwordKey != null && !await _passwordSlotOpens(uid, slots['password'], passwordKey, masterBytes)) {
+      // A slot written by a newer app version (another KDF) is left alone:
+      // re-wrapping it here would downgrade it for every device.
+      final passwordSlot = slots['password'];
+      final newerSlot = passwordSlot != null && passwordSlot['kdf'] != PasswordSecretDeriver.kdfVersion;
+      if (passwordKey != null &&
+          !newerSlot &&
+          !await _passwordSlotOpens(uid, passwordSlot, passwordKey, masterBytes)) {
         // Missing, or the password changed since it was written: re-wrap.
         await _writeSlots(uid, {'password': await _passwordSlot(uid, masterBytes, passwordKey)});
       }
