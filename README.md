@@ -206,6 +206,9 @@ Still needed, outside the repo:
       already declares the capability (`ios/Runner/Runner.entitlements`); with
       automatic signing, Xcode/App Store Connect enables it for the App ID. App
       Store guideline 4.8 requires it because the app offers Google sign-in.
+      With *Hide My Email*, the account's address is an `@privaterelay.appleid.com`
+      relay, so other people can't find that account through share-by-email; they
+      can still be invited with a share link.
 - [ ] **Apple Team ID (iOS Universal Links).** Set `DEVELOPMENT_TEAM`, add the
       Associated Domains capability (`applinks:ramzyqnotes.web.app`), and add
       `hosting/public/.well-known/apple-app-site-association` with
