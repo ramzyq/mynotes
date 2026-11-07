@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/encryption/password_secrets.dart';
@@ -6,7 +7,7 @@ import 'package:mynotes/features/auth/presentation/forgot_password_view.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/auth/presentation/register_view.dart';
-import 'package:mynotes/core/auth/services/auth_exceptions.dart' show GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
+import 'package:mynotes/core/auth/services/auth_exceptions.dart' show AppleSignInCancelledException, GenericAuthException, UserAlreadyExistsAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_wordmark.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
@@ -42,6 +43,30 @@ class _LoginViewState extends ConsumerState<LoginView> {
 
   bool _isValidEmail(String email) {
     return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
+  }
+
+  /// iOS only: Firebase's Apple provider is set up for the native iOS flow.
+  static bool get _offerApple => defaultTargetPlatform == TargetPlatform.iOS;
+
+  Future<void> _handleAppleSignIn() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isLoading = true);
+    try {
+      await ref.read(authServiceProvider).signInWithApple();
+      // AuthenticationWrapper takes it from here.
+    } on AppleSignInCancelledException {
+      // Cancelled: nothing to say.
+    } on UserAlreadyExistsAuthException {
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(
+        content: Text('That email already has a Notely account. Sign in the way you did before.'),
+      ));
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(content: Text('Apple sign-in failed. Please try again.')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _handleGoogleSignIn() async {
@@ -212,6 +237,22 @@ class _LoginViewState extends ConsumerState<LoginView> {
                       ],
                     ),
                     const SizedBox(height: 24),
+                    // Apple first and the same size as Google, per Apple's
+                    // guidelines for apps offering several sign-in options.
+                    if (_offerApple) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: SignInButton(
+                          Theme.of(context).brightness == Brightness.dark ? Buttons.apple : Buttons.appleDark,
+                          text: 'Continue with Apple',
+                          elevation: 0,
+                          onPressed: _isLoading ? () {} : _handleAppleSignIn,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     SizedBox(
                       width: double.infinity,
                       height: 48,

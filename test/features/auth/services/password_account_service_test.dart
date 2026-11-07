@@ -103,6 +103,9 @@ class _FakeFirebase implements AuthProvider {
 
   @override
   Future<EmailActionInfo> checkActionCode(String code) async => const EmailActionInfo();
+
+  @override
+  Future<AuthUser> signInWithApple() => throw UnimplementedError();
 }
 
 class _MemoryStore implements KeyBackupStore {
