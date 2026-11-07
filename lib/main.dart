@@ -5,6 +5,8 @@ import 'package:mynotes/app.dart';
 import 'package:mynotes/core/bootstrap/bootstrap_controller.dart';
 import 'package:mynotes/core/bootstrap/bootstrap_error_view.dart';
 import 'package:mynotes/core/bootstrap/bootstrap_providers.dart';
+import 'package:mynotes/core/bootstrap/splash_view.dart';
+import 'package:mynotes/core/theme/notely_motion.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,8 +17,8 @@ void main() {
   );
 }
 
-/// Boots Firebase and the app engine, then shows the app, a loading state, or
-/// a retryable error screen.
+/// Plays the splash while Firebase and the app engine boot, then fades into
+/// the app or a retryable error screen.
 class BootstrapApp extends ConsumerStatefulWidget {
   const BootstrapApp({super.key});
 
@@ -25,6 +27,10 @@ class BootstrapApp extends ConsumerStatefulWidget {
 }
 
 class _BootstrapAppState extends ConsumerState<BootstrapApp> {
+  // The splash always plays to the end before the app (or the error screen)
+  // replaces it, so a fast boot never cuts the animation off mid-way.
+  bool _splashDone = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,21 +40,37 @@ class _BootstrapAppState extends ConsumerState<BootstrapApp> {
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(bootstrapControllerProvider);
-    return switch (controller.status) {
-      BootstrapStatus.ready => LiquidGlassWidgets.wrap(
+    final Widget child;
+    if (_splashDone && controller.status == BootstrapStatus.ready) {
+      child = KeyedSubtree(
+        key: const ValueKey('app'),
+        child: LiquidGlassWidgets.wrap(
           child: const MyApp(),
           theme: notelyGlassTheme,
         ),
-      BootstrapStatus.initializing => const MaterialApp(
-          debugShowCheckedModeBanner: false,
-          home: Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          ),
-        ),
-      BootstrapStatus.failed => BootstrapErrorView(
+      );
+    } else if (_splashDone && controller.status == BootstrapStatus.failed) {
+      child = KeyedSubtree(
+        key: const ValueKey('error'),
+        child: BootstrapErrorView(
           message: controller.errorMessage,
           onRetry: () => ref.read(bootstrapControllerProvider).bootstrap(),
         ),
-    };
+      );
+    } else {
+      child = MaterialApp(
+        key: const ValueKey('splash'),
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(brightness: Brightness.light),
+        darkTheme: ThemeData(brightness: Brightness.dark),
+        home: SplashView(onFinished: () => setState(() => _splashDone = true)),
+      );
+    }
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 450),
+      switchInCurve: NotelyMotion.enter,
+      switchOutCurve: NotelyMotion.exit,
+      child: child,
+    );
   }
 }

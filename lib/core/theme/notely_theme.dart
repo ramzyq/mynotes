@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import 'package:mynotes/core/theme/notely_motion.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/notely_typography.dart';
 
@@ -23,6 +24,7 @@ ThemeData buildNotelyTheme(Brightness brightness) {
   return ThemeData(
     brightness: brightness,
     useMaterial3: true,
+    pageTransitionsTheme: notelyPageTransitions,
     scaffoldBackgroundColor: notely.bg,
     extensions: <ThemeExtension<dynamic>>[notely],
     colorScheme: ColorScheme.fromSeed(

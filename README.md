@@ -113,6 +113,23 @@ password on the web. To keep resets in the app anyway:
 If the action URL ever becomes changeable, set it to
 `https://ramzyqnotes.web.app/auth/action`; the app handles both.
 
+### App icon and launch screen
+
+The icon and logo artwork live in `assets/branding/` (light icon, iOS dark
+icon, Android adaptive foreground). After changing them:
+
+```bash
+dart run flutter_launcher_icons      # app icons (config in pubspec.yaml)
+dart run flutter_native_splash:create  # native launch screen colours
+```
+
+The native launch screen is only the paper colour (night colour in dark mode);
+the animated logo is drawn by Flutter in `lib/core/bootstrap/splash_view.dart`
+with the same geometry (`lib/core/theme/widgets/notely_mark.dart`).
+`flutter_launcher_icons` 0.14 also rewrites
+`ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS` in the Xcode
+project; discard that change.
+
 ### Firebase Rules, Indexes, and Functions
 
 Deploy the versioned rules and indexes:
@@ -214,6 +231,15 @@ Still needed, outside the repo:
       `hosting/public/.well-known/apple-app-site-association` with
       `<TEAMID>.com.flutter.mynotes`. Until then iOS opens links through the
       *Open in Notely* button.
+- [ ] **Icon credit (Flaticon).** The app icon and logo are based on a Flaticon
+      icon, whose licence asks for credit in the app and in the store listings.
+      Copy the exact attribution Flaticon shows on the icon's download page
+      (it names the author) into `iconAttribution` in
+      `lib/core/config/app_config.dart` (shown under Account → About & credits),
+      and add the same line to the App Store and Google Play descriptions.
+      Also confirm on that page that the licence allows use as an app icon or
+      logo; if not, the mark needs replacing (`assets/branding/`, then
+      `dart run flutter_launcher_icons`).
 - [ ] **App Check** (Play Integrity / App Attest) once the app is signed for release.
 - [ ] Manual test on real devices against production: register, verify email,
       sign out/in, change password, reset password from the email link, share by

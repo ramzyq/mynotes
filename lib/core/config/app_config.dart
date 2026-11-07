@@ -21,3 +21,9 @@ const appConfig = AppConfig();
 /// without domain verification (Android App Links / iOS Universal Links).
 /// Declared in AndroidManifest.xml and ios/Runner/Info.plist.
 const appScheme = 'notely';
+
+/// Credit for the third-party artwork the app icon and logo are based on.
+/// Shown in the app (Account → About & credits) and to be pasted into the
+/// App Store and Play Store descriptions, as the icon's Flaticon licence
+/// requires. Use the exact wording Flaticon gives on the icon's download page.
+const iconAttribution = 'App icon and logo based on an icon from Flaticon (flaticon.com).';
