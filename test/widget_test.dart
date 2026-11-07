@@ -78,4 +78,9 @@ class _FakeAuthProvider implements AuthProvider {
     required String newPassword,
   }) =>
       throw UnimplementedError();
+
+  @override
+  Future<void> reauthenticate({String? password}) async {}
+  @override
+  Future<void> deleteCurrentUser() async {}
 }

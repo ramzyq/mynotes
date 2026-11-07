@@ -66,4 +66,10 @@ class AuthService implements AuthProvider {
     required String newPassword,
   }) =>
       provider.replacePassword(email: email, currentPassword: currentPassword, newPassword: newPassword);
+
+  @override
+  Future<void> reauthenticate({String? password}) => provider.reauthenticate(password: password);
+
+  @override
+  Future<void> deleteCurrentUser() => provider.deleteCurrentUser();
 }

@@ -155,6 +155,31 @@ describe('Firestore rules', () => {
     await assertFails(as('reporter').collection('reports').add({ ...report, targetOwnerUid: 'victim' }));
   });
 
+  it('lets a user delete their own profile, and only theirs', async () => {
+    await seed('users/u1', { displayName: 'U', publicKey: 'pk' });
+    await assertFails(as('u2').doc('users/u1').delete());
+    await assertSucceeds(as('u1').doc('users/u1').delete());
+  });
+
+  it('lets authors find their comments, and recipients their join requests, for account deletion', async () => {
+    await seed('users/owner/notes/n1', { collaborators: ['me', 'other'] });
+    await seed('users/owner/notes/n1/comments/mine', { authorUid: 'me', encryptedContent: 'x' });
+    await seed('users/owner/notes/n1/comments/theirs', { authorUid: 'other', encryptedContent: 'x' });
+    await seed('shareLinks/tok/requests/me', { ownerUid: 'owner', recipientUid: 'me', noteId: 'n1', status: 'pending' });
+    await seed('shareLinks/tok/requests/other', { ownerUid: 'owner', recipientUid: 'other', noteId: 'n1', status: 'pending' });
+
+    const comments = await assertSucceeds(as('me').collectionGroup('comments').where('authorUid', '==', 'me').get());
+    if (comments.size !== 1) throw new Error(`expected 1 comment, got ${comments.size}`);
+    await assertFails(as('me').collectionGroup('comments').get());
+    await assertFails(as('me').collectionGroup('comments').where('authorUid', '==', 'other').get());
+    await assertSucceeds(as('me').doc('users/owner/notes/n1/comments/mine').delete());
+
+    const requests = await assertSucceeds(as('me').collectionGroup('requests').where('recipientUid', '==', 'me').get());
+    if (requests.size !== 1) throw new Error(`expected 1 request, got ${requests.size}`);
+    await assertFails(as('me').collectionGroup('requests').where('recipientUid', '==', 'other').get());
+    await assertSucceeds(as('me').doc('shareLinks/tok/requests/me').delete());
+  });
+
   it('denies collaborator from writing to shared note', async () => {
     const dbOwner = testEnv.authenticatedContext('owner').firestore();
     const dbCollab = testEnv.authenticatedContext('collab').firestore();

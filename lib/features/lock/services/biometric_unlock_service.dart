@@ -174,6 +174,13 @@ class BiometricUnlockService {
     }
   }
 
+  /// Turn biometric unlock off for every note of [uid] (account deletion).
+  Future<void> disableAll(String uid) async {
+    for (final noteId in await _index(uid)) {
+      await disable(uid, noteId);
+    }
+  }
+
   Future<void> disable(String uid, String noteId) async {
     try {
       await _store.delete(_itemName(uid, noteId));

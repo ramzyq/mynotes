@@ -216,6 +216,45 @@ class FirebaseAuthProvider implements AuthProvider {
     }
   }
 
+  @override
+  Future<void> reauthenticate({String? password}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw UserNotLoggedInAuthException();
+    try {
+      if (password != null) {
+        await user.reauthenticateWithCredential(
+          EmailAuthProvider.credential(email: user.email ?? '', password: password),
+        );
+        return;
+      }
+      await _ensureGoogleReady();
+      final account = await GoogleSignIn.instance.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null) throw GenericAuthException();
+      await user.reauthenticateWithCredential(GoogleAuthProvider.credential(idToken: idToken));
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) throw GoogleSignInCancelledException();
+      throw GenericAuthException();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') throw WrongPasswordAuthException();
+      if (e.code == 'too-many-requests') throw TooManyRequestsAuthException();
+      if (e.code == 'user-mismatch') throw WrongPasswordAuthException();
+      throw GenericAuthException();
+    }
+  }
+
+  @override
+  Future<void> deleteCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw UserNotLoggedInAuthException();
+    try {
+      await user.delete();
+      if (_googleReady) await GoogleSignIn.instance.signOut().catchError((_) {});
+    } on FirebaseAuthException {
+      throw GenericAuthException();
+    }
+  }
+
   static bool _googleReady = false;
 
   /// google_sign_in 7 must be initialized once before use. On Android the

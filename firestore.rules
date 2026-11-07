@@ -83,7 +83,10 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if signedIn();
       allow list: if false;
-      allow write: if isUser(userId)
+      // Deleting the account removes the profile (a delete has no
+      // request.resource, so it needs its own rule).
+      allow delete: if isUser(userId);
+      allow create, update: if isUser(userId)
         && request.resource.data.keys().hasOnly(['email', 'displayName', 'publicKey'])
         && optional(request.resource.data, 'email', 'string')
         && optional(request.resource.data, 'displayName', 'string')
@@ -238,9 +241,19 @@ service cloud.firestore {
       }
     }
 
-    // Collection group: owner watches join requests across their links.
+    // Collection group: owner watches join requests across their links, and
+    // a recipient finds their own requests (to delete them with the account).
     match /{path=**}/requests/{recipientUid} {
-      allow read: if signedIn() && resource.data.ownerUid == request.auth.uid;
+      allow read: if signedIn()
+        && (resource.data.ownerUid == request.auth.uid
+            || resource.data.recipientUid == request.auth.uid);
+    }
+
+    // Collection group: an author finds the comments they posted on other
+    // people's notes, to delete them with the account. Comments are still
+    // only readable through the note (canAccessNote) otherwise.
+    match /{path=**}/comments/{commentId} {
+      allow list: if signedIn() && resource.data.authorUid == request.auth.uid;
     }
   }
 }
