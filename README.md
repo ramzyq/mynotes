@@ -17,6 +17,8 @@ A privacy-first notes app built with Flutter and Firebase, featuring end-to-end 
 - **Collaboration** — Share by email or by link (open or approval-required). Each collaborator gets the note key wrapped for their X25519 public key. Removing a collaborator rotates the note key. Collaborators can read and comment; only the owner edits.
 - **Context switcher** — Organize notes with tags. Filter to a focused view per project or topic.
 - **Self-destructing notes** — Set a destruction date, or mark a note read-once so it is deleted when you close it. The note's versions, comments, and share links are deleted with it. Expired notes are deleted by the app while it is open; with the Blaze plan, a Firestore TTL policy (usually within 24 hours of expiry) and a Cloud Function make this server-side and remove everything attached to a deleted note. Self-destruct cannot remove copies a collaborator has already decrypted on their own device.
+- **Works offline** — Writing, editing, pinning, archiving and trashing work without a connection: changes are saved on the device at once and sync when it's back. Sharing, PIN locks and account changes need a connection and say so.
+- **Delete your account** — Account → Delete account removes your notes, their history, comments you posted, share links, join requests and your key backup, then the account itself.
 - **Dark theme** — Calm, dark workspace for focused writing. Light theme also available.
 
 ## Privacy & Security
@@ -153,13 +155,34 @@ firebase emulators:exec --only firestore 'npm test'
 
 ## Launch checklist
 
-Done in the repo: release builds (R8 rules, Crashlytics plugin), App Links,
-the `notely://` scheme, iOS deployment target and Podfile, iOS Google Sign-In,
-backup exclusion, hosting with security headers.
+Done in the repo: release builds (R8 rules, Crashlytics plugin, checked in CI
+for Android and iOS), App Links, the `notely://` scheme, iOS deployment target
+and Podfile, iOS Google Sign-In, backup exclusion, hosting with security
+headers, explicit loading/error/offline states, in-app account deletion.
 
 Still needed, outside the repo:
 
+- [ ] **Deploy to production** (the app depends on these):
+
+      ```bash
+      firebase deploy --only firestore:rules,firestore:indexes,hosting --project ramzyqnotes
+      ```
+
+      Rules: report validation, profile deletion, and the author/recipient
+      queries account deletion uses. Indexes: two single-field
+      collection-group indexes for those queries (they take a few minutes to
+      build). Hosting: share link pages, the email action handler, and
+      `assetlinks.json`.
 - [ ] **Email action URL** in the Firebase console (see *Hosting, share links and email links*).
+- [ ] **Account deletion on the web (Google Play).** Play also wants a web page
+      where people can request deletion without the app. It needs a support
+      contact (an email address), which isn't decided yet; add a
+      `hosting/public/delete-account.html` with the in-app steps and that
+      contact, and give Play its URL.
+- [ ] **Privacy policy.** Both stores require a public privacy policy URL. The
+      *Privacy & Security* section above describes what the app collects and
+      encrypts; publish a policy (e.g. `hosting/public/privacy.html`) that you
+      have reviewed, and link it in both store listings.
 - [ ] **Release signing (Android).** Create an upload key, add a `signingConfigs`
       block in `android/app/build.gradle.kts`, and add the upload key's and
       Play App Signing's SHA-256 fingerprints to
@@ -177,7 +200,9 @@ Still needed, outside the repo:
 - [ ] **App Check** (Play Integrity / App Attest) once the app is signed for release.
 - [ ] Manual test on real devices against production: register, verify email,
       sign out/in, change password, reset password from the email link, share by
-      email and by link, biometric unlock.
+      email and by link, biometric unlock, editing in airplane mode (and closing
+      the editor while offline), and deleting a test account. Time one sign-in
+      on a mid-range Android phone (600k PBKDF2 iterations).
 
 ## Project Structure
 

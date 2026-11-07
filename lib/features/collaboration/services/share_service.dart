@@ -222,9 +222,10 @@ class ShareService {
     );
   }
 
-  Future<void> revokeShareLink({required String token}) async {
+  Future<void> revokeShareLink({required String uid, required String token}) async {
     final linkRef = firestore.collection('shareLinks').doc(token);
-    final requests = await linkRef.collection('requests').get();
+    // Filtered by owner: the rules refuse an unfiltered list of requests.
+    final requests = await linkRef.collection('requests').where('ownerUid', isEqualTo: uid).get();
     final batch = firestore.batch();
     for (final doc in requests.docs) {
       batch.delete(doc.reference);
