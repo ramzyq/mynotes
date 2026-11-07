@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/format/dates.dart';
@@ -94,7 +95,11 @@ class _VersionHistoryViewState extends ConsumerState<VersionHistoryView> {
             return const Center(child: CircularProgressIndicator(strokeWidth: 2));
           }
           if (snapshot.hasError) {
-            return Center(child: Text("Couldn't load version history", style: empty));
+            return ErrorState(
+              title: "Couldn't load version history",
+              error: snapshot.error!,
+              onRetry: () => setState(_loadVersions),
+            );
           }
           final versions = snapshot.data ?? [];
           if (versions.isEmpty) {

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,11 +34,19 @@ Note _n(String id, String title, {bool pinned = false, List<String>? tags}) => N
       updatedAt: DateTime(2024, 1, 2),
     );
 
-Widget _wrap(_MockNotesService notesService, {required _MockShareService shareService, required _MockJoinLinkProcessor joinLinkProcessor}) => ProviderScope(
+Widget _wrap(
+  _MockNotesService notesService, {
+  required _MockShareService shareService,
+  required _MockJoinLinkProcessor joinLinkProcessor,
+  Stream<List<Note>> Function()? notes,
+  Stream<List<Note>> Function()? shared,
+}) =>
+    ProviderScope(
       overrides: [
         notesServiceProvider.overrideWithValue(notesService),
-        notesProvider.overrideWith((ref, uid) => Stream.value([_n('a', 'Alpha', pinned: true), _n('b', 'Beta', tags: const ['Dev'])])),
-        sharedNotesProvider.overrideWith((ref, uid) => Stream.value(const <Note>[])),
+        notesProvider.overrideWith((ref, uid) =>
+            notes?.call() ?? Stream.value([_n('a', 'Alpha', pinned: true), _n('b', 'Beta', tags: const ['Dev'])])),
+        sharedNotesProvider.overrideWith((ref, uid) => shared?.call() ?? Stream.value(const <Note>[])),
         dueCountProvider.overrideWith((ref, uid) => Stream.value(0)),
         shareServiceProvider.overrideWithValue(shareService),
         joinLinkProcessorProvider.overrideWithValue(joinLinkProcessor),
@@ -95,5 +106,62 @@ void main() {
     await tester.tap(find.text('Archive').hitTestable());
     await tester.pumpAndSettle();
     expect(find.text('Note archived'), findsOneWidget);
+  });
+
+  group('load states', () {
+    Widget wrapWith({Stream<List<Note>> Function()? notes, Stream<List<Note>> Function()? shared}) => _wrap(
+          notesService,
+          shareService: shareService,
+          joinLinkProcessor: joinLinkProcessor,
+          notes: notes,
+          shared: shared,
+        );
+    final offline = FirebaseException(plugin: 'cloud_firestore', code: 'unavailable');
+
+    testWidgets('before the first snapshot it shows loading, not an empty account', (tester) async {
+      final pending = StreamController<List<Note>>();
+      addTearDown(pending.close);
+      await tester.pumpWidget(wrapWith(notes: () => pending.stream));
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('A blank page'), findsNothing);
+      expect(find.textContaining('0 notes'), findsNothing);
+    });
+
+    testWidgets('a failed first load shows an error with a working retry', (tester) async {
+      var subscriptions = 0;
+      await tester.pumpWidget(wrapWith(notes: () {
+        subscriptions++;
+        return subscriptions == 1 ? Stream.error(offline) : Stream.value([_n('a', 'Alpha')]);
+      }));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't load your notes"), findsOneWidget);
+      expect(find.textContaining("You're offline"), findsOneWidget);
+      expect(find.text('A blank page'), findsNothing);
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(subscriptions, 2);
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text("Couldn't load your notes"), findsNothing);
+    });
+
+    testWidgets('shared notes failing keeps your own notes and says so', (tester) async {
+      await tester.pumpWidget(wrapWith(shared: () => Stream.error(offline)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text("Couldn't load notes shared with you."), findsOneWidget);
+    });
+
+    testWidgets('a real empty account shows the empty state', (tester) async {
+      await tester.pumpWidget(wrapWith(notes: () => Stream.value(const <Note>[])));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A blank page'), findsOneWidget);
+      expect(find.textContaining('0 notes'), findsOneWidget);
+    });
   });
 }

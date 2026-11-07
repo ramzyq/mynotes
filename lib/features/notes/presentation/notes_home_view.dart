@@ -9,6 +9,7 @@ import 'package:mynotes/core/analytics/analytics_consent_store.dart';
 import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
+import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/features/account/presentation/account_sheet.dart';
 import 'package:mynotes/features/lock/presentation/lock_screen.dart';
 import 'package:mynotes/features/notes/data/note.dart';
@@ -279,7 +280,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
     } catch (error, stack) {
       _reportFailure(error, stack, 'Could not archive the selected notes.');
     }
-    setState(() { _selected.clear(); _selectMode = false; });
+    if (mounted) setState(() { _selected.clear(); _selectMode = false; });
   }
 
   Future<void> _bulkDelete() async {
@@ -414,8 +415,12 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
         ),
       );
     });
-    final own = ref.watch(notesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
-    final shared = ref.watch(sharedNotesProvider(widget.authUser.uid)).valueOrNull ?? const <Note>[];
+    final ownAsync = ref.watch(notesProvider(widget.authUser.uid));
+    final sharedAsync = ref.watch(sharedNotesProvider(widget.authUser.uid));
+    // Before the first snapshot there is nothing to show yet: that is
+    // "loading", never "no notes" (see the slivers below).
+    final own = ownAsync.valueOrNull ?? const <Note>[];
+    final shared = sharedAsync.valueOrNull ?? const <Note>[];
     final notes = [...own, ...shared.where((n) => n.sharedBy != widget.authUser.uid)]
         .where((n) => !n.isExpired && !n.isTrashed)
         .toList();
@@ -439,7 +444,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                   sliver: SliverToBoxAdapter(
                     child: ListHeader(
                       userName: _userName(),
-                      noteCount: notes.where((n) => !n.isArchived).length,
+                      noteCount: ownAsync.hasValue ? notes.where((n) => !n.isArchived).length : null,
                       onOpenAccount: _openAccount,
                       onToggleSelect: () => setState(() { _selectMode = !_selectMode; _selected.clear(); }),
                       selectMode: _selectMode,
@@ -486,8 +491,36 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     sliver: SliverToBoxAdapter(child: _SelectionBar(count: _selected.length, onPin: _bulkPin, onArchive: _bulkArchive, onDelete: _bulkDelete)),
                   ),
+                // Notes are on screen but a refresh failed: say so, keep them.
+                if (ownAsync.hasValue && ownAsync.hasError)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: InlineErrorBanner(
+                        message: "Couldn't refresh your notes. Showing what's on this device.",
+                        onRetry: _retryLoad,
+                      ),
+                    ),
+                  ),
+                if (sharedAsync.hasError)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: InlineErrorBanner(
+                        message: "Couldn't load notes shared with you.",
+                        onRetry: _retryLoad,
+                      ),
+                    ),
+                  ),
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                if (visible.isEmpty)
+                if (!ownAsync.hasValue)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: ownAsync.hasError
+                        ? ErrorState(title: "Couldn't load your notes", error: ownAsync.error!, onRetry: _retryLoad)
+                        : const LoadingState(),
+                  )
+                else if (visible.isEmpty)
                   SliverFillRemaining(
                     hasScrollBody: false,
                     child: EmptyState(query: _query, activeTag: _activeTag),
@@ -548,7 +581,9 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                 ],
               ],
             ),
-            if (!_selectMode) HomeFab(onPressed: () => _openEditor()),
+            // Only once notes have loaded: over a spinner or an error it
+            // would cover "Try again" on short screens.
+            if (!_selectMode && ownAsync.hasValue) HomeFab(onPressed: () => _openEditor()),
           ],
         ),
         ),
@@ -570,6 +605,11 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
       relativeTime: _timeLabel(note.updatedAt),
       preview: buildNotePreview(context, note, allNotes, (n) => _openEditor(note: n)),
     );
+  }
+
+  void _retryLoad() {
+    ref.invalidate(notesProvider(widget.authUser.uid));
+    ref.invalidate(sharedNotesProvider(widget.authUser.uid));
   }
 
   void _openAccount() {

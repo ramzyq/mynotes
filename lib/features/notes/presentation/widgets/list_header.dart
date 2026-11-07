@@ -6,7 +6,8 @@ import 'package:mynotes/features/notes/data/note_sort.dart';
 
 class ListHeader extends StatelessWidget {
   final String userName;
-  final int noteCount;
+  /// Null while the notes are still loading.
+  final int? noteCount;
   final VoidCallback onOpenAccount;
   final VoidCallback onToggleSelect;
   final bool selectMode;
@@ -77,7 +78,9 @@ class ListHeader extends StatelessWidget {
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                '$noteCount ${noteCount == 1 ? 'note' : 'notes'} · encrypted on this device',
+                noteCount == null
+                    ? 'Encrypted on this device'
+                    : '$noteCount ${noteCount == 1 ? 'note' : 'notes'} · encrypted on this device',
                 style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3),
               ),
             ),

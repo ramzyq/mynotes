@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
@@ -27,9 +28,8 @@ class TrashView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notely = NotelyTheme.of(context);
     final uid = authUser?.uid ?? ref.read(authStateProvider).valueOrNull?.uid ?? '';
-    final trashed = (ref.watch(notesProvider(uid)).valueOrNull ?? const <Note>[])
-        .where((n) => n.isTrashed && !n.isExpired)
-        .toList()
+    final notesAsync = ref.watch(notesProvider(uid));
+    final trashed = (notesAsync.valueOrNull ?? const <Note>[]).where((n) => n.isTrashed && !n.isExpired).toList()
       ..sort((a, b) => b.deletedAt!.compareTo(a.deletedAt!));
     // Read lazily: building the screen must not create the service.
     NotesService service() => ref.read(notesServiceProvider);
@@ -65,8 +65,11 @@ class TrashView extends ConsumerWidget {
           TextButton(
             style: TextButton.styleFrom(foregroundColor: notely.danger),
             onPressed: () async {
-              if (!await confirm('Empty the trash?', 'This deletes ${trashed.length} '
-                  '${trashed.length == 1 ? 'note' : 'notes'} for good. This cannot be undone.')) {
+              if (!await confirm(
+                'Empty the trash?',
+                'This deletes ${trashed.length} '
+                    '${trashed.length == 1 ? 'note' : 'notes'} for good. This cannot be undone.',
+              )) {
                 return;
               }
               await run(() => service().deleteMany(uid: uid, notes: trashed), "Some notes couldn't be deleted.");
@@ -75,41 +78,46 @@ class TrashView extends ConsumerWidget {
           ),
         const SizedBox(width: 8),
       ],
-      body: trashed.isEmpty
-          ? const ManagedEmpty(
-              icon: Icons.delete_outline,
-              title: 'Trash is empty',
-              message: 'Deleted notes stay here for 30 days, so you can bring them back.',
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-              itemCount: trashed.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final note = trashed[index];
-                return ManagedNoteRow(
-                  note: note,
-                  caption: daysLeft(note),
-                  actions: [
-                    TextButton(
-                      onPressed: () => run(
-                        () => service().restoreFromTrash(uid: uid, notes: [note]),
-                        "Couldn't restore the note.",
+      body: AsyncStateView<List<Note>>(
+        value: notesAsync,
+        errorTitle: "Couldn't load the trash",
+        onRetry: () => ref.invalidate(notesProvider(uid)),
+        data: (_) => trashed.isEmpty
+            ? const ManagedEmpty(
+                icon: Icons.delete_outline,
+                title: 'Trash is empty',
+                message: 'Deleted notes stay here for 30 days, so you can bring them back.',
+              )
+            : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                itemCount: trashed.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final note = trashed[index];
+                  return ManagedNoteRow(
+                    note: note,
+                    caption: daysLeft(note),
+                    actions: [
+                      TextButton(
+                        onPressed: () => run(
+                          () => service().restoreFromTrash(uid: uid, notes: [note]),
+                          "Couldn't restore the note.",
+                        ),
+                        child: const Text('Restore'),
                       ),
-                      child: const Text('Restore'),
-                    ),
-                    IconButton(
-                      tooltip: 'Delete for good',
-                      icon: Icon(Icons.delete_forever_outlined, size: 20, color: notely.text3),
-                      onPressed: () async {
-                        if (!await confirm('Delete for good?', 'This cannot be undone.')) return;
-                        await run(() => service().deleteNote(uid: uid, noteId: note.id), "Couldn't delete the note.");
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
+                      IconButton(
+                        tooltip: 'Delete for good',
+                        icon: Icon(Icons.delete_forever_outlined, size: 20, color: notely.text3),
+                        onPressed: () async {
+                          if (!await confirm('Delete for good?', 'This cannot be undone.')) return;
+                          await run(() => service().deleteNote(uid: uid, noteId: note.id), "Couldn't delete the note.");
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+      ),
     );
   }
 }
