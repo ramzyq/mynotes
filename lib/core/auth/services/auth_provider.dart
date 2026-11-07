@@ -1,4 +1,5 @@
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/auth/models/email_action_info.dart';
 
 abstract class AuthProvider {
   Stream<AuthUser?> get authStateChanges;
@@ -55,4 +56,11 @@ abstract class AuthProvider {
 
   /// Delete the signed-in Firebase account. Call [reauthenticate] first.
   Future<void> deleteCurrentUser();
+
+  /// Apply the one-time code from an email link that needs no input, such
+  /// as email verification.
+  Future<void> applyActionCode(String code);
+
+  /// Which account an email link's code is for, without using it up.
+  Future<EmailActionInfo> checkActionCode(String code);
 }

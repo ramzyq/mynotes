@@ -5,6 +5,13 @@ class AppConfig {
   /// the Firebase Auth email action URL.
   final String shareDomain = 'ramzyqnotes.web.app';
 
+  /// Where Firebase Auth's own emails link to (`/__/auth/action`). The
+  /// project can't change that link (Firebase refuses with
+  /// EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED), so the Android app claims it with
+  /// App Links instead: this domain serves the same hosting site, including
+  /// assetlinks.json.
+  final String firebaseAuthDomain = 'ramzyqnotes.firebaseapp.com';
+
   const AppConfig();
 }
 

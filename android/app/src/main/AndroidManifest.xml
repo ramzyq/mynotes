@@ -44,14 +44,27 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Share links and password reset links on the app's domain open
-                 the app directly once Android verifies assetlinks.json. -->
+            <!-- Share links and email links open the app directly once Android
+                 verifies assetlinks.json. firebaseapp.com/__/auth/action is
+                 Firebase Auth's own email link, which this project can't
+                 redirect (EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED); claiming it keeps
+                 password resets in the app. That domain serves the same
+                 hosting site, so the same assetlinks.json verifies it. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="ramzyqnotes.web.app" android:pathPrefix="/join/"/>
                 <data android:scheme="https" android:host="ramzyqnotes.web.app" android:path="/auth/action"/>
+            </intent-filter>
+            <!-- Its own filter: on Android 11 and below verification is
+                 all-or-nothing per filter, so a problem with this domain must
+                 not stop the share links above from opening the app. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="ramzyqnotes.firebaseapp.com" android:path="/__/auth/action"/>
             </intent-filter>
             <!-- notely:// from the hosted pages' "Open in Notely" button: works
                  even before (or without) domain verification. -->

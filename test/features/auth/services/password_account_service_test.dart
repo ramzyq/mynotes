@@ -1,5 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mynotes/core/auth/models/email_action_info.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/core/auth/services/auth_provider.dart';
@@ -96,6 +97,12 @@ class _FakeFirebase implements AuthProvider {
   Future<void> reauthenticate({String? password}) async {}
   @override
   Future<void> deleteCurrentUser() async {}
+
+  @override
+  Future<void> applyActionCode(String code) async {}
+
+  @override
+  Future<EmailActionInfo> checkActionCode(String code) async => const EmailActionInfo();
 }
 
 class _MemoryStore implements KeyBackupStore {

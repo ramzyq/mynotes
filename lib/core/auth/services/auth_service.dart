@@ -1,4 +1,5 @@
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/auth/models/email_action_info.dart';
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:mynotes/core/auth/services/firebase_auth_provider.dart';
 
@@ -72,4 +73,10 @@ class AuthService implements AuthProvider {
 
   @override
   Future<void> deleteCurrentUser() => provider.deleteCurrentUser();
+
+  @override
+  Future<void> applyActionCode(String code) => provider.applyActionCode(code);
+
+  @override
+  Future<EmailActionInfo> checkActionCode(String code) => provider.checkActionCode(code);
 }

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:mynotes/core/auth/models/email_action_info.dart';
 import 'package:mynotes/app.dart';
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:mynotes/core/auth/services/auth_service.dart';
@@ -83,4 +84,10 @@ class _FakeAuthProvider implements AuthProvider {
   Future<void> reauthenticate({String? password}) async {}
   @override
   Future<void> deleteCurrentUser() async {}
+
+  @override
+  Future<void> applyActionCode(String code) async {}
+
+  @override
+  Future<EmailActionInfo> checkActionCode(String code) async => const EmailActionInfo();
 }

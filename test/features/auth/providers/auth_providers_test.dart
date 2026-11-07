@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/auth/models/email_action_info.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/auth/services/auth_service.dart';
 import 'package:mynotes/core/auth/services/auth_provider.dart';
@@ -59,6 +60,12 @@ class _MockAuthProvider implements AuthProvider {
   Future<void> reauthenticate({String? password}) async {}
   @override
   Future<void> deleteCurrentUser() async {}
+
+  @override
+  Future<void> applyActionCode(String code) async {}
+
+  @override
+  Future<EmailActionInfo> checkActionCode(String code) async => const EmailActionInfo();
 }
 
 void main() {
