@@ -233,13 +233,17 @@ Still needed, outside the repo:
       *Open in Notely* button.
 - [ ] **Icon credit (Flaticon).** The app icon and logo are based on a Flaticon
       icon, whose licence asks for credit in the app and in the store listings.
-      Copy the exact attribution Flaticon shows on the icon's download page
-      (it names the author) into `iconAttribution` in
-      `lib/core/config/app_config.dart` (shown under Account → About & credits),
-      and add the same line to the App Store and Google Play descriptions.
-      Also confirm on that page that the licence allows use as an app icon or
-      logo; if not, the mark needs replacing (`assets/branding/`, then
-      `dart run flutter_launcher_icons`).
+      The icon is "Post it" (#9418820) by Magnific. The app shows the credit
+      under Account → About & credits (`iconAttribution` in
+      `lib/core/config/app_config.dart`); add the same line to the App Store
+      and Google Play descriptions:
+      *Post it icons created by Magnific - Flaticon*
+      (https://www.flaticon.com/free-icons/post-it).
+      Flaticon's terms (section 8.3) don't allow its icons on a trademark or as
+      part of one unless modified into new and different content, even with a
+      paid licence; an app icon works as a logo. Decide this before launch; to
+      replace the mark, update `assets/branding/` and `notely_mark.dart`, then
+      run `dart run flutter_launcher_icons`.
 - [ ] **App Check** (Play Integrity / App Attest) once the app is signed for release.
 - [ ] Manual test on real devices against production: register, verify email,
       sign out/in, change password, reset password from the email link, share by
