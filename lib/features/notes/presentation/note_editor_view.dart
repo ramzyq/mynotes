@@ -15,6 +15,7 @@ import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
 import 'package:mynotes/features/capture/services/capture_exception.dart';
+import 'package:mynotes/features/capture/services/voice_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
@@ -64,6 +65,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
   bool _isSaving = false;
   bool _isDeleting = false;
   bool _isRecording = false;
+
+  /// Starting or stopping a recording is in progress; taps are ignored.
+  bool _voiceBusy = false;
   List<String> _audioAttachments = [];
   double? _latitude;
   double? _longitude;
@@ -271,7 +275,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       final text = await ocrService.pickAndRecognizeText(
         fromCamera: result == 'camera',
       );
-      if (text == null || text.isEmpty || !mounted) return;
+      if (text == null || !mounted) return; // Cancelled.
+      if (text.isEmpty) {
+        _showCaptureError(const CaptureUnavailableException(
+          "No text found in that photo. Try a sharper, well-lit shot.",
+        ));
+        return;
+      }
 
       final cursorPos = controller.selection.baseOffset;
       final currentText = controller.text;
@@ -285,6 +295,12 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       controller.selection = TextSelection.collapsed(
         offset: insertPos + text.length,
       );
+    } on CaptureUnavailableException catch (e) {
+      _showCaptureError(e);
+    } catch (error, stack) {
+      // Anything unexpected (e.g. a missing plugin) still gets a message.
+      AppErrorHandler().handle(error, stack);
+      _showCaptureError(const CaptureUnavailableException("Couldn't scan that photo."));
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -316,18 +332,21 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
   }
 
   Future<void> _startVoiceRecording() async {
+    if (_voiceBusy) return;
     final voiceService = ref.read(voiceServiceProvider);
+    setState(() => _voiceBusy = true);
     try {
       await voiceService.requestPermission();
-      if (!mounted) return;
-      setState(() => _isRecording = true);
       await voiceService.startRecording();
+      // "Recording" (and the stop button) only once it really is.
+      if (mounted) setState(() => _isRecording = true);
     } on CaptureUnavailableException catch (e) {
       _showCaptureError(e);
     } catch (error, stack) {
       AppErrorHandler().handle(error, stack);
-      if (mounted) setState(() => _isRecording = false);
       _showCaptureError(const CaptureUnavailableException("Couldn't start recording."));
+    } finally {
+      if (mounted) setState(() => _voiceBusy = false);
     }
   }
 
@@ -342,8 +361,21 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
   }
 
   Future<void> _stopVoiceRecording() async {
+    if (_voiceBusy) return;
     final voiceService = ref.read(voiceServiceProvider);
-    final result = await voiceService.stopRecordingAndTranscribe();
+    setState(() => _voiceBusy = true);
+    final VoiceResult? result;
+    try {
+      result = await voiceService.stopRecordingAndTranscribe();
+    } catch (error, stack) {
+      // Never leave the editor stuck in "recording".
+      AppErrorHandler().handle(error, stack);
+      if (mounted) setState(() => _isRecording = false);
+      _showCaptureError(const CaptureUnavailableException("Couldn't save the recording."));
+      return;
+    } finally {
+      if (mounted) setState(() => _voiceBusy = false);
+    }
     if (!mounted) return;
 
     setState(() => _isRecording = false);
@@ -369,7 +401,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       );
     }
 
-    _audioAttachments = [..._audioAttachments, filePath];
+    // setState so autosave sees the new attachment.
+    setState(() => _audioAttachments = [..._audioAttachments, filePath]);
+    if (transcription.isEmpty) {
+      _showCaptureError(const CaptureUnavailableException(
+        "Recording saved. Couldn't turn it into text, so nothing was added to the note.",
+      ));
+    }
   }
 
   /// Owner of the note being edited (the current user for new notes).
@@ -1276,7 +1314,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
                 isCapturingLocation: _isCapturingLocation,
                 hasLocation: _latitude != null,
                 onScan: _showOcrSheet,
-                onVoice: _isRecording ? _stopVoiceRecording : _startVoiceRecording,
+                onVoice: _isRecording ? _stopVoiceRecording : _startVoiceRecording, // Both ignore taps while _voiceBusy.
                 onLocation: _captureLocation,
                 onChecklist: () {
                   _contentController.toggleChecklistLine();
