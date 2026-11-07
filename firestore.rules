@@ -156,8 +156,18 @@ service cloud.firestore {
     // Moderation reports: reporters and note owners can read; only creation
     // is allowed (resolution is handled by support, not self-serve).
     match /reports/{reportId} {
+      // A report must be about a real comment, on a note the reporter can
+      // read, by the author it names. Otherwise anyone could file "reports"
+      // naming any user as the target, and that user would see them.
+      function reportsRealComment(data) {
+        return canAccessNote(data.targetOwnerUid, data.noteId)
+          && get(/databases/$(database)/documents/users/$(data.targetOwnerUid)/notes/$(data.noteId)/comments/$(data.commentId))
+               .data.authorUid == data.commentAuthorUid;
+      }
+
       allow create: if signedIn()
         && request.resource.data.reporterUid == request.auth.uid
+        && reportsRealComment(request.resource.data)
         && request.resource.data.status == 'open'
         && request.resource.data.keys().hasOnly([
              'reporterUid', 'targetOwnerUid', 'noteId', 'commentId',

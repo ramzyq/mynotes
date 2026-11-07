@@ -52,6 +52,12 @@ class NotesService {
   static const _pinIterations = 100000;
   static const _legacyPinIterations = 10000;
 
+  /// New PIN locks need at least this many digits. Existing locks with
+  /// shorter PINs keep working. Against the server a PIN lock is strong (the
+  /// key also needs the master key), but someone holding an unlocked, rooted
+  /// phone can try PINs offline: 6 digits is 100x the work of 4.
+  static const minPinLength = 6;
+
   // In-memory caches; all cleared on sign-out via [clearCaches].
   final _decrypted = <String, ({String fingerprint, Note note})>{};
   final _noteKeys = <String, ({int gen, SecretKey key})>{};
@@ -721,7 +727,16 @@ class NotesService {
 
   static String _pinAad(String noteId) => 'notely:pin:$noteId';
 
+  /// Lock [note] with a PIN the user chose (at least [minPinLength] digits).
   Future<void> lockWithPin({required String uid, required Note note, required String pin}) async {
+    if (pin.length < minPinLength || !RegExp(r'^[0-9]+$').hasMatch(pin)) {
+      throw const NoteException('Use a PIN of at least $minPinLength digits.');
+    }
+    await _applyPinLock(uid: uid, note: note, pin: pin);
+  }
+
+  /// No length check: also upgrades legacy locks, whose PINs may be shorter.
+  Future<void> _applyPinLock({required String uid, required Note note, required String pin}) async {
     final ref = _noteRef(uid, note.id);
     final salt = crypto.generateSalt();
     final kek = await _pinKek(note.id, pin, salt);
@@ -803,7 +818,7 @@ class NotesService {
     final ok = _constantTimeEquals(await derived.extractBytes(), base64Decode(note.pinHash!));
     if (!ok) return null;
     try {
-      await lockWithPin(uid: uid, note: note, pin: pin);
+      await _applyPinLock(uid: uid, note: note, pin: pin);
     } catch (error, stack) {
       AppErrorHandler().handle(error, stack);
     }
