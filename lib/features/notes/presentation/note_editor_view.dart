@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -719,21 +720,14 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
   }
 
   Future<String?> _askForPin() async {
-    final pinController = TextEditingController();
-    final pin = await showNotelyDialog<String>(
+    // The field owns its controller: disposing one here would break the
+    // dialog's closing animation, which still draws the field.
+    var pin = '';
+    return showNotelyDialog<String>(
       context: context,
       title: 'Set a PIN',
       message: null,
-      content: TextField(
-        controller: pinController,
-        obscureText: true,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          hintText: 'At least 4 digits',
-          helperText: 'The PIN encrypts this note. It cannot be recovered.',
-          border: OutlineInputBorder(),
-        ),
-      ),
+      content: _PinField(onChanged: (value) => pin = value),
       actions: [
         NotelyDialogAction(
           label: 'Cancel',
@@ -742,12 +736,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
         NotelyDialogAction(
           label: 'Set PIN',
           isPrimary: true,
-          onPressed: () => Navigator.of(context).pop(pinController.text),
+          onPressed: () => Navigator.of(context).pop(pin),
         ),
       ],
     );
-    pinController.dispose();
-    return pin;
   }
 
   /// Ask for a PIN, encrypt the note under it, and offer biometric unlock.
@@ -757,8 +749,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
     final messenger = ScaffoldMessenger.of(context);
     final pin = await _askForPin();
     if (pin == null || !mounted) return;
-    if (pin.length < 4) {
-      messenger.showSnackBar(const SnackBar(content: Text('Use a PIN of at least 4 digits.')));
+    if (pin.length < NotesService.minPinLength) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Use a PIN of at least ${NotesService.minPinLength} digits.')),
+      );
       return;
     }
     final uid = widget.authUser.uid;
@@ -1927,6 +1921,42 @@ class _RowTile extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Digits-only PIN entry for the "Set a PIN" dialog.
+class _PinField extends StatefulWidget {
+  const _PinField({required this.onChanged});
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_PinField> createState() => _PinFieldState();
+}
+
+class _PinFieldState extends State<_PinField> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      autofocus: true,
+      obscureText: true,
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      onChanged: widget.onChanged,
+      decoration: const InputDecoration(
+        hintText: 'At least ${NotesService.minPinLength} digits',
+        helperText: 'The PIN encrypts this note. It cannot be recovered.',
+        border: OutlineInputBorder(),
       ),
     );
   }

@@ -19,6 +19,12 @@ async function seed(path, data) {
 
 const as = (uid, verified = true) => testEnv.authenticatedContext(uid, { email: `${uid}@example.com`, email_verified: verified }).firestore();
 
+/** A note shared with `reporter`, with a comment by `author`, to report. */
+async function seedReportable() {
+  await seed('users/owner/notes/note1', { collaborators: ['reporter', 'author'] });
+  await seed('users/owner/notes/note1/comments/comment1', { authorUid: 'author', encryptedContent: 'ct' });
+}
+
 afterEach(async () => {
   await testEnv.clearFirestore();
 });
@@ -133,6 +139,22 @@ describe('Firestore rules', () => {
     await assertFails(as('stranger').collectionGroup('notes').get());
   });
 
+  it('only accepts reports about a real comment the reporter can see', async () => {
+    await seedReportable();
+    const report = { reporterUid: 'reporter', targetOwnerUid: 'owner', noteId: 'note1', commentId: 'comment1',
+      commentAuthorUid: 'author', reason: 'spam', status: 'open', createdAt: new Date() };
+    await assertSucceeds(as('reporter').collection('reports').add(report));
+
+    // Someone with no access to the note can't target its owner.
+    await assertFails(as('stranger').collection('reports').add({ ...report, reporterUid: 'stranger' }));
+    // The named author must be the comment's real author.
+    await assertFails(as('reporter').collection('reports').add({ ...report, commentAuthorUid: 'owner' }));
+    // The comment must exist.
+    await assertFails(as('reporter').collection('reports').add({ ...report, commentId: 'nope' }));
+    // A made-up owner/note pair is refused.
+    await assertFails(as('reporter').collection('reports').add({ ...report, targetOwnerUid: 'victim' }));
+  });
+
   it('denies collaborator from writing to shared note', async () => {
     const dbOwner = testEnv.authenticatedContext('owner').firestore();
     const dbCollab = testEnv.authenticatedContext('collab').firestore();
@@ -144,6 +166,7 @@ describe('Firestore rules', () => {
   });
 
   it('allows authenticated user to report a comment', async () => {
+    await seedReportable();
     const db = testEnv.authenticatedContext('reporter').firestore();
     await db.collection('reports').doc('report1').set({
       targetOwnerUid: 'owner',
@@ -159,6 +182,7 @@ describe('Firestore rules', () => {
   });
 
   it('denies creating a report on behalf of another user', async () => {
+    await seedReportable();
     const db = testEnv.authenticatedContext('reporter').firestore();
     await assertFails(db.collection('reports').doc('report1').set({
       targetOwnerUid: 'owner',
@@ -173,6 +197,7 @@ describe('Firestore rules', () => {
   });
 
   it('allows note owner to read reports on their notes', async () => {
+    await seedReportable();
     const dbReporter = testEnv.authenticatedContext('reporter').firestore();
     await dbReporter.collection('reports').doc('report1').set({
       targetOwnerUid: 'owner',
@@ -189,6 +214,7 @@ describe('Firestore rules', () => {
   });
 
   it('denies unrelated user from reading a report', async () => {
+    await seedReportable();
     const dbReporter = testEnv.authenticatedContext('reporter').firestore();
     await dbReporter.collection('reports').doc('report1').set({
       targetOwnerUid: 'owner',
@@ -205,6 +231,7 @@ describe('Firestore rules', () => {
   });
 
   it('denies anyone from updating or deleting a report', async () => {
+    await seedReportable();
     const dbReporter = testEnv.authenticatedContext('reporter').firestore();
     await dbReporter.collection('reports').doc('report1').set({
       targetOwnerUid: 'owner',

@@ -49,25 +49,21 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
     _loadEmails();
   }
 
+  /// How each collaborator is shown: their email, else their name. A raw
+  /// account id means nothing to people, so it is never shown.
   Future<void> _loadEmails() async {
-    final emails = <String, String>{};
-    for (final uid in _collaborators) {
+    final labels = await Future.wait(_collaborators.map((uid) async {
       try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .get();
-        if (doc.exists) {
-          emails[uid] = doc.data()?['email'] as String? ?? uid;
-        } else {
-          emails[uid] = uid;
-        }
+        final data = (await FirebaseFirestore.instance.collection('users').doc(uid).get()).data();
+        final email = (data?['email'] as String?)?.trim() ?? '';
+        final name = (data?['displayName'] as String?)?.trim() ?? '';
+        return MapEntry(uid, email.isNotEmpty ? email : (name.isNotEmpty ? name : 'Notely user'));
       } catch (_) {
-        emails[uid] = uid;
+        return MapEntry(uid, 'Notely user');
       }
-    }
+    }));
     if (!mounted) return;
-    setState(() => _emails.addAll(emails));
+    setState(() => _emails.addEntries(labels));
   }
 
   Future<void> _submit() async {
@@ -255,7 +251,7 @@ class _ShareSheetState extends ConsumerState<ShareSheet> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        _emails[uid] ?? uid,
+                        _emails[uid] ?? 'Loading…',
                         style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text),
                         overflow: TextOverflow.ellipsis,
                       ),

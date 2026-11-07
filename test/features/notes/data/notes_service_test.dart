@@ -61,15 +61,25 @@ void main() {
   test('a PIN lock opens with the right PIN only', () async {
     final (service, db) = await _service();
     final created = await service.createNote(uid: uid, title: 'Locked', content: 'body', colorIndex: 0);
-    await service.lockWithPin(uid: uid, note: created, pin: '4821');
+    await service.lockWithPin(uid: uid, note: created, pin: '482193');
 
     final stored = Note.fromFirestore(await _notes(db).doc(created.id).get());
     expect(stored.pinWrappedKey, isNotNull);
     expect(stored.pinHash, isNull, reason: 'no PIN verifier is stored');
 
-    expect(await service.unlockWithPin(uid: uid, note: stored, pin: '0000'), isNull);
-    final opened = await service.unlockWithPin(uid: uid, note: stored, pin: '4821');
+    expect(await service.unlockWithPin(uid: uid, note: stored, pin: '000000'), isNull);
+    final opened = await service.unlockWithPin(uid: uid, note: stored, pin: '482193');
     expect(opened?.content, 'body');
+  });
+
+  test('a new PIN lock needs at least 6 digits', () async {
+    final (service, db) = await _service();
+    final created = await service.createNote(uid: uid, title: 'Locked', content: 'body', colorIndex: 0);
+    for (final pin in ['4821', '12345', 'abcdef', '12 456']) {
+      await expectLater(service.lockWithPin(uid: uid, note: created, pin: pin), throwsA(isA<NoteException>()),
+          reason: '"$pin" must be refused');
+    }
+    expect(Note.fromFirestore(await _notes(db).doc(created.id).get()).pinWrappedKey, isNull);
   });
 
   test('deleteExpiredNotes removes only expired notes, with their history', () async {
