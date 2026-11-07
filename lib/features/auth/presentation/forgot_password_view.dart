@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/auth/presentation/password_forms.dart';
 import 'package:mynotes/features/auth/presentation/web_reset_repair_view.dart';
@@ -8,9 +9,13 @@ import 'package:mynotes/features/auth/providers/auth_providers.dart';
 /// Reset a forgotten password without Firebase's web page: the email's link
 /// is pasted here, and the app sets the new password (as an auth secret).
 /// Pops with the account email once the password is set.
+///
+/// Opened from the reset email's link ([initialLink]), it skips straight to
+/// choosing the new password.
 class ForgotPasswordView extends ConsumerStatefulWidget {
-  const ForgotPasswordView({super.key, this.initialEmail = ''});
+  const ForgotPasswordView({super.key, this.initialEmail = '', this.initialLink});
   final String initialEmail;
+  final String? initialLink;
 
   @override
   ConsumerState<ForgotPasswordView> createState() => _ForgotPasswordViewState();
@@ -18,11 +23,40 @@ class ForgotPasswordView extends ConsumerStatefulWidget {
 
 class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
   late final TextEditingController _email = TextEditingController(text: widget.initialEmail);
-  final _link = TextEditingController();
+  late final TextEditingController _link = TextEditingController(text: widget.initialLink ?? '');
   final _password = TextEditingController();
   final _confirm = TextEditingController();
-  bool _sent = false;
   bool _busy = false;
+
+  /// Opened from a reset link (until the user asks for a new one).
+  late bool _fromLink = widget.initialLink != null;
+  late bool _sent = _fromLink;
+
+  /// For a link: the account it resets, once checked, or why it can't be used.
+  String? _linkEmail;
+  Object? _linkError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_fromLink) _checkLink();
+  }
+
+  Future<void> _checkLink() async {
+    try {
+      final email = await ref.read(passwordAccountServiceProvider).emailForReset(_link.text);
+      if (mounted) setState(() => _linkEmail = email);
+    } catch (error) {
+      if (mounted) setState(() => _linkError = error);
+    }
+  }
+
+  void _requestNewLink() => setState(() {
+        _fromLink = false;
+        _sent = false;
+        _linkError = null;
+        _link.clear();
+      });
 
   @override
   void dispose() {
@@ -71,37 +105,56 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
     return NotelyPage(
       title: 'Reset password',
       body: PasswordFormBody(children: [
-        const NotelyHeading(
-          title: 'Forgot your password?',
-          subtitle: "We'll email you a reset link. You finish the reset here, in the app.",
-        ),
-        const SizedBox(height: 24),
-        TextField(
-          controller: _email,
-          enabled: !_busy,
-          keyboardType: TextInputType.emailAddress,
-          autofillHints: const [AutofillHints.email],
-          decoration: const InputDecoration(labelText: 'Email'),
-        ),
-        const SizedBox(height: 16),
-        _sent
-            ? NotelySecondaryButton(label: 'Send again', onPressed: _busy ? null : _send)
-            : NotelyPrimaryButton(label: 'Send reset link', loading: _busy, onPressed: _send),
-        if (_sent) ...[
-          const SizedBox(height: 32),
-          const PasswordFormNote(
-            'If an account uses that email, a reset link is on its way. '
-            'Copy the link from the email and paste it below. '
-            "Don't set a password on the web page the link opens: your notes "
-            'stay encrypted only when the new password is chosen in the app.',
+        _fromLink
+            ? NotelyHeading(
+                title: 'Choose a new password',
+                subtitle: _linkEmail == null
+                    ? "It's set here, in the app, so your notes stay end-to-end encrypted."
+                    : 'For $_linkEmail. It\'s set here, in the app, so your notes stay end-to-end encrypted.',
+              )
+            : const NotelyHeading(
+                title: 'Forgot your password?',
+                subtitle: "We'll email you a reset link. You finish the reset here, in the app.",
+              ),
+        if (!_fromLink) ...[
+          const SizedBox(height: 24),
+          TextField(
+            controller: _email,
+            enabled: !_busy,
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
+            decoration: const InputDecoration(labelText: 'Email'),
           ),
           const SizedBox(height: 16),
-          TextField(
-            controller: _link,
-            enabled: !_busy,
-            keyboardType: TextInputType.url,
-            decoration: const InputDecoration(labelText: 'Reset link from the email'),
-          ),
+          _sent
+              ? NotelySecondaryButton(label: 'Send again', onPressed: _busy ? null : _send)
+              : NotelyPrimaryButton(label: 'Send reset link', loading: _busy, onPressed: _send),
+        ],
+        if (_fromLink && _linkError != null) ...[
+          const SizedBox(height: 24),
+          PasswordFormNote(passwordErrorMessage(_linkError!)),
+          const SizedBox(height: 16),
+          NotelyPrimaryButton(label: 'Send a new link', onPressed: _requestNewLink),
+        ] else if (_fromLink && _linkEmail == null) ...[
+          const SizedBox(height: 48),
+          const LoadingState(label: 'Checking the link…'),
+        ] else if (_sent) ...[
+          const SizedBox(height: 32),
+          if (!_fromLink) ...[
+            const PasswordFormNote(
+              'If an account uses that email, a reset link is on its way. '
+              'Open it on this phone, or copy it and paste it below. '
+              "If a web page asks you for a new password, don't enter it there: "
+              'your notes stay encrypted only when the password is chosen in the app.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _link,
+              enabled: !_busy,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(labelText: 'Reset link from the email'),
+            ),
+          ],
           const SizedBox(height: 12),
           NotelyPasswordField(
             controller: _password,

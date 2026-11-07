@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.flutter.mynotes",
+      "sha256_cert_fingerprints": [
+        "B9:E3:37:AA:8D:05:A6:9F:48:CE:04:62:53:0B:89:E2:D1:8E:79:6E:8A:2F:AC:5A:A2:9C:93:3D:D3:73:E7:BF"
+      ]
+    }
+  }
+]
