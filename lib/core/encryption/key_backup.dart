@@ -82,7 +82,17 @@ class KeyBackupService {
   Future<KeySetupResult> prepare({required String uid, List<int>? passwordKey}) async {
     keyManager.setActiveUser(uid);
     var local = await keyManager.loadMasterKey();
-    final backup = await store.read(uid);
+    final Map<String, dynamic>? backup;
+    try {
+      backup = await store.read(uid);
+    } catch (error, stack) {
+      // Offline (and the backup isn't cached). A device that already holds
+      // the key doesn't need the backup to open notes: keeping the backup
+      // in step can wait for the next start. Without the key, it can't.
+      if (local == null) rethrow;
+      AppErrorHandler().handle(error, stack);
+      return const KeySetupReady();
+    }
     final slots = _slots(backup);
 
     if (local == null) {

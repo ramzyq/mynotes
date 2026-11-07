@@ -21,6 +21,14 @@ class _MemoryStore implements KeyBackupStore {
   }
 }
 
+/// Firestore with no connection and nothing cached.
+class _OfflineStore implements KeyBackupStore {
+  @override
+  Future<Map<String, dynamic>?> read(String uid) async => throw StateError('unavailable');
+  @override
+  Future<void> write(String uid, Map<String, dynamic> data) async => throw StateError('unavailable');
+}
+
 /// A fresh "device": empty secure storage, same server-side store.
 KeyBackupService _device(_MemoryStore store) {
   FlutterSecureStorage.setMockInitialValues({});
@@ -71,6 +79,21 @@ void main() {
     final after = (store.docs['u1']!['slots'] as Map)['password'] as Map;
     expect(after['kdf'], 'notely-account-v9');
     expect(after['wrapped'], wrapped);
+  });
+
+  test('offline, a device that holds the key still opens notes', () async {
+    final store = _MemoryStore();
+    final device = _device(store);
+    await device.prepare(uid: 'u1', passwordKey: _k('pw-1'));
+
+    final offline = KeyBackupService(keyManager: device.keyManager, store: _OfflineStore());
+    expect(await offline.prepare(uid: 'u1', passwordKey: _k('pw-1')), isA<KeySetupReady>());
+  });
+
+  test('offline, a device without the key reports the failure', () async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final offline = KeyBackupService(keyManager: KeyManager(), store: _OfflineStore());
+    await expectLater(offline.prepare(uid: 'u1'), throwsA(isA<StateError>()));
   });
 
   test('what the sign-in server receives cannot open the backup', () async {

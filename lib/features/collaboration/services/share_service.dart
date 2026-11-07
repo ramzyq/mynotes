@@ -106,13 +106,15 @@ class ShareService {
   }) async {
     final publicKey = await keyManager.getMyPublicKey();
     final normalized = email.trim().toLowerCase();
-    await firestore.collection('users').doc(uid).set({
+    // Queued while offline (see NotesService.committed): nothing else at
+    // startup should wait for the network because of this.
+    await NotesService.committed(firestore.collection('users').doc(uid).set({
       'email': normalized,
       'displayName': displayName ?? '',
       'publicKey': base64Encode(publicKey),
-    }, SetOptions(merge: true));
+    }, SetOptions(merge: true)));
     if (normalized.isNotEmpty) {
-      await firestore.collection('emailIndex').doc(normalized).set({'uid': uid});
+      await NotesService.committed(firestore.collection('emailIndex').doc(normalized).set({'uid': uid}));
     }
   }
 
