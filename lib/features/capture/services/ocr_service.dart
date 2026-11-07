@@ -20,7 +20,9 @@ class OcrService {
     try {
       image = await _picker.pickImage(source: fromCamera ? ImageSource.camera : ImageSource.gallery);
     } on PlatformException catch (e, stack) {
-      // iOS reports a refused permission; Android's picker intents need none.
+      // iOS reports a refused permission. Android uses the system picker and
+      // camera intents, and the app declares no CAMERA or media permission
+      // (checked in the merged release manifest), so nothing to refuse there.
       if (e.code == 'camera_access_denied') {
         throw const CaptureUnavailableException(
           'Notely needs camera access to scan text. Turn it on in Settings.',

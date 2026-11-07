@@ -64,6 +64,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
   bool _isSaving = false;
   bool _isDeleting = false;
   bool _isRecording = false;
+
+  /// Starting or stopping a recording is in progress; taps are ignored.
+  bool _voiceBusy = false;
   List<String> _audioAttachments = [];
   double? _latitude;
   double? _longitude;
@@ -293,6 +296,10 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       );
     } on CaptureUnavailableException catch (e) {
       _showCaptureError(e);
+    } catch (error, stack) {
+      // Anything unexpected (e.g. a missing plugin) still gets a message.
+      AppErrorHandler().handle(error, stack);
+      _showCaptureError(const CaptureUnavailableException("Couldn't scan that photo."));
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -324,19 +331,21 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
   }
 
   Future<void> _startVoiceRecording() async {
+    if (_voiceBusy) return;
     final voiceService = ref.read(voiceServiceProvider);
+    setState(() => _voiceBusy = true);
     try {
       await voiceService.requestPermission();
-      if (!mounted) return;
-      setState(() => _isRecording = true);
       await voiceService.startRecording();
+      // "Recording" (and the stop button) only once it really is.
+      if (mounted) setState(() => _isRecording = true);
     } on CaptureUnavailableException catch (e) {
-      if (mounted) setState(() => _isRecording = false);
       _showCaptureError(e);
     } catch (error, stack) {
       AppErrorHandler().handle(error, stack);
-      if (mounted) setState(() => _isRecording = false);
       _showCaptureError(const CaptureUnavailableException("Couldn't start recording."));
+    } finally {
+      if (mounted) setState(() => _voiceBusy = false);
     }
   }
 
@@ -351,7 +360,9 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
   }
 
   Future<void> _stopVoiceRecording() async {
+    if (_voiceBusy) return;
     final voiceService = ref.read(voiceServiceProvider);
+    setState(() => _voiceBusy = true);
     final VoiceResult? result;
     try {
       result = await voiceService.stopRecordingAndTranscribe();
@@ -361,6 +372,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       if (mounted) setState(() => _isRecording = false);
       _showCaptureError(const CaptureUnavailableException("Couldn't save the recording."));
       return;
+    } finally {
+      if (mounted) setState(() => _voiceBusy = false);
     }
     if (!mounted) return;
 
@@ -1307,7 +1320,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
                 isCapturingLocation: _isCapturingLocation,
                 hasLocation: _latitude != null,
                 onScan: _showOcrSheet,
-                onVoice: _isRecording ? _stopVoiceRecording : _startVoiceRecording,
+                onVoice: _isRecording ? _stopVoiceRecording : _startVoiceRecording, // Both ignore taps while _voiceBusy.
                 onLocation: _captureLocation,
                 onChecklist: () {
                   _contentController.toggleChecklistLine();

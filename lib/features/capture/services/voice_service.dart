@@ -39,41 +39,48 @@ class VoiceService {
     final path = '${dir.path}/voice_notes/';
     await Directory(path).create(recursive: true);
     final filePath = '$path${DateTime.now().millisecondsSinceEpoch}.m4a';
-    _recordedFilePath = filePath;
     _transcription = null;
 
-    final available = await _speech.initialize();
-    if (available) {
-      await _speech.listen(
-        onResult: (result) {
-          _transcription = result.recognizedWords;
-        },
-        // No localeId: the device's language, not always US English.
-        listenOptions: stt.SpeechListenOptions(listenMode: stt.ListenMode.dictation),
-      );
+    try {
+      final available = await _speech.initialize();
+      if (available) {
+        await _speech.listen(
+          onResult: (result) {
+            _transcription = result.recognizedWords;
+          },
+          // No localeId: the device's language, not always US English.
+          listenOptions: stt.SpeechListenOptions(listenMode: stt.ListenMode.dictation),
+        );
+      }
+      await _recorder.start(const RecordConfig(), path: filePath);
+      // Only now is there a recording to stop.
+      _recordedFilePath = filePath;
+    } catch (_) {
+      // Don't leave speech recognition holding the microphone.
+      await _speech.cancel().catchError((Object _) {});
+      _recordedFilePath = null;
+      _transcription = null;
+      rethrow;
     }
-
-    await _recorder.start(const RecordConfig(), path: filePath);
   }
 
+  /// Stop and return the recording. A transcription failure only costs the
+  /// text: the audio file is still returned.
   Future<VoiceResult?> stopRecordingAndTranscribe() async {
-    if (_recordedFilePath == null) return null;
-
-    await _recorder.stop();
-
-    if (_speech.isListening) {
-      await _speech.stop();
+    final filePath = _recordedFilePath;
+    if (filePath == null) return null;
+    try {
+      await _recorder.stop();
+    } finally {
+      // Whatever happens, this recording is over.
+      _recordedFilePath = null;
+      if (_speech.isListening) {
+        await _speech.stop().catchError((Object _) {});
+      }
     }
-
     final transcription = _transcription ?? '';
-    final filePath = _recordedFilePath!;
-    _recordedFilePath = null;
     _transcription = null;
-
-    return VoiceResult(
-      transcription: transcription,
-      filePath: filePath,
-    );
+    return VoiceResult(transcription: transcription, filePath: filePath);
   }
 
   String? get recordedFilePath => _recordedFilePath;
