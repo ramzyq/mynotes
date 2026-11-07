@@ -47,4 +47,12 @@ abstract class AuthProvider {
     required String currentPassword,
     required String newPassword,
   });
+
+  /// Confirm it's really the signed-in user, as Firebase requires before
+  /// deleting an account: with [password] (an auth secret) for password
+  /// accounts, or through Google again when it is null.
+  Future<void> reauthenticate({String? password});
+
+  /// Delete the signed-in Firebase account. Call [reauthenticate] first.
+  Future<void> deleteCurrentUser();
 }

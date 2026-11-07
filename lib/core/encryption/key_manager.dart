@@ -109,6 +109,12 @@ class KeyManager {
     _cachedMasterKey = SecretKey(List<int>.from(bytes));
   }
 
+  /// Remove [uid]'s master key from this device (account deletion).
+  Future<void> forgetMasterKey(String uid) async {
+    await _storage.delete(key: _masterKeyKey(uid));
+    if (_uid == uid) clearCachedKey();
+  }
+
   /// Generate and persist a brand-new master key. Only call this when the
   /// user has no backup anywhere (first ever setup).
   Future<List<int>> generateMasterKey() async {

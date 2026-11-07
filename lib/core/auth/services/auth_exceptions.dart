@@ -9,6 +9,8 @@ class UserAlreadyExistsAuthException implements Exception {}
 class InvalidCredentialAuthException implements Exception {}
 // generic exceptions
 class GenericAuthException implements Exception {}
+/// No connection to Firebase Auth (network-request-failed).
+class NetworkAuthException implements Exception {}
 class UserNotLoggedInAuthException implements Exception {}
 class GoogleSignInCancelledException implements Exception {}
 // Password reset

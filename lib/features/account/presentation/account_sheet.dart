@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/features/account/presentation/delete_account_view.dart';
 import 'package:mynotes/features/account/presentation/change_password_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/analytics/consent_providers.dart';
@@ -134,6 +135,12 @@ class AccountSheet extends ConsumerWidget {
             label: 'Usage analytics',
             detail: consentDetail(),
             onTap: () => _showConsentDialog(context, ref),
+          ),
+          _SheetRow(
+            icon: Icons.person_remove_outlined,
+            label: 'Delete account',
+            danger: true,
+            onTap: () => _push(context, (c) => DeleteAccountView(authUser: user)),
           ),
           const SizedBox(height: 8),
           _SheetRow(

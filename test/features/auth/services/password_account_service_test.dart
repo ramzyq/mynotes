@@ -91,6 +91,11 @@ class _FakeFirebase implements AuthProvider {
   Future<void> sendEmailVerification() async {}
   @override
   Future<void> reloadCurrentUser() async {}
+
+  @override
+  Future<void> reauthenticate({String? password}) async {}
+  @override
+  Future<void> deleteCurrentUser() async {}
 }
 
 class _MemoryStore implements KeyBackupStore {
