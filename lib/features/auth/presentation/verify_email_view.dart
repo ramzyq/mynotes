@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mynotes/app.dart';
-import 'package:mynotes/core/auth/services/auth_exceptions.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
-import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 
 class VerifyEmailView extends ConsumerStatefulWidget {
@@ -25,8 +23,8 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
   @override
   void initState() {
     super.initState();
-    _sendVerificationEmail();
-    // Periodically check if the user has verified their email
+    // No email here: registration sent one, and this screen also shows on
+    // every launch until the email is verified. Resending is a button.
     _autoCheckTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _checkEmailVerified(silent: true),
@@ -43,73 +41,60 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
     final authService = ref.read(authServiceProvider);
     final user = authService.currentUser;
     if (user == null || user.isEmailVerified) return;
+    final messenger = ScaffoldMessenger.of(context);
 
     setState(() => _isSending = true);
     try {
       await authService.sendEmailVerification();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Verification email sent. Check your inbox.')),
       );
-    } on GenericAuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().contains('too-many-requests')
-                ? 'Too many requests. Please wait before trying again.'
-                : 'Failed to send verification email. Please try again.',
-          ),
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+          '$error'.contains('too-many-requests')
+              ? 'Too many requests. Wait a few minutes before sending another.'
+              : "Couldn't send the email. Check your connection and try again.",
         ),
-      );
+      ));
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
   }
 
+  /// Reload the account. Once the email is verified, the reload makes
+  /// AuthenticationWrapper move on by itself (it follows userChanges).
   Future<void> _checkEmailVerified({bool silent = false}) async {
     final authService = ref.read(authServiceProvider);
-    final user = authService.currentUser;
-    if (user == null) return;
+    if (authService.currentUser == null) return;
+    final messenger = ScaffoldMessenger.of(context);
 
     if (!silent) setState(() => _isChecking = true);
-
     try {
       await authService.reloadCurrentUser();
-      final updatedUser = authService.currentUser;
-      if (updatedUser != null && updatedUser.isEmailVerified) {
+      final verified = authService.currentUser?.isEmailVerified ?? false;
+      if (verified) {
         _autoCheckTimer?.cancel();
-        if (!mounted) return;
-        await _showVerifiedDialogAndNavigate();
-      } else if (!silent && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        // Supersedes anything still showing, like "Verification email sent".
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(content: Text('Email verified.')));
+      } else if (!silent) {
+        messenger.showSnackBar(
           const SnackBar(content: Text('Not verified yet. Open the link in the email first.')),
         );
       }
-    } catch (_) {
-      // Silently ignore reload errors for auto-check
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (!silent) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text("Couldn't check. Check your connection and try again.")),
+        );
+      }
     } finally {
       if (mounted && !silent) setState(() => _isChecking = false);
     }
-  }
-
-  Future<void> _showVerifiedDialogAndNavigate() async {
-    await showNotelyDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      title: 'Email verified',
-      message: 'Your account is ready. Next, Notely sets up the key that encrypts your notes.',
-      actions: [
-        NotelyDialogAction(label: 'Continue', isPrimary: true, onPressed: () => Navigator.of(context).pop()),
-      ],
-    );
-    if (!mounted) return;
-    unawaited(Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => const _VerifiedRedirect(),
-      ),
-      (route) => false,
-    ));
   }
 
   Future<void> _signOut() async {
@@ -178,15 +163,5 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
         ),
       ),
     );
-  }
-}
-// A simple widget that rebuilds from the AuthenticationWrapper,
-/// ensuring the verified user lands on the HomeView.
-class _VerifiedRedirect extends StatelessWidget {
-  const _VerifiedRedirect();
-
-  @override
-  Widget build(BuildContext context) {
-    return const AuthenticationWrapper();
   }
 }

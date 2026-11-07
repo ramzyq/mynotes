@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
-import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/core/encryption/password_secrets.dart';
@@ -103,13 +103,17 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
         displayName: firstName,
       );
       signedIn = true;
+      // The one automatic verification email. VerifyEmailView only resends
+      // on request, so reopening the app doesn't send another every time.
+      try {
+        await ref.read(authServiceProvider).sendEmailVerification();
+      } catch (error, stack) {
+        AppErrorHandler().handle(error, stack); // "Send the link again" is there.
+      }
       if (!mounted) return;
-      // Navigate to email verification screen
-      unawaited(Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => const VerifyEmailView(),
-        ),
-      ));
+      // Signed in now: AuthenticationWrapper shows the verify screen under
+      // this one. Pushing another would stack a second copy.
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } on WeakPasswordAuthException {
       if (!mounted) return;
       messenger.showSnackBar(
