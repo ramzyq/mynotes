@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/core/encryption/presentation/key_setup_gate.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/error/error_handler.dart';
@@ -106,8 +107,12 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
       loading: () => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       ),
-      error: (_, _) => const Scaffold(
-        body: Center(child: Text('Authentication error')),
+      error: (error, _) => Scaffold(
+        body: ErrorState(
+          title: "Couldn't check your sign-in",
+          error: error,
+          onRetry: () => ref.invalidate(authStateProvider),
+        ),
       ),
     );
   }

@@ -122,4 +122,24 @@ void main() {
     final after = (await _notes(db).doc(created.id).get()).data()![NoteFields.encryptedContent];
     expect(after, before);
   });
+
+  test('a study card that becomes due while watching appears without a new snapshot', () async {
+    final (service, _) = await _service();
+    final card = await service.createNote(uid: uid, title: 'Card', content: 'q', colorIndex: 0, isStudyMaterial: true);
+    final dueSoon = DateTime.now().add(const Duration(milliseconds: 300));
+    await service.updateStudyProgress(
+      uid: uid, noteId: card.id, studyInterval: 1, studyEaseFactor: 2.5, studyRepetitions: 1, studyDueAt: dueSoon,
+    );
+
+    final emissions = <List<String>>[];
+    final sub = service
+        .watchStudyCards(uid, recheck: const Duration(milliseconds: 100))
+        .listen((cards) => emissions.add(cards.map((c) => c.id).toList()));
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    await sub.cancel();
+
+    expect(emissions.first, isEmpty, reason: 'not due yet when first loaded');
+    expect(emissions.last, [card.id], reason: 'due now, found by the recheck');
+    expect(emissions.where((e) => e.isNotEmpty), hasLength(1), reason: 'no repeat emissions');
+  });
 }

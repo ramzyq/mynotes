@@ -232,10 +232,13 @@ class NotesService {
     });
   }
 
-  Stream<List<Note>> watchStudyCards(String uid) {
-    return _notesCollection(uid)
+  /// Study cards that are due now. "Now" moves: a card that becomes due
+  /// while the app is open appears within [recheck], without a new snapshot.
+  /// (A server-side `studyDueAt <= now` filter would freeze "now" at the
+  /// moment of subscribing.)
+  Stream<List<Note>> watchStudyCards(String uid, {Duration recheck = const Duration(minutes: 1)}) {
+    final cards = _notesCollection(uid)
         .where(NoteFields.isStudyMaterial, isEqualTo: true)
-        .where(NoteFields.studyDueAt, isLessThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
         .orderBy(NoteFields.studyDueAt, descending: false)
         .snapshots()
         .asyncMap((snapshot) async => (await Future.wait(
@@ -243,6 +246,40 @@ class NotesService {
             ))
                 .where((note) => !note.isExpired && !note.isTrashed)
                 .toList());
+
+    late final StreamController<List<Note>> controller;
+    StreamSubscription<List<Note>>? subscription;
+    Timer? timer;
+    List<Note>? latest;
+    String? lastEmitted;
+
+    void emitDue() {
+      final all = latest;
+      if (all == null) return;
+      final now = DateTime.now();
+      final due = all.where((n) => n.studyDueAt != null && !n.studyDueAt!.isAfter(now)).toList();
+      final key = due.map((n) => '${n.id}@${n.studyDueAt!.millisecondsSinceEpoch}').join(',');
+      if (key == lastEmitted) return; // The timer found nothing new.
+      lastEmitted = key;
+      controller.add(due);
+    }
+
+    controller = StreamController<List<Note>>(
+      onListen: () {
+        subscription = cards.listen((notes) {
+          latest = notes;
+          lastEmitted = null; // A new snapshot always reaches listeners.
+          emitDue();
+        }, onError: controller.addError);
+        timer = Timer.periodic(recheck, (_) => emitDue());
+      },
+      onCancel: () async {
+        timer?.cancel();
+        await subscription?.cancel();
+        await controller.close();
+      },
+    );
+    return controller.stream;
   }
 
   Stream<List<Note>> getSharedNotes(String uid) {

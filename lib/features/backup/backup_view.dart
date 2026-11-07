@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/error/error_handler.dart';
@@ -59,7 +60,8 @@ class _BackupViewState extends ConsumerState<BackupView> {
       _exporting = true;
     });
     try {
-      final all = ref.read(notesProvider(widget.authUser.uid)).valueOrNull ?? const [];
+      // Wait for the real list rather than exporting an empty one.
+      final all = await ref.read(notesProvider(widget.authUser.uid).future);
       final notes = BackupService.exportable(all);
       final contents = await ref.read(backupServiceProvider).encode(notes, password);
       final dir = await getTemporaryDirectory();
@@ -147,7 +149,11 @@ class _BackupViewState extends ConsumerState<BackupView> {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    final all = ref.watch(notesProvider(widget.authUser.uid)).valueOrNull ?? const [];
+    final notesAsync = ref.watch(notesProvider(widget.authUser.uid));
+    // Until the notes have loaded, the counts below would read "0 notes":
+    // say what's actually happening, and keep export disabled.
+    final loaded = notesAsync.hasValue;
+    final all = notesAsync.valueOrNull ?? const [];
     final exportable = BackupService.exportable(all).length;
     final skipped = all.where((n) => !n.isTrashed && !n.isExpired && n.sharedBy == null).length - exportable;
     final caption = TextStyle(fontFamily: 'Geist', fontSize: 13, height: 1.45, color: notely.text2);
@@ -166,11 +172,19 @@ class _BackupViewState extends ConsumerState<BackupView> {
           _Section(
             title: 'Export',
             children: [
-              Text(
-                '$exportable ${exportable == 1 ? 'note' : 'notes'} will be included.'
-                '${skipped > 0 ? ' $skipped PIN-locked or undecryptable ${skipped == 1 ? 'note is' : 'notes are'} left out.' : ''}',
-                style: caption,
-              ),
+              if (!loaded && notesAsync.hasError)
+                InlineErrorBanner(
+                  message: "Couldn't load your notes, so there's nothing to export yet.",
+                  onRetry: () => ref.invalidate(notesProvider(widget.authUser.uid)),
+                )
+              else if (!loaded)
+                Text('Loading your notes…', style: caption)
+              else
+                Text(
+                  '$exportable ${exportable == 1 ? 'note' : 'notes'} will be included.'
+                  '${skipped > 0 ? ' $skipped PIN-locked or undecryptable ${skipped == 1 ? 'note is' : 'notes are'} left out.' : ''}',
+                  style: caption,
+                ),
               const SizedBox(height: 16),
               NotelyPasswordField(
                 controller: _password,
@@ -196,10 +210,10 @@ class _BackupViewState extends ConsumerState<BackupView> {
               Text('If you forget this password, the backup cannot be opened.', style: caption),
               const SizedBox(height: 16),
               NotelyPrimaryButton(
-                label: 'Export $exportable ${exportable == 1 ? 'note' : 'notes'}',
+                label: loaded ? 'Export $exportable ${exportable == 1 ? 'note' : 'notes'}' : 'Export',
                 icon: Icons.ios_share,
                 loading: _exporting,
-                onPressed: exportable == 0 ? null : _export,
+                onPressed: !loaded || exportable == 0 ? null : _export,
               ),
             ],
           ),

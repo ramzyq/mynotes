@@ -26,10 +26,11 @@ class AccountSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notely = NotelyTheme.of(context);
     final themeMode = ref.watch(themeModeProvider);
-    final due = ref.watch(dueCountProvider(_uid(ref))).valueOrNull ?? 0;
-    final notes = ref.watch(notesProvider(_uid(ref))).valueOrNull ?? const [];
-    final archivedCount = notes.where((n) => n.isArchived && !n.isTrashed).length;
-    final trashCount = notes.where((n) => n.isTrashed).length;
+    // Null until loaded: rows show nothing rather than a made-up "0".
+    final due = ref.watch(dueCountProvider(_uid(ref))).valueOrNull;
+    final notes = ref.watch(notesProvider(_uid(ref))).valueOrNull;
+    final archivedCount = notes?.where((n) => n.isArchived && !n.isTrashed).length;
+    final trashCount = notes?.where((n) => n.isTrashed).length;
     final consent = ref.watch(consentStatusProvider).valueOrNull;
     final user = authUser ?? _currentUser(ref);
 
@@ -101,19 +102,19 @@ class AccountSheet extends ConsumerWidget {
           _SheetRow(
             icon: Icons.style_outlined,
             label: 'Study',
-            detail: due == 0 ? 'Nothing due' : '$due due',
+            detail: due == null ? null : (due == 0 ? 'Nothing due' : '$due due'),
             onTap: () => _push(context, (c) => ReviewView(authUser: user)),
           ),
           _SheetRow(
             icon: Icons.archive_outlined,
             label: 'Archive',
-            detail: '$archivedCount',
+            detail: archivedCount?.toString(),
             onTap: () => _push(context, (c) => ArchivedNotesView(authUser: user)),
           ),
           _SheetRow(
             icon: Icons.delete_outline,
             label: 'Trash',
-            detail: '$trashCount',
+            detail: trashCount?.toString(),
             onTap: () => _push(context, (c) => TrashView(authUser: user)),
           ),
           _SheetRow(
