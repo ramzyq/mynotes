@@ -1,6 +1,7 @@
 import 'package:app_links/app_links.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/config/app_config.dart';
+import 'package:mynotes/core/deeplinks/join_link_handler.dart';
 
 /// Links that open the app: share links and password reset links, from the
 /// app's domain (App Links / Universal Links) or the `notely://` scheme the
@@ -20,9 +21,7 @@ sealed class IncomingLink {
           ? PasswordResetIncomingLink(uri)
           : null;
     }
-    if (segments.length == 2 && segments[0] == 'join' && segments[1].isNotEmpty) {
-      return JoinIncomingLink(uri);
-    }
+    if (JoinLinkHandler.tokenFromUri(uri) != null) return JoinIncomingLink(uri);
     return null;
   }
 

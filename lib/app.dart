@@ -63,6 +63,10 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
 
   StreamSubscription<Uri>? _links;
 
+  /// A reset screen opened from a link is showing: further links (e.g. the
+  /// same one twice) don't stack more screens.
+  bool _resetFromLinkOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -76,9 +80,19 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
   Future<void> _openLink(Uri uri) async {
     switch (IncomingLink.parse(uri)) {
       case PasswordResetIncomingLink(:final uri):
-        final email = await appNavigatorKey.currentState?.push<String>(MaterialPageRoute(
-          builder: (_) => ForgotPasswordView(initialLink: uri.toString()),
-        ));
+        if (_resetFromLinkOpen) return;
+        _resetFromLinkOpen = true;
+        // A link that launched the app can arrive before the first frame,
+        // when there is no navigator to push onto yet.
+        await WidgetsBinding.instance.endOfFrame;
+        final String? email;
+        try {
+          email = await appNavigatorKey.currentState?.push<String>(MaterialPageRoute(
+            builder: (_) => ForgotPasswordView(initialLink: uri.toString()),
+          ));
+        } finally {
+          _resetFromLinkOpen = false;
+        }
         if (email != null) {
           appMessengerKey.currentState?.showSnackBar(
             const SnackBar(content: Text('Password changed. Sign in with your new password.')),

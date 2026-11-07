@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/auth/presentation/password_forms.dart';
 import 'package:mynotes/features/auth/presentation/web_reset_repair_view.dart';
@@ -23,11 +24,39 @@ class ForgotPasswordView extends ConsumerStatefulWidget {
 class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
   late final TextEditingController _email = TextEditingController(text: widget.initialEmail);
   late final TextEditingController _link = TextEditingController(text: widget.initialLink ?? '');
-  bool get _fromLink => widget.initialLink != null;
   final _password = TextEditingController();
   final _confirm = TextEditingController();
-  late bool _sent = _fromLink;
   bool _busy = false;
+
+  /// Opened from a reset link (until the user asks for a new one).
+  late bool _fromLink = widget.initialLink != null;
+  late bool _sent = _fromLink;
+
+  /// For a link: the account it resets, once checked, or why it can't be used.
+  String? _linkEmail;
+  Object? _linkError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_fromLink) _checkLink();
+  }
+
+  Future<void> _checkLink() async {
+    try {
+      final email = await ref.read(passwordAccountServiceProvider).emailForReset(_link.text);
+      if (mounted) setState(() => _linkEmail = email);
+    } catch (error) {
+      if (mounted) setState(() => _linkError = error);
+    }
+  }
+
+  void _requestNewLink() => setState(() {
+        _fromLink = false;
+        _sent = false;
+        _linkError = null;
+        _link.clear();
+      });
 
   @override
   void dispose() {
@@ -77,9 +106,11 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
       title: 'Reset password',
       body: PasswordFormBody(children: [
         _fromLink
-            ? const NotelyHeading(
+            ? NotelyHeading(
                 title: 'Choose a new password',
-                subtitle: "It's set here, in the app, so your notes stay end-to-end encrypted.",
+                subtitle: _linkEmail == null
+                    ? "It's set here, in the app, so your notes stay end-to-end encrypted."
+                    : 'For $_linkEmail. It\'s set here, in the app, so your notes stay end-to-end encrypted.',
               )
             : const NotelyHeading(
                 title: 'Forgot your password?',
@@ -99,7 +130,15 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
               ? NotelySecondaryButton(label: 'Send again', onPressed: _busy ? null : _send)
               : NotelyPrimaryButton(label: 'Send reset link', loading: _busy, onPressed: _send),
         ],
-        if (_sent) ...[
+        if (_fromLink && _linkError != null) ...[
+          const SizedBox(height: 24),
+          PasswordFormNote(passwordErrorMessage(_linkError!)),
+          const SizedBox(height: 16),
+          NotelyPrimaryButton(label: 'Send a new link', onPressed: _requestNewLink),
+        ] else if (_fromLink && _linkEmail == null) ...[
+          const SizedBox(height: 48),
+          const LoadingState(label: 'Checking the link…'),
+        ] else if (_sent) ...[
           const SizedBox(height: 32),
           if (!_fromLink) ...[
             const PasswordFormNote(
