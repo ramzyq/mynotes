@@ -14,6 +14,7 @@ import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/core/theme/widgets/notely_sheet.dart';
 import 'package:mynotes/features/capture/providers/capture_providers.dart';
 import 'package:mynotes/features/capture/services/capture_exception.dart';
+import 'package:mynotes/features/capture/services/voice_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:mynotes/features/lock/providers/lock_providers.dart';
@@ -270,7 +271,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       final text = await ocrService.pickAndRecognizeText(
         fromCamera: result == 'camera',
       );
-      if (text == null || text.isEmpty || !mounted) return;
+      if (text == null || !mounted) return; // Cancelled.
+      if (text.isEmpty) {
+        _showCaptureError(const CaptureUnavailableException(
+          "No text found in that photo. Try a sharper, well-lit shot.",
+        ));
+        return;
+      }
 
       final cursorPos = controller.selection.baseOffset;
       final currentText = controller.text;
@@ -284,6 +291,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       controller.selection = TextSelection.collapsed(
         offset: insertPos + text.length,
       );
+    } on CaptureUnavailableException catch (e) {
+      _showCaptureError(e);
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
@@ -322,6 +331,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       setState(() => _isRecording = true);
       await voiceService.startRecording();
     } on CaptureUnavailableException catch (e) {
+      if (mounted) setState(() => _isRecording = false);
       _showCaptureError(e);
     } catch (error, stack) {
       AppErrorHandler().handle(error, stack);
@@ -342,7 +352,16 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
 
   Future<void> _stopVoiceRecording() async {
     final voiceService = ref.read(voiceServiceProvider);
-    final result = await voiceService.stopRecordingAndTranscribe();
+    final VoiceResult? result;
+    try {
+      result = await voiceService.stopRecordingAndTranscribe();
+    } catch (error, stack) {
+      // Never leave the editor stuck in "recording".
+      AppErrorHandler().handle(error, stack);
+      if (mounted) setState(() => _isRecording = false);
+      _showCaptureError(const CaptureUnavailableException("Couldn't save the recording."));
+      return;
+    }
     if (!mounted) return;
 
     setState(() => _isRecording = false);
@@ -368,7 +387,13 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       );
     }
 
-    _audioAttachments = [..._audioAttachments, filePath];
+    // setState so autosave sees the new attachment.
+    setState(() => _audioAttachments = [..._audioAttachments, filePath]);
+    if (transcription.isEmpty) {
+      _showCaptureError(const CaptureUnavailableException(
+        "Recording saved. Couldn't turn it into text, so nothing was added to the note.",
+      ));
+    }
   }
 
   /// Owner of the note being edited (the current user for new notes).

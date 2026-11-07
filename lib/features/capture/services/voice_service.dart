@@ -48,10 +48,8 @@ class VoiceService {
         onResult: (result) {
           _transcription = result.recognizedWords;
         },
-        listenOptions: stt.SpeechListenOptions(
-          localeId: 'en_US',
-          listenMode: stt.ListenMode.dictation,
-        ),
+        // No localeId: the device's language, not always US English.
+        listenOptions: stt.SpeechListenOptions(listenMode: stt.ListenMode.dictation),
       );
     }
 
