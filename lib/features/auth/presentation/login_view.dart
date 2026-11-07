@@ -6,7 +6,6 @@ import 'package:mynotes/features/auth/presentation/forgot_password_view.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/auth/presentation/register_view.dart';
-import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_wordmark.dart';
@@ -121,20 +120,12 @@ class _LoginViewState extends ConsumerState<LoginView> {
     ref.read(pendingPasswordKeyProvider.notifier).state = secrets.backupKey;
     var signedIn = false;
     try {
-      final user = await ref.read(authServiceProvider).logIn(
+      await ref.read(authServiceProvider).logIn(
         email: email,
         password: secrets.authSecret,
       );
+      // AuthenticationWrapper routes from here (verify email, key setup, notes).
       signedIn = true;
-      if (!mounted) return;
-      // If email is not verified, navigate to verification screen
-      if (!user.isEmailVerified) {
-        unawaited(Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const VerifyEmailView(),
-          ),
-        ));
-      }
     } on UserNotFoundAuthException {
       if (!mounted) return;
       messenger.showSnackBar(

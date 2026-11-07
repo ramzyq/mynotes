@@ -8,8 +8,11 @@ import 'package:mynotes/core/error/error_handler.dart';
 
 class FirebaseAuthProvider implements AuthProvider {
   @override
+  /// userChanges, not authStateChanges: it also fires after reload(), so a
+  /// newly verified email moves the app on by itself (authStateChanges only
+  /// fires on sign-in and sign-out).
   Stream<AuthUser?> get authStateChanges {
-    return FirebaseAuth.instance.authStateChanges().map((user) {
+    return FirebaseAuth.instance.userChanges().map((user) {
       if (user == null) {
         return null;
       }
