@@ -35,6 +35,20 @@ void main() {
     expect(b.backupKey, isNot(a.backupKey));
   });
 
+  test('a password typed with composed or decomposed accents gives the same secrets', () async {
+    const composed = 'café crème'; // é and è as single code points
+    const decomposed = 'café crème'; // e + combining accent
+    expect(composed, isNot(decomposed));
+    final a = await deriver.derive(email: 'maya@example.com', password: composed);
+    final b = await deriver.derive(email: 'maya@example.com', password: decomposed);
+    expect(b.authSecret, a.authSecret);
+    expect(b.backupKey, a.backupKey);
+  });
+
+  test('defaults to OWASP-strength PBKDF2', () {
+    expect(PasswordSecretDeriver.defaultIterations, greaterThanOrEqualTo(600000));
+  });
+
   test('the auth secret satisfies a strict password policy', () async {
     final s = await deriver.derive(email: 'maya@example.com', password: 'pw-123456');
     expect(s.authSecret, matches(RegExp('[A-Z]')));

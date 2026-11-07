@@ -48,6 +48,17 @@ KeyBackupService _legacyDevice(_MemoryStore store, {String? publishedKey}) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('a password slot from an unknown KDF falls back to the recovery code', () async {
+    final store = _MemoryStore();
+    await _device(store).prepare(uid: 'u1', passwordKey: _k('pw-1'));
+    final slots = store.docs['u1']!['slots'] as Map;
+    expect((slots['password'] as Map)['kdf'], 'notely-account-v1');
+    (slots['password'] as Map)['kdf'] = 'notely-account-v9';
+
+    expect(await _device(store).prepare(uid: 'u1', passwordKey: _k('pw-1')),
+        isA<KeySetupNeedsRecoveryCode>());
+  });
+
   test('what the sign-in server receives cannot open the backup', () async {
     final store = _MemoryStore();
     final secrets = await PasswordSecretDeriver(iterations: 1000)
@@ -88,11 +99,14 @@ void main() {
           reason: 'the owner may still need it');
     });
 
-    test('is adopted by an account with no published key and no backup', () async {
+    test('is left alone for an account with no published key, even without a backup', () async {
+      // e.g. a new account registering on a device another account used.
       final store = _MemoryStore();
       final service = _legacyDevice(store);
-      await service.prepare(uid: 'u1', passwordKey: _k('pw-1'));
-      expect(await _masterBytes(service), base64Decode(_legacyB64));
+      final result = await service.prepare(uid: 'u3', passwordKey: _k('pw-3'));
+      expect(result, isA<KeySetupShowRecoveryCode>(), reason: 'gets a fresh key of its own');
+      expect(await _masterBytes(service), isNot(base64Decode(_legacyB64)));
+      expect(await service.keyManager.readLegacyMasterKey(), isNotNull);
     });
 
     test('is not adopted over an existing backup without a published key', () async {

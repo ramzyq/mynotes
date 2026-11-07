@@ -70,4 +70,12 @@ class _FakeAuthProvider implements AuthProvider {
   @override
   Future<void> changePassword({required String currentPassword, required String newPassword}) =>
       throw UnimplementedError();
+
+  @override
+  Future<void> replacePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) =>
+      throw UnimplementedError();
 }

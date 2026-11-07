@@ -38,4 +38,13 @@ abstract class AuthProvider {
   /// Re-authenticate the signed-in user with [currentPassword], then set
   /// [newPassword].
   Future<void> changePassword({required String currentPassword, required String newPassword});
+
+  /// Change the password of the account [email] in a separate session,
+  /// without signing the app in. Used to replace a password Firebase knows
+  /// in plain text before the app ever signs in with it.
+  Future<void> replacePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  });
 }

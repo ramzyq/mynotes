@@ -40,11 +40,15 @@ class PasswordAccountService {
     final current = await deriver.derive(email: user.email, password: currentPassword);
     final next = await deriver.derive(email: user.email, password: newPassword);
     await auth.changePassword(currentPassword: current.authSecret, newPassword: next.authSecret);
-    try {
-      await keyBackup.setPasswordSlot(uid: user.uid, passwordKey: next.backupKey);
-    } catch (error, stack) {
-      AppErrorHandler().handle(error, stack);
-      throw PasswordBackupNotUpdatedException();
+    // Firebase already has the new password, so try hard to match it.
+    for (var attempt = 1;; attempt++) {
+      try {
+        await keyBackup.setPasswordSlot(uid: user.uid, passwordKey: next.backupKey);
+        return;
+      } catch (error, stack) {
+        AppErrorHandler().handle(error, stack);
+        if (attempt == 2) throw PasswordBackupNotUpdatedException();
+      }
     }
   }
 
@@ -56,9 +60,9 @@ class PasswordAccountService {
   /// The reset code in whatever the user pasted: the link from the reset
   /// email (also when wrapped in another link), or the bare code. Null when
   /// there is none, including for links meant for another action.
-  static String? resetCodeFrom(String input) {
+  static String? resetCodeFrom(String input, {int depth = 0}) {
     final text = input.trim();
-    if (text.isEmpty) return null;
+    if (text.isEmpty || depth > 3) return null;
     final uri = Uri.tryParse(text);
     if (uri != null && uri.hasQuery) {
       final params = uri.queryParameters;
@@ -67,7 +71,7 @@ class PasswordAccountService {
       if (code != null && code.isNotEmpty) return mode == null || mode == 'resetPassword' ? code : null;
       for (final key in const ['link', 'deep_link_id', 'continueUrl']) {
         final nested = params[key];
-        final found = nested == null ? null : resetCodeFrom(nested);
+        final found = nested == null ? null : resetCodeFrom(nested, depth: depth + 1);
         if (found != null) return found;
       }
       return null;
@@ -91,8 +95,10 @@ class PasswordAccountService {
 
   /// Repair an account whose password was set on Firebase's hosted reset
   /// page. Firebase has that password in plain text, so it can't protect
-  /// the key backup: sign in with it once and replace it with [newPassword]
-  /// (split as usual). [holdPasswordKey] receives the new backup key before
+  /// the key backup: replace it with [newPassword] (split as usual) in a
+  /// separate session, then sign the app in with the new auth secret. The
+  /// app never signs in with the old password, so key setup only ever sees
+  /// the new backup key. [holdPasswordKey] receives that key just before
   /// sign-in, because signing in immediately starts the key setup.
   Future<void> repairWebReset({
     required String email,
@@ -102,19 +108,12 @@ class PasswordAccountService {
   }) async {
     _checkLength(newPassword);
     final next = await deriver.derive(email: email, password: newPassword);
+    await auth.replacePassword(email: email, currentPassword: webPassword, newPassword: next.authSecret);
     holdPasswordKey(next.backupKey);
     try {
-      await auth.logIn(email: email, password: webPassword);
+      await auth.logIn(email: email, password: next.authSecret);
     } catch (_) {
       holdPasswordKey(null);
-      rethrow;
-    }
-    try {
-      await auth.changePassword(currentPassword: webPassword, newPassword: next.authSecret);
-    } catch (_) {
-      // Don't leave the user signed in on the password Firebase knows.
-      holdPasswordKey(null);
-      await auth.logOut();
       rethrow;
     }
   }

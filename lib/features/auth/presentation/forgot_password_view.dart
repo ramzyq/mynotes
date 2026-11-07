@@ -90,7 +90,8 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
         if (_sent) ...[
           const SizedBox(height: 32),
           const PasswordFormNote(
-            'Check your inbox. Copy the link from the email and paste it below. '
+            'If an account uses that email, a reset link is on its way. '
+            'Copy the link from the email and paste it below. '
             "Don't set a password on the web page the link opens: your notes "
             'stay encrypted only when the new password is chosen in the app.',
           ),

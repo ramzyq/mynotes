@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:mynotes/core/encryption/crypto_service.dart';
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 /// The two secrets an account password is split into.
 class PasswordSecrets {
@@ -15,7 +16,7 @@ class PasswordSecrets {
 /// Splits an account password so that the sign-in server never receives
 /// anything that can open the user's notes.
 ///
-///   stretched  = PBKDF2-SHA256(password, salt: "notely-account-v1:" + email)
+///   stretched  = PBKDF2-SHA256(NFC(password), 600k, salt: "notely-account-v1:" + email)
 ///   authSecret = HKDF(stretched, info: "notely-auth-v1")          -> Firebase
 ///   backupKey  = HKDF(stretched, info: "notely-password-slot-v1") -> device only
 ///
@@ -25,6 +26,15 @@ class PasswordSecrets {
 /// full PBKDF2 work, and that is the remaining risk a strong password
 /// covers. The salt is the normalized email because it must be known before
 /// sign-in, when nothing else about the account is.
+///
+/// The password is NFC-normalized first (as RFC 8265's OpaqueString does),
+/// so the same password typed on keyboards that compose accented letters
+/// differently derives the same secrets.
+///
+/// The parameters are fixed per [kdfVersion]: they have to be known before
+/// sign-in, so they can't be read from the account. To strengthen them
+/// later, add a version, try the newest at sign-in and fall back to older
+/// ones, then upgrade the account with a password change.
 ///
 /// Consequences for any future account feature:
 /// - Password reset and change must run in the app (`confirmPasswordReset`
@@ -39,7 +49,12 @@ class PasswordSecretDeriver {
   final CryptoService _crypto;
   final int iterations;
 
-  static const defaultIterations = 210000;
+  /// OWASP's current recommendation for PBKDF2-HMAC-SHA256. Runs natively
+  /// (cryptography_flutter), so it costs well under a second on most phones.
+  static const defaultIterations = 600000;
+
+  /// Recorded on the key backup's password slot, which refuses others.
+  static const kdfVersion = 'notely-account-v1';
 
   /// The server can no longer enforce a password policy (it never sees the
   /// password), and the password is now what guards against offline
@@ -54,8 +69,8 @@ class PasswordSecretDeriver {
 
   Future<PasswordSecrets> derive({required String email, required String password}) async {
     final stretched = await _crypto.deriveKey(
-      password: password,
-      salt: utf8.encode('notely-account-v1:${normalizeEmail(email)}'),
+      password: unorm.nfc(password),
+      salt: utf8.encode('$kdfVersion:${normalizeEmail(email)}'),
       iterations: iterations,
     );
     final stretchedBytes = await stretched.extractBytes();

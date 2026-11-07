@@ -15,7 +15,8 @@ String passwordErrorMessage(Object error) => switch (error) {
       InvalidCredentialAuthException() => 'Enter a valid email address.',
       PasswordBackupNotUpdatedException() =>
         "Your password was changed, but your key backup couldn't be updated. "
-            'Sign out and back in on this device to finish.',
+            'Sign out and back in on this device to finish. Until then, a new '
+            'device will need your recovery code, not the new password.',
       _ => 'Something went wrong. Please try again.',
     };
 

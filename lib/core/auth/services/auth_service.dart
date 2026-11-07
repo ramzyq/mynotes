@@ -58,4 +58,12 @@ class AuthService implements AuthProvider {
   @override
   Future<void> changePassword({required String currentPassword, required String newPassword}) =>
       provider.changePassword(currentPassword: currentPassword, newPassword: newPassword);
+
+  @override
+  Future<void> replacePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) =>
+      provider.replacePassword(email: email, currentPassword: currentPassword, newPassword: newPassword);
 }

@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:mynotes/core/encryption/crypto_service.dart';
 import 'package:mynotes/core/encryption/key_manager.dart';
+import 'package:mynotes/core/encryption/password_secrets.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 
 /// Where the encrypted master-key backup lives. Abstracted for tests.
 abstract class KeyBackupStore {
@@ -84,7 +87,7 @@ class KeyBackupService {
 
     if (local == null) {
       final legacy = await keyManager.readLegacyMasterKey();
-      if (legacy != null && await _legacyKeyBelongsTo(uid, legacy, hasBackup: slots.isNotEmpty)) {
+      if (legacy != null && await _legacyKeyBelongsTo(uid, legacy)) {
         await keyManager.adoptLegacyMasterKey(legacy);
         local = await keyManager.loadMasterKey();
       }
@@ -130,11 +133,12 @@ class KeyBackupService {
 
   /// An older app version kept one unscoped key per device, so on a shared
   /// device it may be another account's. Adopt it only if it derives the
-  /// public key on this user's profile or, for an account that never
-  /// published one, if no backup exists (nothing else could hold its key).
-  Future<bool> _legacyKeyBelongsTo(String uid, List<int> legacy, {required bool hasBackup}) async {
+  /// public key published on this user's profile. Without a published key
+  /// there is no proof (a brand-new account has none yet either), so the
+  /// key is left for its owner and this account gets its own.
+  Future<bool> _legacyKeyBelongsTo(String uid, List<int> legacy) async {
     final published = await publishedPublicKey?.call(uid);
-    if (published == null) return !hasBackup;
+    if (published == null) return false;
     return base64Encode(await keyManager.publicKeyForMasterKey(legacy)) == published;
   }
 
@@ -270,12 +274,21 @@ class KeyBackupService {
     return {
       // The key is derived on the client (see PasswordSecretDeriver), so the
       // slot carries no salt or iteration count of its own.
-      'kdf': 'notely-account-v1',
+      'kdf': PasswordSecretDeriver.kdfVersion,
       'wrapped': await _crypto.seal(key: SecretKey(passwordKey), data: master, aad: _aad(uid, 'password')),
     };
   }
 
   Future<List<int>?> _tryOpenPasswordSlot(String uid, Map<String, dynamic> slot, List<int> passwordKey) async {
+    // A slot from another derivation can't open with this key. Don't try:
+    // the caller falls back to the recovery code, as for a wrong password.
+    if (slot['kdf'] != PasswordSecretDeriver.kdfVersion) {
+      AppErrorHandler().handle(
+        StateError('Password slot uses unsupported KDF ${slot['kdf']}'),
+        StackTrace.current,
+      );
+      return null;
+    }
     try {
       return await _crypto.open(
         key: SecretKey(passwordKey),
@@ -297,10 +310,7 @@ class KeyBackupService {
   ) async {
     if (slot == null) return false;
     final bytes = await _tryOpenPasswordSlot(uid, slot, passwordKey);
-    if (bytes == null || bytes.length != expected.length) return false;
-    for (var i = 0; i < bytes.length; i++) {
-      if (bytes[i] != expected[i]) return false;
-    }
-    return true;
+    // Already authenticated by AES-GCM, so no need for a constant-time compare.
+    return bytes != null && listEquals(bytes, expected);
   }
 }

@@ -21,6 +21,7 @@ class _FakeFirebase implements AuthProvider {
   @override
   Future<AuthUser> logIn({required String email, required String password}) async {
     received.add(password);
+    appSignIns.add(password);
     if (email != this.email || password != this.password) throw WrongPasswordAuthException();
     signedIn = true;
     return AuthUser(uid: 'u1', email: email, isEmailVerified: true, hasPassword: true);
@@ -52,6 +53,21 @@ class _FakeFirebase implements AuthProvider {
     received.add(newPassword);
     password = newPassword;
   }
+
+  /// Password changes made in a separate session; the app is not signed in.
+  @override
+  Future<void> replacePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (email != this.email || currentPassword != password) throw WrongPasswordAuthException();
+    received.add(newPassword);
+    password = newPassword;
+  }
+
+  /// Every password the app's own session signed in with.
+  final appSignIns = <String>[];
 
   @override
   Future<void> logOut() async => signedIn = false;
@@ -203,23 +219,27 @@ void main() {
       final next = await _deriver.derive(email: _email, password: 'chosen in the app');
       expect(firebase.password, next.authSecret);
       expect(held, next.backupKey);
+      expect(firebase.signedIn, isTrue);
+      // The app's session (and so key setup) only ever saw the new secret.
+      expect(firebase.appSignIns, [next.authSecret]);
       expectNeverSent('chosen in the app');
     });
 
     test('a wrong web password leaves nothing behind', () async {
       firebase.password = 'typed on the web page';
-      List<int>? held = [1];
+      var held = false;
       await expectLater(
         service.repairWebReset(
           email: _email,
           webPassword: 'wrong',
           newPassword: 'chosen in the app',
-          holdPasswordKey: (key) => held = key,
+          holdPasswordKey: (_) => held = true,
         ),
         throwsA(isA<WrongPasswordAuthException>()),
       );
-      expect(held, isNull);
-      expect(firebase.signedIn, isFalse);
+      expect(held, isFalse, reason: 'key setup never got a key');
+      expect(firebase.appSignIns, isEmpty);
+      expect(firebase.password, 'typed on the web page');
     });
   });
 
@@ -233,6 +253,14 @@ void main() {
       }).toString();
       expect(PasswordAccountService.resetCodeFrom(wrapped), code);
       expect(PasswordAccountService.resetCodeFrom('  $code  '), code);
+    });
+
+    test('stops following links nested too deep', () {
+      var link = 'https://x.firebaseapp.com/__/auth/action?mode=resetPassword&oobCode=reset-code-0123456789abcdef';
+      for (var i = 0; i < 6; i++) {
+        link = Uri.https('x.page.link', '/', {'link': link}).toString();
+      }
+      expect(PasswordAccountService.resetCodeFrom(link), isNull);
     });
 
     test('ignores links for other actions and text without a code', () {

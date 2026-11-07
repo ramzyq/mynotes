@@ -2,6 +2,7 @@ import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, InvalidResetCodeAuthException;
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' show EmailAuthProvider, FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
+import 'package:firebase_core/firebase_core.dart' show Firebase, FirebaseApp, FirebaseException;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 
@@ -181,6 +182,37 @@ class FirebaseAuthProvider implements AuthProvider {
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') throw WrongPasswordAuthException();
       if (e.code == 'too-many-requests') throw TooManyRequestsAuthException();
       throw GenericAuthException();
+    }
+  }
+
+  @override
+  Future<void> replacePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    // A second Firebase app has its own auth session, so the app's
+    // authStateChanges never fire and nothing starts key setup.
+    const name = 'notely-password-replace';
+    FirebaseApp app;
+    try {
+      app = await Firebase.initializeApp(name: name, options: Firebase.app().options);
+    } on FirebaseException catch (e) {
+      if (e.code != 'duplicate-app') rethrow;
+      app = Firebase.app(name);
+    }
+    final auth = FirebaseAuth.instanceFor(app: app);
+    try {
+      final credential = await auth.signInWithEmailAndPassword(email: email, password: currentPassword);
+      await credential.user!.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') throw WrongPasswordAuthException();
+      if (e.code == 'user-not-found') throw UserNotFoundAuthException();
+      if (e.code == 'too-many-requests') throw TooManyRequestsAuthException();
+      throw GenericAuthException();
+    } finally {
+      await auth.signOut().catchError((Object _) {});
+      await app.delete().catchError((Object _) {});
     }
   }
 
