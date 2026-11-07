@@ -43,8 +43,7 @@ class CreditsView extends StatelessWidget {
           const SizedBox(height: 6),
           GestureDetector(
             onLongPress: () => Clipboard.setData(const ClipboardData(text: iconAttribution)),
-            child: Text('$iconAttribution
-$iconAttributionUrl', style: body),
+            child: Text('$iconAttribution\n$iconAttributionUrl', style: body),
           ),
           const SizedBox(height: 24),
           Text('Fonts', style: heading),
