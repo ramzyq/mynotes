@@ -95,13 +95,23 @@ flutter run
 firebase deploy --only hosting
 ```
 
-In the Firebase console, open **Authentication → Templates**, choose any
-template, click the pencil, then **Customize action URL**, and set it to
-`https://ramzyqnotes.web.app/auth/action`. This applies to every email
-template. Without it, reset emails link to Firebase's own page, which asks for
-the new password on the web; the app can repair such an account afterwards
-(*Already set a new password on the web page?*), but the action URL avoids
-the problem.
+**Firebase's own email links.** This project can't point Firebase's emails at
+`/auth/action`: the console's *Customize action URL* is refused with
+`EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED` (tried 2026-11-07; Blaze or custom SMTP
+might lift it). Emails therefore link to Firebase's page,
+`https://ramzyqnotes.firebaseapp.com/__/auth/action`, which asks for a new
+password on the web. To keep resets in the app anyway:
+
+- **Android** claims that link with App Links (`firebaseapp.com` serves the same
+  hosting site, so the same `assetlinks.json` verifies it). Tapping a reset link
+  opens Notely's reset screen; tapping a verification link verifies in the app.
+- **iOS and computers** see Firebase's page. Users can copy the link into
+  Notely's *Reset password* screen, and an account whose password was set on the
+  web is repaired with *Already set a new password on the web page?*. With an
+  Apple Team ID, iOS can claim the link the same way.
+
+If the action URL ever becomes changeable, set it to
+`https://ramzyqnotes.web.app/auth/action`; the app handles both.
 
 ### Firebase Rules, Indexes, and Functions
 
@@ -173,7 +183,6 @@ Still needed, outside the repo:
       collection-group indexes for those queries (they take a few minutes to
       build). Hosting: share link pages, the email action handler, and
       `assetlinks.json`.
-- [ ] **Email action URL** in the Firebase console (see *Hosting, share links and email links*).
 - [ ] **Account deletion on the web (Google Play).** Play also wants a web page
       where people can request deletion without the app. It needs a support
       contact (an email address), which isn't decided yet; add a

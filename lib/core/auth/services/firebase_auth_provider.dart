@@ -1,5 +1,5 @@
 import 'package:mynotes/core/auth/models/auth_user.dart';
-import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, InvalidResetCodeAuthException, NetworkAuthException;
+import 'package:mynotes/core/auth/services/auth_exceptions.dart' show UserNotLoggedInAuthException, WeakPasswordAuthException, UserAlreadyExistsAuthException, InvalidCredentialAuthException, GenericAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, UserDisabledAuthException, GoogleSignInCancelledException, InvalidResetCodeAuthException, NetworkAuthException, InvalidActionCodeAuthException;
 import 'package:mynotes/core/auth/services/auth_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' show EmailAuthProvider, FirebaseAuth, FirebaseAuthException, GoogleAuthProvider;
 import 'package:firebase_core/firebase_core.dart' show Firebase, FirebaseApp, FirebaseException;
@@ -257,6 +257,20 @@ class FirebaseAuthProvider implements AuthProvider {
     } on FirebaseAuthException catch (e) {
       if (e.code == 'network-request-failed') throw NetworkAuthException();
       throw GenericAuthException();
+    }
+  }
+
+  @override
+  Future<void> applyActionCode(String code) async {
+    try {
+      await FirebaseAuth.instance.applyActionCode(code);
+    } on FirebaseAuthException catch (e) {
+      throw switch (e.code) {
+        'expired-action-code' || 'invalid-action-code' => InvalidActionCodeAuthException(),
+        'network-request-failed' => NetworkAuthException(),
+        'too-many-requests' => TooManyRequestsAuthException(),
+        _ => GenericAuthException(),
+      };
     }
   }
 

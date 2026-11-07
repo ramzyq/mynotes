@@ -55,4 +55,8 @@ abstract class AuthProvider {
 
   /// Delete the signed-in Firebase account. Call [reauthenticate] first.
   Future<void> deleteCurrentUser();
+
+  /// Apply the one-time code from an email link that needs no input, such
+  /// as email verification.
+  Future<void> applyActionCode(String code);
 }

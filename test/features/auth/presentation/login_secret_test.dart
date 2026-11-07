@@ -59,6 +59,9 @@ class _RecordingAuth implements AuthProvider {
   Future<void> reauthenticate({String? password}) async {}
   @override
   Future<void> deleteCurrentUser() async {}
+
+  @override
+  Future<void> applyActionCode(String code) async {}
 }
 
 void main() {

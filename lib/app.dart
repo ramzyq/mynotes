@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/theme/widgets/async_states.dart';
+import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/core/deeplinks/incoming_links.dart';
 import 'package:mynotes/core/encryption/presentation/key_setup_gate.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
@@ -100,9 +101,43 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
         }
       case JoinIncomingLink(:final uri):
         await ref.read(joinLinkProcessorProvider).handleUri(uri).catchError(AppErrorHandler().handle);
+      case VerifyEmailIncomingLink(:final code):
+        await _verifyEmail(code);
+      case UnsupportedEmailActionIncomingLink():
+        _tell("Notely can't open this link. Open it on a computer to finish.");
       case null:
         break;
     }
+  }
+
+  void _tell(String message) =>
+      appMessengerKey.currentState?.showSnackBar(SnackBar(content: Text(message)));
+
+  /// Apply a verification link. If this device is signed in, reload the
+  /// account so the verify screen moves on by itself (userChanges).
+  Future<void> _verifyEmail(String code) async {
+    final auth = ref.read(authServiceProvider);
+    try {
+      await auth.applyActionCode(code);
+    } on InvalidActionCodeAuthException {
+      // Often a second tap on a link that already worked.
+      final verified = auth.currentUser?.isEmailVerified ?? false;
+      _tell(verified
+          ? 'Your email is already verified.'
+          : "This link has expired or was already used. Send a new one from Notely's verify screen.");
+      return;
+    } on NetworkAuthException {
+      _tell("You're offline. Open the link again once you're connected.");
+      return;
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      _tell("Couldn't verify your email. Try the link again.");
+      return;
+    }
+    if (auth.currentUser != null) {
+      await auth.reloadCurrentUser().catchError(AppErrorHandler().handle);
+    }
+    _tell('Email verified.');
   }
 
   @override
