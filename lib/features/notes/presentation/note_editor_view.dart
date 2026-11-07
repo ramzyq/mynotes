@@ -1010,7 +1010,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
           );
         },
         onRevokeLink: (token) {
-          return ref.read(shareServiceProvider).revokeShareLink(token: token);
+          return ref.read(shareServiceProvider).revokeShareLink(uid: widget.authUser.uid, token: token);
         },
       ),
       ),

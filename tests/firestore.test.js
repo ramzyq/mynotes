@@ -155,6 +155,20 @@ describe('Firestore rules', () => {
     await assertFails(as('reporter').collection('reports').add({ ...report, targetOwnerUid: 'victim' }));
   });
 
+  // The app deletes a share link's requests when the note is deleted or the
+  // link revoked. Rules can't check each document of a list, so the query
+  // must be filtered by owner; an unfiltered one is refused.
+  it("lets a link's owner list its requests only with an owner filter", async () => {
+    await seed('shareLinks/tok', { ownerUid: 'owner', noteId: 'n1', mode: 'open' });
+    await seed('shareLinks/tok/requests/r1', { ownerUid: 'owner', recipientUid: 'r1', status: 'pending' });
+    const owner = as('owner');
+    await assertFails(owner.collection('shareLinks/tok/requests').get());
+    const snap = await assertSucceeds(owner.collection('shareLinks/tok/requests').where('ownerUid', '==', 'owner').get());
+    if (snap.size !== 1) throw new Error(`expected 1 request, got ${snap.size}`);
+    await assertSucceeds(owner.doc('shareLinks/tok/requests/r1').delete());
+    await assertFails(as('stranger').collection('shareLinks/tok/requests').where('ownerUid', '==', 'owner').get());
+  });
+
   it('denies collaborator from writing to shared note', async () => {
     const dbOwner = testEnv.authenticatedContext('owner').firestore();
     const dbCollab = testEnv.authenticatedContext('collab').firestore();
