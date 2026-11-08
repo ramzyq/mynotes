@@ -12,6 +12,14 @@ import 'package:mynotes/features/auth/presentation/login_view.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 
 /// Records what the app hands to the sign-in server.
+/// A deriver that fails, as the Android HMAC did with an empty key.
+class _FailingDeriver extends PasswordSecretDeriver {
+  _FailingDeriver() : super(iterations: 1000);
+  @override
+  Future<PasswordSecrets> derive({required String email, required String password}) async =>
+      throw ArgumentError('Empty key');
+}
+
 class _RecordingAuth implements AuthProvider {
   String? sentPassword;
 
@@ -98,5 +106,28 @@ void main() {
     expect(auth.sentPassword, expected!.authSecret);
     expect(container.read(pendingPasswordKeyProvider), expected.backupKey,
         reason: 'only the backup key is kept, for the key setup gate');
+  });
+
+  testWidgets('if preparing the password fails, sign-in stops and says so', (tester) async {
+    final auth = _RecordingAuth();
+    final container = ProviderContainer(overrides: [
+      authServiceProvider.overrideWithValue(AuthService(auth)),
+      passwordSecretDeriverProvider.overrideWithValue(_FailingDeriver()),
+    ]);
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(theme: buildNotelyTheme(Brightness.light), home: const LoginView()),
+    ));
+    await tester.enterText(find.byType(TextField).at(0), 'maya@example.com');
+    await tester.enterText(find.byType(TextField).at(1), 'correct horse battery');
+    await tester.tap(find.text('Sign in').last);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining("Couldn't prepare your sign-in"), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing, reason: 'no endless spinner');
+    expect(auth.sentPassword, isNull, reason: 'nothing reached Firebase');
   });
 }
