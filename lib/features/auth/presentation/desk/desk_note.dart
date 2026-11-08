@@ -15,7 +15,13 @@ Color deskNoteColor(DeskNoteRole role) => switch (role) {
       DeskNoteRole.middle => const Color(0xFFFDFBF7),
     };
 
+/// The notes' outline. In dark mode it's a warm grey rather than the logo's
+/// near-black, so the notes keep a crisp edge against the dark page.
 Color deskOutline(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark ? const Color(0xFF5E584F) : NotelyMarkColors.light.outline;
+
+/// The logo's own outline, which the notes blend into as they become it.
+Color logoOutline(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark ? NotelyMarkColors.dark.outline : NotelyMarkColors.light.outline;
 
 /// One note as drawn at a moment in time: [flip] turns it over (0 face-up,
@@ -29,6 +35,7 @@ class DeskNoteFace extends StatelessWidget {
     this.flip = 0,
     this.contentOpacity = 1,
     this.stroke = 3,
+    this.outline,
     this.radius = 12,
     this.shadow = true,
   });
@@ -38,12 +45,15 @@ class DeskNoteFace extends StatelessWidget {
   final double flip;
   final double contentOpacity;
   final double stroke;
+
+  /// Overrides the outline colour (the sign-in moment blends it into the logo's).
+  final Color? outline;
   final double radius;
   final bool shadow;
 
   @override
   Widget build(BuildContext context) {
-    final outline = deskOutline(context);
+    final outline = this.outline ?? deskOutline(context);
     final showBack = flip > 0.5;
     final face = Container(
       decoration: BoxDecoration(

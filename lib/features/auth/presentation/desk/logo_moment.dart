@@ -190,6 +190,7 @@ class _LogoMomentState extends State<_LogoMoment> with SingleTickerProviderState
           flip: flip,
           contentOpacity: 1 - _span(0, 250),
           stroke: 3 + (layout.logoStroke - 3) * move,
+          outline: Color.lerp(deskOutline(context), logoOutline(context), move),
           radius: 12 + (layout.logoStroke * 0.55 - 12) * move,
           shadow: move < 0.6,
         ),
