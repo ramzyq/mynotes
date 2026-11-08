@@ -55,21 +55,30 @@ class ResendCooldown {
 
 final resendCooldownProvider = Provider<ResendCooldown>((ref) => ResendCooldown());
 
-/// Seconds left on a cooldown, ticking down once a second while a screen
-/// shows it. Dispose with the screen.
+/// Seconds left on a cooldown, updated while a screen shows it. Counts
+/// against the clock, not ticks, so time spent in the background (when
+/// timers can pause) still counts. Dispose with the screen.
 class CooldownTicker extends ValueNotifier<int> {
-  CooldownTicker() : super(0);
+  CooldownTicker({DateTime Function()? now})
+      : _now = now ?? DateTime.now,
+        super(0);
 
+  final DateTime Function() _now;
   Timer? _timer;
+  DateTime? _endsAt;
 
   void run(Duration left) {
     _timer?.cancel();
-    value = left.inSeconds + (left.inMilliseconds % 1000 > 0 ? 1 : 0);
+    _endsAt = _now().add(left);
+    _update();
     if (value <= 0) return;
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      value = value - 1;
-      if (value <= 0) timer.cancel();
-    });
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) => _update());
+  }
+
+  void _update() {
+    final ms = _endsAt!.difference(_now()).inMilliseconds;
+    value = ms <= 0 ? 0 : (ms + 999) ~/ 1000;
+    if (value <= 0) _timer?.cancel();
   }
 
   @override

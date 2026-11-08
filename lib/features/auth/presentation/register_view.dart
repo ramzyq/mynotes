@@ -51,16 +51,23 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     _email.dispose();
     _password.dispose();
     _confirmPassword.dispose();
+    _passwordFocus.removeListener(_focusChanged);
+    _confirmFocus.removeListener(_focusChanged);
     _passwordFocus.dispose();
     _confirmFocus.dispose();
     super.dispose();
   }
 
-  bool get _typingPassword => _passwordFocus.hasFocus || _confirmFocus.hasFocus;
+  /// Held while the account is being created: the fields are disabled then,
+  /// which drops their focus, and the notes shouldn't turn back over.
+  bool? _heldFaceDown;
+
+  bool get _typingPassword => _heldFaceDown ?? (_passwordFocus.hasFocus || _confirmFocus.hasFocus);
   bool _wasTypingPassword = false;
 
   /// The notes turn over while a password is typed, and back after.
   void _focusChanged() {
+    if (!mounted) return;
     if (_typingPassword != _wasTypingPassword) NotelyHaptics.select();
     _wasTypingPassword = _typingPassword;
     setState(() {});
@@ -110,8 +117,12 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
 
     final overlay = Overlay.of(context, rootOverlay: true);
     final card = globalRectOf(_cardKey);
+    final faceDown = _typingPassword;
     NotelyHaptics.medium();
-    setState(() => _isLoading = true);
+    setState(() {
+      _heldFaceDown = faceDown;
+      _isLoading = true;
+    });
 
     // Firebase gets only the auth secret; the backup key stays in memory
     // until the key setup gate has used it, then is cleared.
@@ -141,7 +152,7 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
       // The notes become the logo, with a welcome, over the verify screen.
       showLogoMoment(
         overlay,
-        faceDown: _typingPassword,
+        faceDown: faceDown,
         middle: _FreshNotebook(name: firstName),
         card: card,
         welcome: 'Welcome, ${firstName.split(' ').first}.',
@@ -172,7 +183,10 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     } finally {
       if (!signedIn && mounted) ref.read(pendingPasswordKeyProvider.notifier).state = null;
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _heldFaceDown = null;
+          _isLoading = false;
+        });
       }
     }
   }

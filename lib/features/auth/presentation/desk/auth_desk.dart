@@ -78,7 +78,19 @@ class _AuthDeskState extends State<AuthDesk> with SingleTickerProviderStateMixin
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (NotelyMotion.ambient(context)) {
+    _runDrift();
+  }
+
+  @override
+  void didUpdateWidget(AuthDesk oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pose != widget.pose) _runDrift();
+  }
+
+  /// Drifts only while the notes are drifting: no repaints under the glass
+  /// while they're turned over or cleared away.
+  void _runDrift() {
+    if (NotelyMotion.ambient(context) && widget.pose == DeskPose.drift) {
       if (!_drift.isAnimating) _drift.repeat();
     } else {
       _drift.stop();

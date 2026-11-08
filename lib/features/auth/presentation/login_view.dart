@@ -47,6 +47,8 @@ class _LoginViewState extends ConsumerState<LoginView> {
 
   @override
   void dispose() {
+    _emailFocus.removeListener(_focusChanged);
+    _passwordFocus.removeListener(_focusChanged);
     _email.dispose();
     _password.dispose();
     _emailFocus.dispose();
@@ -55,16 +57,34 @@ class _LoginViewState extends ConsumerState<LoginView> {
   }
 
   void _focusChanged() {
+    if (!mounted) return;
     if (_emailFocus.hasFocus || _passwordFocus.hasFocus) NotelyHaptics.select();
     setState(() {});
   }
 
+  /// Held while signing in: the fields are disabled then, which drops their
+  /// focus, and the notes shouldn't turn back over mid-request.
+  DeskPose? _heldPose;
+
   /// The notes lean in for the email and turn over for the password.
-  DeskPose get _pose => _passwordFocus.hasFocus
-      ? DeskPose.faceDown
-      : _emailFocus.hasFocus
-          ? DeskPose.lean
-          : DeskPose.drift;
+  DeskPose get _pose =>
+      _heldPose ??
+      (_passwordFocus.hasFocus
+          ? DeskPose.faceDown
+          : _emailFocus.hasFocus
+              ? DeskPose.lean
+              : DeskPose.drift);
+
+  /// Starts a sign-in request: holds the scene as it is.
+  void _startLoading() => setState(() {
+        _heldPose = _pose;
+        _isLoading = true;
+      });
+
+  void _stopLoading() => setState(() {
+        _heldPose = null;
+        _isLoading = false;
+      });
 
   bool _isValidEmail(String email) {
     return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
@@ -82,7 +102,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
     final messenger = ScaffoldMessenger.of(context);
     final overlay = Overlay.of(context, rootOverlay: true);
     final card = globalRectOf(_cardKey);
-    setState(() => _isLoading = true);
+    _startLoading();
     try {
       await ref.read(authServiceProvider).signInWithApple();
       // AuthenticationWrapper takes it from here.
@@ -98,7 +118,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
       if (!mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text('Apple sign-in failed. Please try again.')));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) _stopLoading();
     }
   }
 
@@ -106,7 +126,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
     final messenger = ScaffoldMessenger.of(context);
     final overlay = Overlay.of(context, rootOverlay: true);
     final card = globalRectOf(_cardKey);
-    setState(() => _isLoading = true);
+    _startLoading();
 
     try {
       await ref.read(authServiceProvider).signInWithGoogle();
@@ -125,9 +145,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
         const SnackBar(content: Text('An error occurred. Please try again.')),
       );
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) _stopLoading();
     }
   }
 
@@ -182,7 +200,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
     final overlay = Overlay.of(context, rootOverlay: true);
     final card = globalRectOf(_cardKey);
     final faceDown = _pose == DeskPose.faceDown;
-    setState(() => _isLoading = true);
+    _startLoading();
 
     // Firebase gets only the auth secret; the backup key stays in memory
     // until the key setup gate has used it, then is cleared.
@@ -216,9 +234,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
       );
     } finally {
       if (!signedIn && mounted) ref.read(pendingPasswordKeyProvider.notifier).state = null;
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) _stopLoading();
     }
   }
 

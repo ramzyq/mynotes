@@ -21,7 +21,8 @@ abstract final class NotelyMotion {
 
   /// Endless background motion (the sign-in notes drifting). Off under
   /// `flutter test`, where a loop that never settles would hang every
-  /// `pumpAndSettle`; tests that want it can turn it back on.
+  /// `pumpAndSettle`. It's global: a test that turns it on must turn it off
+  /// again (in `addTearDown`).
   static bool ambientEnabled = !_underTest;
   static final bool _underTest = !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
 

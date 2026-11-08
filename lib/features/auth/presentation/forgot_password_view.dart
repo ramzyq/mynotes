@@ -65,6 +65,25 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
     if (_fromLink) _checkLink();
     _password.addListener(_typed);
     _confirm.addListener(_typed);
+    _email.addListener(_emailChanged);
+    _loadCooldown();
+  }
+
+  /// The email the running wait belongs to.
+  String _cooldownEmail = '';
+
+  /// Each address has its own wait, restored even after a restart.
+  Future<void> _loadCooldown() async {
+    final email = _email.text.trim().toLowerCase();
+    _cooldownEmail = email;
+    if (!email.contains('@')) return _cooldown.run(Duration.zero);
+    final left = await ref.read(resendCooldownProvider).remaining(ResendPurpose.reset, email);
+    // Only if the field still holds the address that was looked up.
+    if (mounted && _cooldownEmail == email) _cooldown.run(left);
+  }
+
+  void _emailChanged() {
+    if (_email.text.trim().toLowerCase() != _cooldownEmail) _loadCooldown();
   }
 
   Future<void> _checkLink() async {
@@ -96,6 +115,9 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
 
   @override
   void dispose() {
+    _email.removeListener(_emailChanged);
+    _password.removeListener(_typed);
+    _confirm.removeListener(_typed);
     _email.dispose();
     _link.dispose();
     _password.dispose();
@@ -125,10 +147,8 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
     }
   }
 
-  /// Back to the email step, keeping any wait that's still running.
-  Future<void> _changeEmail() async {
-    setState(() => _sent = false);
-  }
+  /// Back to the email step. A different address gets its own wait.
+  void _changeEmail() => setState(() => _sent = false);
 
   Future<void> _paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
@@ -136,15 +156,32 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
     if (!mounted) return;
     if (text.isEmpty) return _show('Copy the link from the email first, then tap Paste.');
     NotelyHaptics.select();
-    setState(() {
-      _link.text = text;
-      _linkReady = true;
-    });
+    await _acceptLink(text);
   }
 
   void _useTypedLink() {
-    if (_link.text.trim().isEmpty) return _show('Paste or type the link from the email.');
-    setState(() => _linkReady = true);
+    final text = _link.text.trim();
+    if (text.isEmpty) return _show('Paste or type the link from the email.');
+    _acceptLink(text);
+  }
+
+  /// Checks a pasted or typed link before asking for the new password, so a
+  /// bad or expired one is caught here, and step 3 can name the account.
+  Future<void> _acceptLink(String text) async {
+    setState(() => _busy = true);
+    try {
+      final email = await ref.read(passwordAccountServiceProvider).emailForReset(text);
+      if (!mounted) return;
+      setState(() {
+        _link.text = text;
+        _linkEmail = email;
+        _linkReady = true;
+      });
+    } catch (error) {
+      if (mounted) _show(passwordErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _setPassword() async {
@@ -299,7 +336,7 @@ class _ForgotPasswordViewState extends ConsumerState<ForgotPasswordView> {
             onSubmitted: (_) => _useTypedLink(),
           ),
           const SizedBox(height: 10),
-          NotelyPrimaryButton(label: 'Continue', onPressed: _useTypedLink),
+          NotelyPrimaryButton(label: 'Continue', loading: _busy, onPressed: _useTypedLink),
         ] else ...[
           NotelySecondaryButton(
             label: 'Paste the link',

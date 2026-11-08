@@ -45,17 +45,27 @@ class _LogoMoment extends StatefulWidget {
 
 class _LogoMomentState extends State<_LogoMoment> with SingleTickerProviderStateMixin {
   // Milliseconds on the full timeline.
-  static const _total = 3600;
+  static const _total = 3200;
   static const _travelEnd = 900;
   static const _markStart = 950;
   static const _markEnd = 1900;
   static const _clipSnap = 1150;
   static const _wordStart = 1700;
-  static const _leaveStart = 3100;
+  static const _leaveStart = 2700;
 
   late final AnimationController _c;
   bool _reduced = false;
   bool _buzzed = false;
+  bool _done = false;
+
+  /// A tap jumps to the fade-out, for anyone who'd rather not wait.
+  void _skip() {
+    final leaveAt = _reduced ? 0.8 : _leaveStart / _total;
+    if (_c.value < leaveAt) {
+      _c.value = leaveAt;
+      _c.forward();
+    }
+  }
 
   @override
   void initState() {
@@ -67,7 +77,10 @@ class _LogoMomentState extends State<_LogoMoment> with SingleTickerProviderState
           )
           ..addListener(_haptic)
           ..addStatusListener((status) {
-            if (status == AnimationStatus.completed) widget.onDone();
+            if (status == AnimationStatus.completed && !_done) {
+              _done = true;
+              widget.onDone();
+            }
           });
   }
 
@@ -112,25 +125,29 @@ class _LogoMomentState extends State<_LogoMoment> with SingleTickerProviderState
         final leave = _span(_leaveStart, _total, NotelyMotion.exit);
         return IgnorePointer(
           ignoring: leave > 0.5,
-          child: Opacity(
-            opacity: 1 - leave,
-            child: Material(
-              color: notely.bg,
-              child: LayoutBuilder(
-                builder: (context, box) {
-                  final layout = DeskLayout(box.biggest, top: MediaQuery.paddingOf(context).top + 8);
-                  return Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      if (widget.card != null) _ghostCard(notely),
-                      // The notes stay solid under the logo as it fades in on
-                      // top, so nothing shows through; then they go.
-                      if (_ms < _markStart + 400) ...[for (final role in DeskNoteRole.values) _travellingNote(layout, role)],
-                      _mark(layout),
-                      _word(layout, notely),
-                    ],
-                  );
-                },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _skip,
+            child: Opacity(
+              opacity: 1 - leave,
+              child: Material(
+                color: notely.bg,
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final layout = DeskLayout(box.biggest, top: MediaQuery.paddingOf(context).top + 8);
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        if (widget.card != null) _ghostCard(notely),
+                        // The notes stay solid under the logo as it fades in on
+                        // top, so nothing shows through; then they go.
+                        if (_ms < _markStart + 400) ...[for (final role in DeskNoteRole.values) _travellingNote(layout, role)],
+                        _mark(layout),
+                        _word(layout, notely),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),
