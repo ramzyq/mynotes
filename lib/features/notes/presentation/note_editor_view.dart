@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/features/notes/data/notes_service.dart';
@@ -28,6 +26,7 @@ import 'package:mynotes/features/notes/presentation/widgets/tags_sheet.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
 import 'package:mynotes/core/format/dates.dart';
 import 'package:mynotes/features/notes/presentation/widgets/checklist_text.dart';
+import 'package:mynotes/features/notes/presentation/widgets/editor_paper.dart';
 import 'package:mynotes/features/reminders/reminder_providers.dart';
 
 class NoteEditorView extends ConsumerStatefulWidget {
@@ -1142,7 +1141,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
             children: [
               Text('Color label', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 4),
-              Text('Shown as the margin line on this note.', style: Theme.of(context).textTheme.bodySmall),
+              Text('Colours the clip and the top of this note.', style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 20),
               Wrap(
                 spacing: 16,
@@ -1206,6 +1205,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
   Future<void> _onMenu(String value) async {
     final note = _note;
     switch (value) {
+      case 'pin':
+        setState(() => _isPinned = !_isPinned);
       case 'study':
         setState(() => _isStudyMaterial = !_isStudyMaterial);
       case 'lock':
@@ -1247,33 +1248,35 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
             tooltip: 'Back',
             onPressed: () => Navigator.of(context).maybePop(),
           ),
-          titleSpacing: 0,
+          centerTitle: true,
+          // Where the note stands, with the lock: it's always encrypted.
           title: _canEdit
               ? ValueListenableBuilder<_SaveStatus>(
                   valueListenable: _saveStatus,
-                  builder: (context, status, _) => Text(
-                    switch (status) {
-                      _SaveStatus.clean => note == null ? 'New note' : 'Saved',
-                      _SaveStatus.edited => 'Edited',
-                      _SaveStatus.saving => 'Saving…',
-                      _SaveStatus.saved => 'Saved',
-                      _SaveStatus.failed => 'Not saved',
-                    },
-                    style: TextStyle(
-                      fontFamily: 'Geist',
-                      fontSize: 13,
-                      color: status == _SaveStatus.failed ? notely.danger : notely.text3,
-                    ),
-                  ),
+                  builder: (context, status, _) {
+                    final failed = status == _SaveStatus.failed;
+                    final color = failed ? notely.danger : notely.text3;
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(failed ? Icons.error_outline : Icons.lock_outline, size: 13, color: color),
+                        const SizedBox(width: 5),
+                        Text(
+                          switch (status) {
+                            _SaveStatus.clean => note == null ? 'New note' : 'Saved · encrypted',
+                            _SaveStatus.edited => 'Edited',
+                            _SaveStatus.saving => 'Saving…',
+                            _SaveStatus.saved => 'Saved · encrypted',
+                            _SaveStatus.failed => 'Not saved',
+                          },
+                          style: TextStyle(fontFamily: 'Geist', fontSize: 12.5, color: color),
+                        ),
+                      ],
+                    );
+                  },
                 )
               : Text('View only', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3)),
           actions: [
-            if (_isOwner)
-              IconButton(
-                tooltip: _isPinned ? 'Unpin' : 'Pin',
-                onPressed: busy ? null : () => setState(() => _isPinned = !_isPinned),
-                icon: Icon(_isPinned ? Icons.push_pin : Icons.push_pin_outlined, size: 20),
-              ),
             if (note != null && _isOwner)
               IconButton(
                 tooltip: 'Share',
@@ -1289,6 +1292,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
                     : const Icon(Icons.more_horiz),
                 onSelected: _onMenu,
                 itemBuilder: (context) => [
+                  PopupMenuItem(value: 'pin', child: Text(_isPinned ? 'Unpin' : 'Pin to top')),
                   CheckedPopupMenuItem(value: 'study', checked: _isStudyMaterial, child: const Text('Use as flashcard')),
                   if (note != null)
                     PopupMenuItem(value: 'lock', child: Text(note.isLocked ? 'Lock settings' : 'Lock with PIN')),
@@ -1302,59 +1306,200 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
                 ],
               ),
             if (_canEdit)
-              TextButton(
-                onPressed: busy ? null : _saveNote,
-                child: _isSaving
-                    ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text('Done', style: TextStyle(fontFamily: 'Geist', fontSize: 15, fontWeight: FontWeight.w500, color: notely.violet)),
-              ),
-            const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 12),
+                child: FilledButton(
+                  onPressed: busy ? null : _saveNote,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: notely.violet,
+                    foregroundColor: Theme.of(context).brightness == Brightness.dark ? notely.bg : Colors.white,
+                    minimumSize: const Size(64, 34),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    shape: const StadiumBorder(),
+                    textStyle: const TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Done'),
+                ),
+              )
+            else
+              const SizedBox(width: 8),
           ],
         ),
-        bottomNavigationBar: _canEdit
-            ? _EditorToolbar(
-                enabled: !busy,
-                isRecording: _isRecording,
-                isCapturingLocation: _isCapturingLocation,
-                hasLocation: _latitude != null,
-                onScan: _showOcrSheet,
-                onVoice: _isRecording ? _stopVoiceRecording : _startVoiceRecording, // Both ignore taps while _voiceBusy.
-                onLocation: _captureLocation,
-                onChecklist: () {
-                  _contentController.toggleChecklistLine();
-                  _contentFocusNode.requestFocus();
-                },
-              )
-            : null,
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        // The tool bar rides on top of the keyboard: it's part of the page,
+        // which the keyboard resizes, not the screen's bottom edge.
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_destroysOnClose)
+                      _Notice(
+                        icon: Icons.visibility_off_outlined,
+                        text: 'Read once: this note is deleted when you close it.',
+                        color: notely.danger,
+                      ),
+                    if (_isOwner && (note?.isLocked ?? false) && !(note?.hasPinLock ?? false))
+                      _Notice(
+                        icon: Icons.lock_open,
+                        text: 'This note is hidden but not encrypted.',
+                        color: notely.text2,
+                        action: TextButton(onPressed: _toggleLock, child: const Text('Encrypt with PIN')),
+                      ),
+                    if (note?.decryptionFailed ?? false)
+                      _Notice(
+                        icon: Icons.error_outline,
+                        text: "This note can't be decrypted on this device, so it can't be edited.",
+                        color: notely.text2,
+                      ),
+                    _paperSheet(context, note: note, accent: accent, busy: busy, hasSelfDestruct: hasSelfDestruct),
+                    if (_showSuggestions)
+                      Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        decoration: BoxDecoration(
+                          color: notely.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: notely.borderStrong),
+                        ),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: _suggestions.length,
+                          itemBuilder: (context, index) {
+                            final title = _suggestions[index];
+                            return ListTile(
+                              dense: true,
+                              leading: Icon(Icons.link, size: 16, color: notely.text3),
+                              title: Text(title, style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text)),
+                              onTap: () => _insertSuggestion(title),
+                            );
+                          },
+                        ),
+                      ),
+                    if (_audioAttachments.isNotEmpty) ...[
+                      const _SectionLabel('Recordings'),
+                      for (final path in _audioAttachments)
+                        _RowTile(
+                          icon: Icons.graphic_eq,
+                          label: path.split('\\').last.split('/').last,
+                        ),
+                    ],
+                    if (note != null) ...[
+                      const _SectionLabel('Linked from'),
+                      if (_loadingBacklinks)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      else if (_backlinks.isEmpty)
+                        Text('No other notes link here yet. Type [[ in any note to link one.', style: textTheme.bodySmall)
+                      else
+                        for (final bl in _backlinks)
+                          _RowTile(
+                            leading: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: kNotePalette[bl.colorIndex % kNotePalette.length],
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            label: bl.displayTitle,
+                            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                              builder: (context) => NoteEditorView(authUser: widget.authUser, note: bl),
+                            )),
+                          ),
+                    ],
+                    if (_isShared && note != null) ..._buildComments(note, notely, textTheme),
+                  ],
+                ),
+              ),
+            ),
+            if (_canEdit)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+                  child: EditorToolBar(tools: [
+                    EditorTool(
+                      icon: Icons.checklist,
+                      label: 'List',
+                      onTap: busy
+                          ? null
+                          : () {
+                              _contentController.toggleChecklistLine();
+                              _contentFocusNode.requestFocus();
+                            },
+                    ),
+                    EditorTool(icon: Icons.document_scanner_outlined, label: 'Scan', onTap: busy ? null : _showOcrSheet),
+                    EditorTool(
+                      icon: _isRecording ? Icons.stop_circle_outlined : Icons.mic_none,
+                      label: _isRecording ? 'Stop' : 'Dictate',
+                      color: _isRecording ? notely.danger : null,
+                      // Both ignore taps while _voiceBusy.
+                      onTap: busy ? null : (_isRecording ? _stopVoiceRecording : _startVoiceRecording),
+                    ),
+                    EditorTool(
+                      icon: _latitude != null ? Icons.location_on : Icons.location_on_outlined,
+                      label: 'Place',
+                      color: _latitude != null ? accent : null,
+                      busy: _isCapturingLocation,
+                      onTap: busy ? null : (_latitude != null ? _showPlaceSheet : _captureLocation),
+                    ),
+                    if (note != null)
+                      EditorTool(icon: Icons.history, label: 'History', onTap: busy ? null : () => _onMenu('history')),
+                  ]),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The note as a sheet of paper: the clip in its colour, a header washed
+  /// in that colour holding the title and badges, then the writing on ruled
+  /// lines, and the place, if there is one, clipped underneath.
+  Widget _paperSheet(
+    BuildContext context, {
+    required Note? note,
+    required Color accent,
+    required bool busy,
+    required bool hasSelfDestruct,
+  }) {
+    final notely = NotelyTheme.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final bodyStyle = textTheme.bodyLarge?.copyWith(height: 1.75) ?? const TextStyle(fontSize: 16, height: 1.75);
+    final lineHeight = (bodyStyle.fontSize ?? 16) * (bodyStyle.height ?? 1.75);
+    final canChange = _canEdit && !busy;
+    final reminderLive = _reminderAt?.isAfter(DateTime.now()) ?? false;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 10),
+          decoration: BoxDecoration(
+            color: notely.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: notely.border),
+          ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_destroysOnClose)
-                _Notice(
-                  icon: Icons.visibility_off_outlined,
-                  text: 'Read once: this note is deleted when you close it.',
-                  color: notely.danger,
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                padding: const EdgeInsets.fromLTRB(18, 28, 18, 14),
+                decoration: BoxDecoration(
+                  gradient: paperHeaderWash(context, accent),
+                  border: Border(bottom: BorderSide(color: notely.border)),
                 ),
-              if (_isOwner && (note?.isLocked ?? false) && !(note?.hasPinLock ?? false))
-                _Notice(
-                  icon: Icons.lock_open,
-                  text: 'This note is hidden but not encrypted.',
-                  color: notely.text2,
-                  action: TextButton(onPressed: _toggleLock, child: const Text('Encrypt with PIN')),
-                ),
-              if (note?.decryptionFailed ?? false)
-                _Notice(
-                  icon: Icons.error_outline,
-                  text: "This note can't be decrypted on this device, so it can't be edited.",
-                  color: notely.text2,
-                ),
-              // The writing surface: the margin line in the note's color, then
-              // the title, one row of metadata and the body.
-              Container(
-                padding: const EdgeInsets.only(left: 16),
-                decoration: BoxDecoration(border: Border(left: BorderSide(color: accent, width: 2))),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1377,205 +1522,196 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
                         contentPadding: const EdgeInsets.symmetric(vertical: 4),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        _MetaChip(
-                          leading: Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
-                          ),
+                        PaperBadge(
+                          leading: Container(width: 8, height: 8, decoration: BoxDecoration(color: accent, shape: BoxShape.circle)),
                           label: kNotePaletteNames[_selectedColorIndex % kNotePaletteNames.length],
-                          tooltip: 'Color label',
-                          onTap: _canEdit && !busy ? _showColorSheet : null,
+                          tooltip: 'Note colour',
+                          onTap: canChange ? _showColorSheet : null,
                         ),
-                        _MetaChip(
-                          leading: Icon(Icons.sell_outlined, size: 14, color: notely.text3),
-                          label: _tags.isEmpty ? 'Add tags' : _tags.join(', '),
-                          tooltip: 'Tags',
-                          onTap: _canEdit && !busy ? _showTagsDialog : null,
-                        ),
+                        if (_tags.isEmpty)
+                          PaperBadge(
+                            leading: Icon(Icons.sell_outlined, size: 13, color: notely.text3),
+                            label: 'Add tags',
+                            tooltip: 'Tags',
+                            dashed: true,
+                            onTap: canChange ? _showTagsDialog : null,
+                          )
+                        else
+                          for (final tag in _tags)
+                            PaperBadge(label: '#$tag', tooltip: 'Tags', onTap: canChange ? _showTagsDialog : null),
+                        if (_reminderAt != null)
+                          PaperBadge(
+                            leading: Icon(Icons.notifications_none, size: 13, color: reminderLive ? notely.violet : notely.text3),
+                            label: formatDateTime(_reminderAt!),
+                            color: reminderLive ? null : notely.text3,
+                            tooltip: 'Reminder',
+                            onTap: _isOwner && !busy ? _showReminderSheet : null,
+                          ),
+                        if (_isPinned)
+                          PaperBadge(
+                            leading: Icon(Icons.push_pin, size: 13, color: notely.text2),
+                            label: 'Pinned',
+                            tooltip: 'Pinned to the top. Tap to unpin.',
+                            onTap: _isOwner && !busy ? () => setState(() => _isPinned = false) : null,
+                          ),
+                        if (_isCapturingLocation)
+                          PaperBadge(
+                            leading: Icon(Icons.location_on_outlined, size: 13, color: notely.text3),
+                            label: 'Finding you…',
+                            tooltip: 'Location',
+                            shimmer: true,
+                          )
+                        else if (_latitude != null && _longitude != null)
+                          PaperBadge(
+                            leading: Icon(Icons.location_on, size: 13, color: accent),
+                            label: _placeName ?? 'Location',
+                            tooltip: 'Location',
+                            onTap: _showPlaceSheet,
+                          ),
                         if (hasSelfDestruct)
-                          _MetaChip(
-                            leading: Icon(Icons.timer_outlined, size: 14, color: notely.danger),
+                          PaperBadge(
+                            leading: Icon(Icons.timer_outlined, size: 13, color: notely.danger),
                             label: _selfDestructLabel(),
                             color: notely.danger,
                             tooltip: 'Self-destruct',
                             onTap: _isOwner && !busy ? _showSelfDestructSheet : null,
                           ),
-                        if (_reminderAt != null)
-                          _MetaChip(
-                            leading: Icon(
-                              Icons.notifications_none,
-                              size: 14,
-                              color: _reminderAt!.isAfter(DateTime.now()) ? notely.violet : notely.text3,
-                            ),
-                            label: formatDateTime(_reminderAt!),
-                            color: _reminderAt!.isAfter(DateTime.now()) ? notely.violet : notely.text3,
-                            tooltip: 'Reminder',
-                            onTap: _isOwner && !busy ? _showReminderSheet : null,
-                          ),
                         if (_isStudyMaterial)
-                          _MetaChip(
-                            leading: Icon(Icons.style_outlined, size: 14, color: notely.text3),
+                          PaperBadge(
+                            leading: Icon(Icons.style_outlined, size: 13, color: notely.text3),
                             label: 'Flashcard',
                             tooltip: 'Used in Study. Tap to stop.',
                             onTap: _isOwner && !busy ? () => setState(() => _isStudyMaterial = false) : null,
                           ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    CompositedTransformTarget(
-                      link: _suggestionLayerLink,
-                      child: TextField(
-                        controller: _contentController..mutedColor = notely.text3,
-                        focusNode: _contentFocusNode,
-                        inputFormatters: [ChecklistContinuation()],
-                        onTap: () {
-                          if (!_canEdit) return;
-                          final sel = _contentController.selection;
-                          if (sel.isValid && sel.isCollapsed) _contentController.toggleAt(sel.baseOffset);
-                        },
-                        enabled: !_isSaving,
-                        readOnly: !_canEdit,
-                        autofocus: note == null,
-                        minLines: 12,
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
-                        textCapitalization: TextCapitalization.sentences,
-                        textAlignVertical: TextAlignVertical.top,
-                        style: textTheme.bodyLarge,
-                        decoration: InputDecoration(
-                          hintText: 'Start writing. Type [[ to link a note.',
-                          hintStyle: textTheme.bodyLarge?.copyWith(color: notely.text4),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          disabledBorder: InputBorder.none,
-                          filled: false,
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),
-              if (_showSuggestions)
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  decoration: BoxDecoration(
-                    color: notely.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: notely.borderStrong),
-                  ),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: _suggestions.length,
-                    itemBuilder: (context, index) {
-                      final title = _suggestions[index];
-                      return ListTile(
-                        dense: true,
-                        leading: Icon(Icons.link, size: 16, color: notely.text3),
-                        title: Text(title, style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text)),
-                        onTap: () => _insertSuggestion(title),
-                      );
-                    },
-                  ),
-                ),
-              if (_audioAttachments.isNotEmpty) ...[
-                const _SectionLabel('Recordings'),
-                for (final path in _audioAttachments)
-                  _RowTile(
-                    icon: Icons.graphic_eq,
-                    label: path.split('\\').last.split('/').last,
-                  ),
-              ],
-              if (_latitude != null && _longitude != null) ...[
-                _SectionLabel(
-                  'Location',
-                  trailing: _canEdit
-                      ? IconButton(
-                          tooltip: 'Remove location',
-                          icon: Icon(Icons.close, size: 16, color: notely.text3),
-                          onPressed: () => setState(() {
-                            _latitude = null;
-                            _longitude = null;
-                            _placeName = null;
-                          }),
-                        )
-                      : null,
-                ),
-                if (_placeName != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(_placeName!, style: textTheme.bodySmall),
-                  ),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SizedBox(
-                    height: 160,
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter: LatLng(_latitude!, _longitude!),
-                        initialZoom: 15,
-                        interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.flutter.mynotes',
-                        ),
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: LatLng(_latitude!, _longitude!),
-                              child: Icon(Icons.location_on, color: notely.violet, size: 32),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-              if (note != null) ...[
-                const _SectionLabel('Linked from'),
-                if (_loadingBacklinks)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                  )
-                else if (_backlinks.isEmpty)
-                  Text('No other notes link here yet. Type [[ in any note to link one.', style: textTheme.bodySmall)
-                else
-                  for (final bl in _backlinks)
-                    _RowTile(
-                      leading: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: kNotePalette[bl.colorIndex % kNotePalette.length],
-                          shape: BoxShape.circle,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 6, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    CustomPaint(
+                      painter: RuledLinesPainter(lineHeight: lineHeight, color: notely.border),
+                      child: CompositedTransformTarget(
+                        link: _suggestionLayerLink,
+                        child: TextField(
+                          controller: _contentController..mutedColor = notely.text3,
+                          focusNode: _contentFocusNode,
+                          inputFormatters: [ChecklistContinuation()],
+                          onTap: () {
+                            if (!_canEdit) return;
+                            final sel = _contentController.selection;
+                            if (sel.isValid && sel.isCollapsed) _contentController.toggleAt(sel.baseOffset);
+                          },
+                          enabled: !_isSaving,
+                          readOnly: !_canEdit,
+                          autofocus: note == null,
+                          minLines: 10,
+                          maxLines: null,
+                          keyboardType: TextInputType.multiline,
+                          textCapitalization: TextCapitalization.sentences,
+                          textAlignVertical: TextAlignVertical.top,
+                          style: bodyStyle,
+                          // Lines exactly as tall as the ruling, whatever the font.
+                          strutStyle: StrutStyle(fontSize: bodyStyle.fontSize, height: bodyStyle.height, forceStrutHeight: true),
+                          decoration: InputDecoration(
+                            hintText: 'Start writing. Type [[ to link a note.',
+                            hintStyle: bodyStyle.copyWith(color: notely.text4),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            filled: false,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ),
                       ),
-                      label: bl.displayTitle,
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (context) => NoteEditorView(authUser: widget.authUser, note: bl),
-                      )),
                     ),
-              ],
-              if (_isShared && note != null) ..._buildComments(note, notely, textTheme),
+                    if (_latitude != null && _longitude != null) ...[
+                      const SizedBox(height: 14),
+                      NoteMapCard(
+                        latitude: _latitude!,
+                        longitude: _longitude!,
+                        placeName: _placeName,
+                        color: accent,
+                        onTap: _showPlaceSheet,
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-      ),
+        Positioned(
+          top: -8,
+          left: 16,
+          child: PaperClip(color: accent, onTap: canChange ? _showColorSheet : null),
+        ),
+      ],
     );
+  }
+
+  /// The note's place: a map to look around, and the choice to update it to
+  /// where you are now or remove it.
+  Future<void> _showPlaceSheet() async {
+    final lat = _latitude, lng = _longitude;
+    if (lat == null || lng == null) return;
+    final accent = kNotePalette[_selectedColorIndex % kNotePalette.length];
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        final notely = NotelyTheme.of(context);
+        return NotelySheet(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(height: 220, child: NoteMap(latitude: lat, longitude: lng, color: accent, interactive: true)),
+              ),
+              const SizedBox(height: 14),
+              Text(_placeName ?? 'Location', style: Theme.of(context).textTheme.displaySmall),
+              const SizedBox(height: 4),
+              Text('Where you were when you added it.', style: Theme.of(context).textTheme.bodySmall),
+              if (_canEdit) ...[
+                const SizedBox(height: 16),
+                NotelyPrimaryButton(label: 'Update to here', onPressed: () => Navigator.of(context).pop('update')),
+                const SizedBox(height: 4),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop('remove'),
+                  style: TextButton.styleFrom(foregroundColor: notely.danger),
+                  child: const Text('Remove location'),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'update':
+        await _captureLocation();
+      case 'remove':
+        setState(() {
+          _latitude = null;
+          _longitude = null;
+          _placeName = null;
+        });
+    }
   }
 
   List<Widget> _buildComments(Note note, NotelyTheme notely, TextTheme textTheme) {
@@ -1718,149 +1854,6 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
 
 /// Shown next to the pin and study chips so autosave is visible.
 enum _SaveStatus { clean, edited, saving, saved, failed }
-
-/// Capture tools under the writing surface, labeled so they explain
-/// themselves: scan text from a photo, dictate, attach where you are.
-class _EditorToolbar extends StatelessWidget {
-  final bool enabled;
-  final bool isRecording;
-  final bool isCapturingLocation;
-  final bool hasLocation;
-  final VoidCallback onScan;
-  final VoidCallback onVoice;
-  final VoidCallback onLocation;
-  final VoidCallback onChecklist;
-
-  const _EditorToolbar({
-    required this.enabled,
-    required this.isRecording,
-    required this.isCapturingLocation,
-    required this.hasLocation,
-    required this.onScan,
-    required this.onVoice,
-    required this.onLocation,
-    required this.onChecklist,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final notely = NotelyTheme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: notely.bg,
-        border: Border(top: BorderSide(color: notely.border)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 52,
-          child: Row(
-            children: [
-              const SizedBox(width: 8),
-              _ToolButton(icon: Icons.checklist, label: 'List', onTap: enabled ? onChecklist : null),
-              _ToolButton(icon: Icons.document_scanner_outlined, label: 'Scan', onTap: enabled ? onScan : null),
-              _ToolButton(
-                icon: isRecording ? Icons.stop_circle_outlined : Icons.mic_none,
-                label: isRecording ? 'Stop' : 'Dictate',
-                color: isRecording ? notely.danger : null,
-                onTap: enabled ? onVoice : null,
-              ),
-              _ToolButton(
-                icon: hasLocation ? Icons.location_on : Icons.location_on_outlined,
-                label: 'Place',
-                busy: isCapturingLocation,
-                onTap: enabled && !isCapturingLocation ? onLocation : null,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ToolButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-  final Color? color;
-  final bool busy;
-
-  const _ToolButton({required this.icon, required this.label, required this.onTap, this.color, this.busy = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final notely = NotelyTheme.of(context);
-    final fg = onTap == null && !busy ? notely.text4 : (color ?? notely.text2);
-    return TextButton(
-      onPressed: onTap,
-      style: TextButton.styleFrom(
-        foregroundColor: fg,
-        disabledForegroundColor: fg,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        minimumSize: const Size(0, 40),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          busy
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(icon, size: 18, color: fg),
-          const SizedBox(width: 8),
-          Text(label, style: TextStyle(fontFamily: 'Geist', fontSize: 14, fontWeight: FontWeight.w500, color: fg)),
-        ],
-      ),
-    );
-  }
-}
-
-/// One item of the metadata row under the title: color, tags, timers.
-class _MetaChip extends StatelessWidget {
-  final Widget leading;
-  final String label;
-  final String tooltip;
-  final VoidCallback? onTap;
-  final Color? color;
-
-  const _MetaChip({required this.leading, required this.label, required this.tooltip, required this.onTap, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final notely = NotelyTheme.of(context);
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: notely.border)),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            height: 28,
-            constraints: const BoxConstraints(maxWidth: 240),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                leading,
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: color ?? notely.text2),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _Notice extends StatelessWidget {
   final IconData icon;
