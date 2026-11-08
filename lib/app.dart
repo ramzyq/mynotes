@@ -10,14 +10,18 @@ import 'package:mynotes/core/encryption/presentation/key_setup_gate.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/providers/theme_mode_provider.dart';
+import 'package:mynotes/core/theme/notely_motion.dart';
 import 'package:mynotes/core/theme/notely_theme.dart';
 import 'package:mynotes/core/theme/widgets/notely_dialog.dart';
 import 'package:mynotes/features/auth/presentation/forgot_password_view.dart';
 import 'package:mynotes/features/auth/presentation/login_view.dart';
+import 'package:mynotes/features/auth/presentation/register_view.dart';
 import 'package:mynotes/features/auth/presentation/verify_email_view.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/features/notes/presentation/notes_home_view.dart';
 import 'package:mynotes/features/notes/providers/notes_providers.dart';
+import 'package:mynotes/features/onboarding/onboarding_store.dart';
+import 'package:mynotes/features/onboarding/presentation/welcome_view.dart';
 
 export 'package:mynotes/core/theme/notely_theme.dart';
 
@@ -250,6 +254,15 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
         .catchError(AppErrorHandler().handle);
   }
 
+  void _finishWelcome(bool createAccount) {
+    ref.read(onboardingSeenProvider.notifier).complete().catchError(AppErrorHandler().handle);
+    if (createAccount) {
+      // The sign-in screen replaces the welcome pages underneath, so going
+      // back from creating an account lands there.
+      appNavigatorKey.currentState?.push(MaterialPageRoute<void>(builder: (_) => const RegisterView()));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Drop all key material and decrypted caches when the user changes.
@@ -260,32 +273,51 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
       ref.read(keyManagerProvider).setActiveUser(uid);
       ref.read(notesServiceProvider).clearCaches();
       if (uid == null) ref.read(pendingPasswordKeyProvider.notifier).state = null;
+      // Someone already signed in (an install from before the welcome pages
+      // existed) has no need for them after signing out.
+      if (uid != null && !ref.read(onboardingSeenProvider)) {
+        ref.read(onboardingSeenProvider.notifier).complete().catchError(AppErrorHandler().handle);
+      }
     });
     final authState = ref.watch(authStateProvider);
-    return authState.when(
+    final onboarded = ref.watch(onboardingSeenProvider);
+    final Widget screen = authState.when(
       data: (user) {
         if (user != null) {
           if (user.isEmailVerified) {
             return KeySetupGate(
-              key: ValueKey(user.uid),
+              key: ValueKey('home-${user.uid}'),
               authUser: user,
               child: NotesHomeView(authUser: user),
             );
           }
-          return const VerifyEmailView();
+          return const VerifyEmailView(key: ValueKey('verify'));
         }
-        return const LoginView();
+        if (!onboarded) return WelcomeView(key: const ValueKey('welcome'), onFinish: _finishWelcome);
+        return const LoginView(key: ValueKey('login'));
       },
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      // The splash has just faded out onto paper; stay on plain paper rather
+      // than flashing a spinner for the moment sign-in takes to resolve.
+      loading: () => const Scaffold(key: ValueKey('loading')),
       error: (error, _) => Scaffold(
+        key: const ValueKey('error'),
         body: ErrorState(
           title: "Couldn't check your sign-in",
           error: error,
           onRetry: () => ref.invalidate(authStateProvider),
         ),
       ),
+    );
+    // Moving between signed out, verifying and signed in fades the new
+    // screen in instead of cutting.
+    return AnimatedSwitcher(
+      duration: NotelyMotion.of(context, NotelyMotion.slow),
+      transitionBuilder: NotelyMotion.fadeThrough,
+      // Only the incoming screen is kept, so this is a fade-in, not a
+      // cross-fade: the outgoing one (say, home after sign-out) mustn't keep
+      // running against cleared keys while it fades.
+      layoutBuilder: (current, previous) => current ?? const SizedBox.shrink(),
+      child: screen,
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/features/account/presentation/delete_account_view.dart';
 import 'package:mynotes/features/account/presentation/change_password_view.dart';
+import 'package:mynotes/features/account/presentation/credits_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
@@ -135,6 +136,11 @@ class AccountSheet extends ConsumerWidget {
             label: 'Usage analytics',
             detail: consentDetail(),
             onTap: () => _showConsentDialog(context, ref),
+          ),
+          _SheetRow(
+            icon: Icons.info_outline,
+            label: 'About & credits',
+            onTap: () => _push(context, (c) => const CreditsView()),
           ),
           _SheetRow(
             icon: Icons.person_remove_outlined,

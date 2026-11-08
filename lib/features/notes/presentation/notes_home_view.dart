@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/analytics/analytics_consent_store.dart';
 import 'package:mynotes/core/analytics/consent_providers.dart';
 import 'package:mynotes/core/auth/models/auth_user.dart';
+import 'package:mynotes/core/theme/notely_motion.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/async_states.dart';
 import 'package:mynotes/features/account/presentation/account_sheet.dart';
@@ -534,7 +535,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                             separatorBuilder: (context, index) => const SizedBox(width: 16),
                             itemBuilder: (context, index) {
                               final note = pinned[index];
-                              return PinnedNoteCard(
+                              return _reveal(index, note.id, PinnedNoteCard(
                                 note: note,
                                 relativeTime: _timeLabel(note.updatedAt),
                                 selectMode: _selectMode,
@@ -549,7 +550,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                                 }),
                                 onUnpin: () => _togglePin(note),
                                 onArchive: () => _archive(note),
-                              );
+                              ));
                             },
                           ),
                         ),
@@ -565,7 +566,7 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
                     sliver: SliverList.separated(
                       itemCount: rest.length,
                       separatorBuilder: (context, index) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) => _buildCard(rest[index], notes),
+                      itemBuilder: (context, index) => _reveal(index, rest[index].id, _buildCard(rest[index], notes)),
                     ),
                   ),
                 ],
@@ -577,6 +578,23 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
           ],
         ),
         ),
+    );
+  }
+
+  // Notes ease in, a beat apart, the first time they appear; ones already
+  // seen stay put when scrolled back into view or rebuilt.
+  final Set<String> _revealed = {};
+
+  Widget _reveal(int index, String id, Widget child) {
+    final first = _revealed.add(id);
+    // Only the first screenful is staggered; notes reached by scrolling
+    // fade in at once instead of waiting their turn.
+    final initial = _revealed.length <= 8;
+    return EntranceFade(
+      key: ValueKey('reveal-$id'),
+      animate: first,
+      delay: initial ? Duration(milliseconds: 45 * index.clamp(0, 8)) : Duration.zero,
+      child: child,
     );
   }
 

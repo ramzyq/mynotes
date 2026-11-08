@@ -21,3 +21,13 @@ const appConfig = AppConfig();
 /// without domain verification (Android App Links / iOS Universal Links).
 /// Declared in AndroidManifest.xml and ios/Runner/Info.plist.
 const appScheme = 'notely';
+
+/// Credit for the third-party artwork the app icon and logo are based on.
+/// Shown in the app (Account → About & credits) and to be pasted into the
+/// App Store and Play Store descriptions, as the icon's Flaticon licence
+/// requires (icon #9418820, "Post it" by Magnific). Wording as given on
+/// the icon's Flaticon page.
+const iconAttribution = 'Post it icons created by Magnific - Flaticon';
+
+/// Where [iconAttribution] links to, as Flaticon asks.
+const iconAttributionUrl = 'https://www.flaticon.com/free-icons/post-it';
