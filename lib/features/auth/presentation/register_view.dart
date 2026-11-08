@@ -9,6 +9,11 @@ import 'package:mynotes/core/auth/services/auth_exceptions.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:mynotes/core/encryption/password_secrets.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
+import 'package:mynotes/core/haptics/notely_haptics.dart';
+import 'package:mynotes/features/auth/presentation/desk/auth_desk.dart';
+import 'package:mynotes/features/auth/presentation/desk/desk_note.dart';
+import 'package:mynotes/features/auth/presentation/desk/logo_moment.dart';
+import 'package:mynotes/features/auth/services/resend_cooldown.dart';
 
 class RegisterView extends ConsumerStatefulWidget {
   const RegisterView({
@@ -24,6 +29,9 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
   late final TextEditingController _email;
   late final TextEditingController _password;
   late final TextEditingController _confirmPassword;
+  final _passwordFocus = FocusNode();
+  final _confirmFocus = FocusNode();
+  final _cardKey = GlobalKey();
   bool _isLoading = false;
 
   @override
@@ -32,6 +40,8 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     _email = TextEditingController();
     _password = TextEditingController();
     _confirmPassword = TextEditingController();
+    _passwordFocus.addListener(_focusChanged);
+    _confirmFocus.addListener(_focusChanged);
     super.initState();
   }
 
@@ -41,7 +51,19 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     _email.dispose();
     _password.dispose();
     _confirmPassword.dispose();
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
     super.dispose();
+  }
+
+  bool get _typingPassword => _passwordFocus.hasFocus || _confirmFocus.hasFocus;
+  bool _wasTypingPassword = false;
+
+  /// The notes turn over while a password is typed, and back after.
+  void _focusChanged() {
+    if (_typingPassword != _wasTypingPassword) NotelyHaptics.select();
+    _wasTypingPassword = _typingPassword;
+    setState(() {});
   }
 
   bool _isValidEmail(String email) {
@@ -86,6 +108,9 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
       return;
     }
 
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final card = globalRectOf(_cardKey);
+    NotelyHaptics.medium();
     setState(() => _isLoading = true);
 
     // Firebase gets only the auth secret; the backup key stays in memory
@@ -107,10 +132,20 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
       // on request, so reopening the app doesn't send another every time.
       try {
         await ref.read(authServiceProvider).sendEmailVerification();
+        // Verify email waits a minute before offering to send another.
+        unawaited(ref.read(resendCooldownProvider).start(ResendPurpose.verify, email));
       } catch (error, stack) {
         AppErrorHandler().handle(error, stack); // "Send the link again" is there.
       }
       if (!mounted) return;
+      // The notes become the logo, with a welcome, over the verify screen.
+      showLogoMoment(
+        overlay,
+        faceDown: _typingPassword,
+        middle: _FreshNotebook(name: firstName),
+        card: card,
+        welcome: 'Welcome, ${firstName.split(' ').first}.',
+      );
       // Signed in now: AuthenticationWrapper shows the verify screen under
       // this one. Pushing another would stack a second copy.
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -145,77 +180,110 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    return NotelyPage(
-      body: SafeArea(
-        top: false,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: AutofillGroup(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const NotelyHeading(
-                      title: 'Create your notebook',
-                      subtitle: 'Your password also protects your encryption key, so choose one you will remember.',
-                    ),
-                    const SizedBox(height: 32),
-                    TextField(
-                      controller: _firstName,
-                      enabled: !_isLoading,
-                      keyboardType: TextInputType.name,
-                      textCapitalization: TextCapitalization.words,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.givenName],
-                      decoration: const InputDecoration(labelText: 'First name'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _email,
-                      enabled: !_isLoading,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.email],
-                      decoration: const InputDecoration(labelText: 'Email'),
-                    ),
-                    const SizedBox(height: 12),
-                    NotelyPasswordField(
-                      controller: _password,
-                      enabled: !_isLoading,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.newPassword],
-                    ),
-                    const SizedBox(height: 12),
-                    NotelyPasswordField(
-                      controller: _confirmPassword,
-                      label: 'Confirm password',
-                      enabled: !_isLoading,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.newPassword],
-                      onSubmitted: (_) => _handleRegister(),
-                    ),
-                    const SizedBox(height: 24),
-                    NotelyPrimaryButton(label: 'Create account', loading: _isLoading, onPressed: _handleRegister),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text('Already have an account?', style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text2)),
-                        TextButton(
-                          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                          child: const Text('Sign in'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+    return AuthDesk(
+      pose: _typingPassword ? DeskPose.faceDown : DeskPose.drift,
+      cardKey: _cardKey,
+      showBack: true,
+      middleClip: true,
+      // The first name writes itself onto the fresh notebook as it's typed.
+      middle: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: _firstName,
+        builder: (context, value, _) => _FreshNotebook(name: value.text),
+      ),
+      card: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const DeskTitle('Start your', 'notebook.'),
+            const DeskSubtitle('Your password also protects your encryption key, so choose one you will remember.'),
+            TextField(
+              controller: _firstName,
+              enabled: !_isLoading,
+              keyboardType: TextInputType.name,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.givenName],
+              decoration: const InputDecoration(labelText: 'First name'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _email,
+              enabled: !_isLoading,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            const SizedBox(height: 10),
+            Focus(
+              focusNode: _passwordFocus,
+              skipTraversal: true,
+              canRequestFocus: false,
+              child: NotelyPasswordField(
+                controller: _password,
+                enabled: !_isLoading,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.newPassword],
               ),
             ),
-          ),
+            const SizedBox(height: 10),
+            Focus(
+              focusNode: _confirmFocus,
+              skipTraversal: true,
+              canRequestFocus: false,
+              child: NotelyPasswordField(
+                controller: _confirmPassword,
+                label: 'Confirm password',
+                enabled: !_isLoading,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.newPassword],
+                onSubmitted: (_) => _handleRegister(),
+              ),
+            ),
+            const SizedBox(height: 18),
+            NotelyPrimaryButton(label: 'Create account', loading: _isLoading, onPressed: _handleRegister),
+            const SizedBox(height: 6),
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('Already have an account?', style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text2)),
+                TextButton(
+                  onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Sign in'),
+                ),
+              ],
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+/// The fresh notebook on Create account, with the first name written on it.
+class _FreshNotebook extends StatelessWidget {
+  const _FreshNotebook({required this.name});
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontFamily: 'Instrument Serif', fontStyle: FontStyle.italic, fontSize: 22, height: 1.1, color: Color(0xFF1F1B16)),
+          ),
+          const SizedBox(height: 4),
+          const Text('A fresh notebook', style: TextStyle(fontFamily: 'Geist', fontSize: 10, color: Color(0xFF7B7266))),
+          const SizedBox(height: 9),
+          Container(height: 5, decoration: BoxDecoration(color: deskInk.withValues(alpha: 0.45), borderRadius: BorderRadius.circular(3))),
+        ],
       ),
     );
   }

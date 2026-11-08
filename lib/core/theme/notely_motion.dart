@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 /// One set of timings and curves for the whole app, so motion feels like
@@ -15,6 +18,15 @@ abstract final class NotelyMotion {
   static const Curve exit = Cubic(0.4, 0, 1, 1);
 
   static bool reduced(BuildContext context) => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  /// Endless background motion (the sign-in notes drifting). Off under
+  /// `flutter test`, where a loop that never settles would hang every
+  /// `pumpAndSettle`; tests that want it can turn it back on.
+  static bool ambientEnabled = !_underTest;
+  static final bool _underTest = !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+
+  /// Whether endless background motion should run here.
+  static bool ambient(BuildContext context) => ambientEnabled && !reduced(context);
 
   /// [duration], or zero when reduce motion is on.
   static Duration of(BuildContext context, Duration duration) => reduced(context) ? Duration.zero : duration;

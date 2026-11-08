@@ -25,7 +25,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Notely'), findsOneWidget);
+    expect(find.text('Welcome back.'), findsOneWidget);
     expect(find.byType(Scaffold), findsWidgets);
   });
 }

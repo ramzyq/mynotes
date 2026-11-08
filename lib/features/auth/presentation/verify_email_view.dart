@@ -2,9 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/core/haptics/notely_haptics.dart';
 import 'package:mynotes/core/theme/notely_tokens.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
+import 'package:mynotes/features/auth/presentation/desk/auth_desk.dart';
+import 'package:mynotes/features/auth/presentation/desk/desk_scenes.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
+import 'package:mynotes/features/auth/services/resend_cooldown.dart';
 
 class VerifyEmailView extends ConsumerStatefulWidget {
   const VerifyEmailView({
@@ -19,6 +23,10 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
   bool _isSending = false;
   bool _isChecking = false;
   Timer? _autoCheckTimer;
+  final _envelope = GlobalKey<EnvelopeSceneState>();
+
+  /// Seconds until "Send the link again" is offered.
+  final _cooldown = CooldownTicker();
 
   @override
   void initState() {
@@ -29,11 +37,21 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
       const Duration(seconds: 5),
       (_) => _checkEmailVerified(silent: true),
     );
+    _loadCooldown();
+  }
+
+  /// Picks up the wait where it was, even across restarts.
+  Future<void> _loadCooldown() async {
+    final email = ref.read(authServiceProvider).currentUser?.email;
+    if (email == null) return;
+    final left = await ref.read(resendCooldownProvider).remaining(ResendPurpose.verify, email);
+    if (mounted) _cooldown.run(left);
   }
 
   @override
   void dispose() {
     _autoCheckTimer?.cancel();
+    _cooldown.dispose();
     super.dispose();
   }
 
@@ -46,6 +64,11 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
     setState(() => _isSending = true);
     try {
       await authService.sendEmailVerification();
+      NotelyHaptics.light();
+      _envelope.currentState?.play();
+      // Saved in the background: the wait starts on screen straight away.
+      unawaited(ref.read(resendCooldownProvider).start(ResendPurpose.verify, user.email));
+      if (mounted) _cooldown.run(ResendCooldown.length);
       messenger.showSnackBar(
         const SnackBar(content: Text('Verification email sent. Check your inbox.')),
       );
@@ -76,6 +99,7 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
       final verified = authService.currentUser?.isEmailVerified ?? false;
       if (verified) {
         _autoCheckTimer?.cancel();
+        NotelyHaptics.success();
         // Supersedes anything still showing, like "Verification email sent".
         messenger
           ..hideCurrentSnackBar()
@@ -109,58 +133,38 @@ class _VerifyEmailViewState extends ConsumerState<VerifyEmailView> {
     final email = ref.read(authServiceProvider).currentUser?.email ?? 'your email';
     final notely = NotelyTheme.of(context);
 
-    return NotelyPage(
-      showBack: false,
-      body: SafeArea(
-        top: false,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: notely.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: notely.border),
-                      ),
-                      child: Icon(Icons.mark_email_unread_outlined, size: 22, color: notely.violet),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  NotelyHeading(
-                    title: 'Check your inbox',
-                    subtitle: 'We sent a link to $email. Open it on any device; this screen continues on its own once you have.',
-                  ),
-                  const SizedBox(height: 32),
-                  NotelyPrimaryButton(
-                    label: "I've verified my email",
-                    loading: _isChecking,
-                    onPressed: () => _checkEmailVerified(),
-                  ),
-                  const SizedBox(height: 12),
-                  NotelySecondaryButton(
-                    label: _isSending ? 'Sending…' : 'Send the link again',
-                    onPressed: _isSending ? null : _sendVerificationEmail,
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: _signOut,
-                    style: TextButton.styleFrom(foregroundColor: notely.text2),
-                    child: const Text('Sign out'),
-                  ),
-                ],
-              ),
+    return AuthDesk(
+      scene: EnvelopeScene(key: _envelope),
+      showMiddle: false,
+      card: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const DeskTitle('Check your', 'inbox.'),
+          DeskSubtitle('We sent a link to $email. Open it on any device; this screen continues on its own once you have.'),
+          NotelyPrimaryButton(
+            label: "I've verified my email",
+            loading: _isChecking,
+            onPressed: () => _checkEmailVerified(),
+          ),
+          const SizedBox(height: 10),
+          ValueListenableBuilder<int>(
+            valueListenable: _cooldown,
+            builder: (context, seconds, _) => NotelySecondaryButton(
+              label: _isSending
+                  ? 'Sending…'
+                  : seconds > 0
+                      ? 'Send again in ${CooldownTicker.format(seconds)}'
+                      : 'Send the link again',
+              onPressed: _isSending || seconds > 0 ? null : _sendVerificationEmail,
             ),
           ),
-        ),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: _signOut,
+            style: TextButton.styleFrom(foregroundColor: notely.text2),
+            child: const Text('Sign out'),
+          ),
+        ],
       ),
     );
   }

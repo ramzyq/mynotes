@@ -6,11 +6,16 @@ import 'package:flutter/material.dart';
 /// The Notely logo: a clipped note on two loose notes. [progress] runs the
 /// build-up animation from 0 (nothing drawn) to 1 (the finished mark), so the
 /// same painter serves the splash animation and every static use.
+///
+/// With [assembled], the three notes are already in place (they arrived on
+/// their own, as at the end of sign-in) and [progress] only snaps the clip on
+/// and writes the lines.
 class NotelyMark extends StatelessWidget {
   final double size;
   final double progress;
+  final bool assembled;
 
-  const NotelyMark({super.key, this.size = 96, this.progress = 1});
+  const NotelyMark({super.key, this.size = 96, this.progress = 1, this.assembled = false});
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +25,11 @@ class NotelyMark extends StatelessWidget {
       image: true,
       child: CustomPaint(
         size: Size.square(size),
-        painter: NotelyMarkPainter(progress: progress, colors: dark ? NotelyMarkColors.dark : NotelyMarkColors.light),
+        painter: NotelyMarkPainter(
+          progress: progress,
+          colors: dark ? NotelyMarkColors.dark : NotelyMarkColors.light,
+          assembled: assembled,
+        ),
       ),
     );
   }
@@ -66,8 +75,9 @@ class NotelyMarkColors {
 class NotelyMarkPainter extends CustomPainter {
   final double progress;
   final NotelyMarkColors colors;
+  final bool assembled;
 
-  NotelyMarkPainter({required this.progress, required this.colors});
+  NotelyMarkPainter({required this.progress, required this.colors, this.assembled = false});
 
   // Drawn in a 512-unit space (the same geometry as the app icon), inside a
   // 520-unit box so the outline strokes aren't clipped.
@@ -93,6 +103,12 @@ class NotelyMarkPainter extends CustomPainter {
   static const _lineStarts = [0.53, 0.61, 0.68, 0.73, 0.79];
   static const _lineLength = 0.21;
 
+  // The assembled timeline: notes already placed, so the clip and the
+  // writing get the whole run.
+  static const _clipInAssembled = (0.0, 0.45);
+  static const _lineStartsAssembled = [0.3, 0.4, 0.48, 0.55, 0.62];
+  static const _lineLengthAssembled = 0.3;
+
   static double _phase((double, double) span, double t) => ((t - span.$1) / (span.$2 - span.$1)).clamp(0.0, 1.0);
 
   @override
@@ -117,7 +133,7 @@ class NotelyMarkPainter extends CustomPainter {
       outline,
       const Offset(-70, -30),
       -6,
-      Curves.easeOutCubic.transform(_phase(_fanRight, t)),
+      assembled ? 1 : Curves.easeOutCubic.transform(_phase(_fanRight, t)),
     );
     _drawLoose(
       canvas,
@@ -126,11 +142,11 @@ class NotelyMarkPainter extends CustomPainter {
       outline,
       const Offset(70, -30),
       17,
-      Curves.easeOutCubic.transform(_phase(_fanLeft, t)),
+      assembled ? 1 : Curves.easeOutCubic.transform(_phase(_fanLeft, t)),
     );
 
     // The top note drops in.
-    final f = Curves.easeOutCubic.transform(_phase(_front, t));
+    final f = assembled ? 1.0 : Curves.easeOutCubic.transform(_phase(_front, t));
     if (f > 0) {
       _fadeLayer(canvas, f);
       canvas.translate(270, 197);
@@ -142,7 +158,7 @@ class NotelyMarkPainter extends CustomPainter {
     }
 
     // The clip snaps on with a small overshoot.
-    final c = _phase(_clipIn, t);
+    final c = _phase(assembled ? _clipInAssembled : _clipIn, t);
     if (c > 0) {
       final dy = -60 * (1 - Curves.easeOutBack.transform(c));
       final clip = RRect.fromLTRBR(247, 8 + dy, 299, 98 + dy, const Radius.circular(10));
@@ -159,7 +175,9 @@ class NotelyMarkPainter extends CustomPainter {
       ..strokeWidth = _stroke
       ..strokeCap = StrokeCap.round;
     for (var i = 0; i < _lines.length; i++) {
-      final p = Curves.easeInOutCubic.transform(((t - _lineStarts[i]) / _lineLength).clamp(0.0, 1.0));
+      final start = assembled ? _lineStartsAssembled[i] : _lineStarts[i];
+      final length = assembled ? _lineLengthAssembled : _lineLength;
+      final p = Curves.easeInOutCubic.transform(((t - start) / length).clamp(0.0, 1.0));
       if (p <= 0) continue;
       final (a, b) = _lines[i];
       canvas.drawLine(a, Offset.lerp(a, b, p)!, ink);
@@ -221,5 +239,6 @@ class NotelyMarkPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(NotelyMarkPainter oldDelegate) => oldDelegate.progress != progress || oldDelegate.colors != colors;
+  bool shouldRepaint(NotelyMarkPainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.colors != colors || oldDelegate.assembled != assembled;
 }

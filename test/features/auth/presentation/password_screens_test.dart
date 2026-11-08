@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -22,6 +23,15 @@ Widget _app(PasswordAccountService service, Widget home) => ProviderScope(
 
 Finder _field(String label) => find.widgetWithText(TextField, label);
 
+/// Locked out, step 2: types the reset link in by hand and moves on.
+Future<void> _typeLink(WidgetTester tester, String link) async {
+  await tester.tap(find.text('Type it instead'));
+  await tester.pumpAndSettle();
+  await tester.enterText(_field('Reset link from the email'), link);
+  await tester.tap(find.text('Continue'));
+  await tester.pumpAndSettle();
+}
+
 /// The page title says "Change password" too; this is the button.
 final _changeButton = find.widgetWithText(NotelyPrimaryButton, 'Change password');
 
@@ -44,9 +54,17 @@ void main() {
     await tester.tap(find.text('Send reset link'));
     await tester.pumpAndSettle();
     verify(() => service.sendResetEmail('Maya@Example.com')).called(1);
-    expect(find.textContaining("If a web page asks you for a new password, don't enter it there"), findsOneWidget);
+    expect(find.textContaining("If a web page asks for a new password, don't use it"), findsOneWidget);
+    expect(find.text('Sent to M•••a@Example.com'), findsOneWidget);
 
-    await tester.enterText(_field('Reset link from the email'), 'https://x/?mode=resetPassword&oobCode=abc');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.getData') return {'text': 'https://x/?mode=resetPassword&oobCode=abc'};
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await tester.tap(find.text('Paste the link'));
+    await tester.pumpAndSettle();
+
     await tester.enterText(_field('New password'), 'brand new password');
     await tester.enterText(_field('Confirm new password'), 'brand new password');
     await tester.ensureVisible(find.text('Set new password'));
@@ -57,6 +75,9 @@ void main() {
           linkOrCode: 'https://x/?mode=resetPassword&oobCode=abc',
           newPassword: 'brand new password',
         )).called(1);
+    expect(find.text("You're back in."), findsOneWidget);
+    await tester.tap(find.widgetWithText(NotelyPrimaryButton, 'Sign in'));
+    await tester.pumpAndSettle();
     expect(find.text('Sign in'), findsWidgets, reason: 'back on the sign-in screen');
     expect(find.text('maya@example.com'), findsOneWidget, reason: 'email filled in');
     expect(find.text('Password changed. Sign in with your new password.'), findsOneWidget);
@@ -70,6 +91,7 @@ void main() {
     await tester.enterText(_field('Email'), 'maya@example.com');
     await tester.tap(find.text('Send reset link'));
     await tester.pumpAndSettle();
+    await _typeLink(tester, 'https://x/?mode=resetPassword&oobCode=abc');
 
     await tester.enterText(_field('New password'), 'brand new password');
     await tester.enterText(_field('Confirm new password'), 'brand new passwrod');
@@ -92,7 +114,7 @@ void main() {
     await tester.enterText(_field('Email'), 'maya@example.com');
     await tester.tap(find.text('Send reset link'));
     await tester.pumpAndSettle();
-    await tester.enterText(_field('Reset link from the email'), 'old-link');
+    await _typeLink(tester, 'old-link');
     await tester.enterText(_field('New password'), 'brand new password');
     await tester.enterText(_field('Confirm new password'), 'brand new password');
     await tester.ensureVisible(find.text('Set new password'));
@@ -100,7 +122,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining("reset link isn't valid any more"), findsOneWidget);
-    expect(find.text('Reset password'), findsOneWidget, reason: 'stays on the reset screen');
+    expect(find.text('A new password.'), findsOneWidget, reason: 'stays on the reset screen');
   });
 
   testWidgets('change password: success closes the screen', (tester) async {
