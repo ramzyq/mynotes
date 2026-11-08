@@ -126,9 +126,21 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
 
     // Firebase gets only the auth secret; the backup key stays in memory
     // until the key setup gate has used it, then is cleared.
-    final secrets = await ref
-        .read(passwordSecretDeriverProvider)
-        .derive(email: email, password: password);
+    // Before the try below: a failure here must still stop the spinner.
+    final PasswordSecrets secrets;
+    try {
+      secrets = await ref.read(passwordSecretDeriverProvider).derive(email: email, password: password);
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (mounted) {
+        setState(() {
+          _heldFaceDown = null;
+          _isLoading = false;
+        });
+        messenger.showSnackBar(const SnackBar(content: Text("Couldn't prepare your account on this device. Please try again.")));
+      }
+      return;
+    }
     if (!mounted) return;
     ref.read(pendingPasswordKeyProvider.notifier).state = secrets.backupKey;
     var signedIn = false;

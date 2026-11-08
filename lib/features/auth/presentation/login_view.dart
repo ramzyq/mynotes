@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/encryption/password_secrets.dart';
+import 'package:mynotes/core/error/error_handler.dart';
 import 'package:mynotes/core/haptics/notely_haptics.dart';
 import 'package:mynotes/features/auth/presentation/desk/auth_desk.dart';
 import 'package:mynotes/features/auth/presentation/desk/logo_moment.dart';
@@ -204,9 +205,18 @@ class _LoginViewState extends ConsumerState<LoginView> {
 
     // Firebase gets only the auth secret; the backup key stays in memory
     // until the key setup gate has used it, then is cleared.
-    final secrets = await ref
-        .read(passwordSecretDeriverProvider)
-        .derive(email: email, password: password);
+    // Before the try below: a failure here must still stop the spinner.
+    final PasswordSecrets secrets;
+    try {
+      secrets = await ref.read(passwordSecretDeriverProvider).derive(email: email, password: password);
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (mounted) {
+        _stopLoading();
+        messenger.showSnackBar(const SnackBar(content: Text("Couldn't prepare your sign-in on this device. Please try again.")));
+      }
+      return;
+    }
     if (!mounted) return;
     ref.read(pendingPasswordKeyProvider.notifier).state = secrets.backupKey;
     var signedIn = false;
