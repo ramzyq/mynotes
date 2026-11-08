@@ -18,7 +18,10 @@ const _user = AuthUser(uid: 'u1', email: 'maya@example.com', isEmailVerified: tr
 void main() {
   late _MockDeletion deletion;
 
-  setUpAll(() => registerFallbackValue(_user));
+  setUpAll(() {
+    registerFallbackValue(_user);
+    registerFallbackValue((AccountDeletionStage _) {});
+  });
   setUp(() => deletion = _MockDeletion());
 
   Future<void> open(WidgetTester tester) async {
@@ -44,7 +47,7 @@ void main() {
   });
 
   testWidgets('a wrong password keeps the screen open and says so', (tester) async {
-    when(() => deletion.deleteAccount(user: any(named: 'user'), password: any(named: 'password')))
+    when(() => deletion.deleteAccount(user: any(named: 'user'), password: any(named: 'password'), onStage: any(named: 'onStage')))
         .thenThrow(AccountDeletionException(AccountDeletionStage.verifying, WrongPasswordAuthException()));
     await open(tester);
     await tester.enterText(find.widgetWithText(TextField, 'Your password'), 'not it');
@@ -56,11 +59,11 @@ void main() {
 
     expect(find.text("That password isn't right. Nothing was deleted."), findsOneWidget);
     expect(find.text('Delete your account?'), findsOneWidget);
-    verify(() => deletion.deleteAccount(user: _user, password: 'not it')).called(1);
+    verify(() => deletion.deleteAccount(user: _user, password: 'not it', onStage: any(named: 'onStage'))).called(1);
   });
 
   testWidgets('a dropped connection while deleting says some notes may be gone', (tester) async {
-    when(() => deletion.deleteAccount(user: any(named: 'user'), password: any(named: 'password'))).thenThrow(
+    when(() => deletion.deleteAccount(user: any(named: 'user'), password: any(named: 'password'), onStage: any(named: 'onStage'))).thenThrow(
         AccountDeletionException(AccountDeletionStage.deletingData, FirebaseException(plugin: 'p', code: 'unavailable')));
     await open(tester);
     await tester.enterText(find.widgetWithText(TextField, 'Your password'), 'pw');

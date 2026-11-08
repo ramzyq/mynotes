@@ -74,15 +74,23 @@ class AccountDeletionService {
   final Future<void> Function(String uid)? onDeviceCleanup;
 
   /// [password] is required for password accounts and ignored for Google.
-  /// Throws [AccountDeletionException].
-  Future<void> deleteAccount({required AuthUser user, String? password}) async {
+  /// [onStage] hears each stage as it starts, so a screen can show real
+  /// progress. Throws [AccountDeletionException].
+  Future<void> deleteAccount({
+    required AuthUser user,
+    String? password,
+    void Function(AccountDeletionStage stage)? onStage,
+  }) async {
+    onStage?.call(AccountDeletionStage.verifying);
     await _stage(AccountDeletionStage.verifying, () async {
       final authSecret = user.hasPassword
           ? (await deriver.derive(email: user.email, password: password ?? '')).authSecret
           : null;
       await auth.reauthenticate(password: authSecret);
     });
+    onStage?.call(AccountDeletionStage.deletingData);
     await _stage(AccountDeletionStage.deletingData, () => deleteData(uid: user.uid, email: user.email));
+    onStage?.call(AccountDeletionStage.deletingAccount);
     await _stage(AccountDeletionStage.deletingAccount, auth.deleteCurrentUser);
 
     await keyManager.forgetMasterKey(user.uid);
