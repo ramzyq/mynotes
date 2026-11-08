@@ -11,7 +11,7 @@ class SplashView extends StatefulWidget {
 
   const SplashView({super.key, required this.onFinished});
 
-  static const Duration duration = Duration(milliseconds: 1550);
+  static const Duration duration = Duration(milliseconds: 6000);
 
   static const Color paper = Color(0xFFF7F4EE);
   static const Color night = Color(0xFF161513);
