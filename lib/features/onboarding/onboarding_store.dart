@@ -17,7 +17,13 @@ class OnboardingController extends StateNotifier<bool> {
   OnboardingController() : super(true);
 
   Future<void> restore() async {
-    state = await OnboardingStore.read();
+    try {
+      state = await OnboardingStore.read();
+    } catch (_) {
+      // A non-essential flag: if it can't be read, skip the welcome pages
+      // rather than failing app start.
+      state = true;
+    }
   }
 
   Future<void> complete() async {

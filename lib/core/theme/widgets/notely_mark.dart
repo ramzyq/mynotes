@@ -132,7 +132,7 @@ class NotelyMarkPainter extends CustomPainter {
     // The top note drops in.
     final f = Curves.easeOutCubic.transform(_phase(_front, t));
     if (f > 0) {
-      canvas.saveLayer(null, Paint()..color = Color.fromRGBO(0, 0, 0, f));
+      _fadeLayer(canvas, f);
       canvas.translate(270, 197);
       canvas.scale(lerpDouble(0.94, 1, f)!);
       canvas.translate(-270, -197 - 26 * (1 - f));
@@ -146,7 +146,7 @@ class NotelyMarkPainter extends CustomPainter {
     if (c > 0) {
       final dy = -60 * (1 - Curves.easeOutBack.transform(c));
       final clip = RRect.fromLTRBR(247, 8 + dy, 299, 98 + dy, const Radius.circular(10));
-      canvas.saveLayer(null, Paint()..color = Color.fromRGBO(0, 0, 0, math.min(1, c * 2)));
+      _fadeLayer(canvas, math.min(1, c * 2));
       canvas.drawRRect(clip, Paint()..color = colors.clip);
       canvas.drawRRect(clip, outline);
       canvas.restore();
@@ -179,13 +179,27 @@ class NotelyMarkPainter extends CustomPainter {
     if (p <= 0) return;
     final center = corners.reduce((a, b) => a + b) / 4;
     final path = Path()..addPolygon(corners, true);
-    canvas.saveLayer(null, Paint()..color = Color.fromRGBO(0, 0, 0, p));
+    _fadeLayer(canvas, p);
     canvas.translate(center.dx + from.dx * (1 - p), center.dy + from.dy * (1 - p));
     canvas.rotate(fromDegrees * (1 - p) * math.pi / 180);
     canvas.translate(-center.dx, -center.dy);
     canvas.drawPath(path, Paint()..color = fill);
     canvas.drawPath(path, outline);
     canvas.restore();
+  }
+
+  // Opens a group drawn at [opacity]: an offscreen layer (bounded to the
+  // mark) only while it's fading, a plain save once it's fully shown. Always
+  // paired with canvas.restore().
+  static void _fadeLayer(Canvas canvas, double opacity) {
+    if (opacity >= 1) {
+      canvas.save();
+    } else {
+      canvas.saveLayer(
+        Rect.fromLTWH(-_origin.dx, -_origin.dy, _box, _box),
+        Paint()..color = Color.fromRGBO(0, 0, 0, opacity),
+      );
+    }
   }
 
   // The top note's outline, with the opening beside the clip.

@@ -78,14 +78,17 @@ class _SplashViewState extends State<SplashView> with SingleTickerProviderStateM
                         opacity: word,
                         child: Transform.translate(
                           offset: Offset(0, 10 * (1 - word)),
-                          child: Text(
-                            'Notely',
-                            style: TextStyle(
-                              fontFamily: 'Instrument Serif',
-                              fontStyle: FontStyle.italic,
-                              fontSize: 48,
-                              height: 1,
-                              color: text,
+                          // The mark above already announces "Notely".
+                          child: ExcludeSemantics(
+                            child: Text(
+                              'Notely',
+                              style: TextStyle(
+                                fontFamily: 'Instrument Serif',
+                                fontStyle: FontStyle.italic,
+                                fontSize: 48,
+                                height: 1,
+                                color: text,
+                              ),
                             ),
                           ),
                         ),

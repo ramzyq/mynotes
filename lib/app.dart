@@ -273,6 +273,11 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
       ref.read(keyManagerProvider).setActiveUser(uid);
       ref.read(notesServiceProvider).clearCaches();
       if (uid == null) ref.read(pendingPasswordKeyProvider.notifier).state = null;
+      // Someone already signed in (an install from before the welcome pages
+      // existed) has no need for them after signing out.
+      if (uid != null && !ref.read(onboardingSeenProvider)) {
+        ref.read(onboardingSeenProvider.notifier).complete().catchError(AppErrorHandler().handle);
+      }
     });
     final authState = ref.watch(authStateProvider);
     final onboarded = ref.watch(onboardingSeenProvider);
@@ -308,8 +313,9 @@ class _AuthenticationWrapperState extends ConsumerState<AuthenticationWrapper>
     return AnimatedSwitcher(
       duration: NotelyMotion.of(context, NotelyMotion.slow),
       transitionBuilder: NotelyMotion.fadeThrough,
-      // Only the incoming screen is kept: the outgoing one (say, home after
-      // sign-out) mustn't keep running against cleared keys while it fades.
+      // Only the incoming screen is kept, so this is a fade-in, not a
+      // cross-fade: the outgoing one (say, home after sign-out) mustn't keep
+      // running against cleared keys while it fades.
       layoutBuilder: (current, previous) => current ?? const SizedBox.shrink(),
       child: screen,
     );

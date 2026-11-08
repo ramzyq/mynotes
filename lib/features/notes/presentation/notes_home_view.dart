@@ -587,10 +587,13 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
 
   Widget _reveal(int index, String id, Widget child) {
     final first = _revealed.add(id);
+    // Only the first screenful is staggered; notes reached by scrolling
+    // fade in at once instead of waiting their turn.
+    final initial = _revealed.length <= 8;
     return EntranceFade(
       key: ValueKey('reveal-$id'),
       animate: first,
-      delay: Duration(milliseconds: 45 * index.clamp(0, 8)),
+      delay: initial ? Duration(milliseconds: 45 * index.clamp(0, 8)) : Duration.zero,
       child: child,
     );
   }

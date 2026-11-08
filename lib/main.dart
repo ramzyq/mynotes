@@ -6,21 +6,23 @@ import 'package:mynotes/core/bootstrap/bootstrap_controller.dart';
 import 'package:mynotes/core/bootstrap/bootstrap_error_view.dart';
 import 'package:mynotes/core/bootstrap/bootstrap_providers.dart';
 import 'package:mynotes/core/bootstrap/splash_view.dart';
+import 'package:mynotes/core/providers/theme_mode_provider.dart';
 import 'package:mynotes/core/theme/notely_motion.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(
-    const ProviderScope(
-      child: BootstrapApp(),
-    ),
-  );
+  // The splash paints before bootstrap restores the saved theme, so read it
+  // here: someone who chose Light on a dark-mode phone gets a light splash.
+  final splashTheme = await readSavedThemeMode();
+  runApp(ProviderScope(child: BootstrapApp(splashTheme: splashTheme)));
 }
 
 /// Plays the splash while Firebase and the app engine boot, then fades into
 /// the app or a retryable error screen.
 class BootstrapApp extends ConsumerStatefulWidget {
-  const BootstrapApp({super.key});
+  final ThemeMode splashTheme;
+
+  const BootstrapApp({super.key, this.splashTheme = ThemeMode.system});
 
   @override
   ConsumerState<BootstrapApp> createState() => _BootstrapAppState();
@@ -34,7 +36,9 @@ class _BootstrapAppState extends ConsumerState<BootstrapApp> {
   @override
   void initState() {
     super.initState();
-    ref.read(bootstrapControllerProvider).bootstrap();
+    // Started just after this build: bootstrap notifies its listeners
+    // straight away, which Riverpod refuses in the middle of a build.
+    Future.microtask(() => ref.read(bootstrapControllerProvider).bootstrap());
   }
 
   @override
@@ -44,10 +48,7 @@ class _BootstrapAppState extends ConsumerState<BootstrapApp> {
     if (_splashDone && controller.status == BootstrapStatus.ready) {
       child = KeyedSubtree(
         key: const ValueKey('app'),
-        child: LiquidGlassWidgets.wrap(
-          child: const MyApp(),
-          theme: notelyGlassTheme,
-        ),
+        child: LiquidGlassWidgets.wrap(child: const MyApp(), theme: notelyGlassTheme),
       );
     } else if (_splashDone && controller.status == BootstrapStatus.failed) {
       child = KeyedSubtree(
@@ -57,20 +58,29 @@ class _BootstrapAppState extends ConsumerState<BootstrapApp> {
           onRetry: () => ref.read(bootstrapControllerProvider).bootstrap(),
         ),
       );
+    } else if (_splashDone) {
+      // Retrying after a failed start: plain paper, not the splash again
+      // (a fast retry would otherwise cut a replayed splash off mid-way).
+      child = _plainApp(const ValueKey('retrying'), const Scaffold(body: SizedBox.expand()));
     } else {
-      child = MaterialApp(
-        key: const ValueKey('splash'),
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(brightness: Brightness.light),
-        darkTheme: ThemeData(brightness: Brightness.dark),
-        home: SplashView(onFinished: () => setState(() => _splashDone = true)),
-      );
+      child = _plainApp(const ValueKey('splash'), SplashView(onFinished: () => setState(() => _splashDone = true)));
     }
+    // Above any MediaQuery, so ask the platform about reduce motion directly.
+    final reduceMotion = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 450),
+      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 450),
       switchInCurve: NotelyMotion.enter,
       switchOutCurve: NotelyMotion.exit,
       child: child,
     );
   }
+
+  Widget _plainApp(Key key, Widget home) => MaterialApp(
+    key: key,
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(brightness: Brightness.light, scaffoldBackgroundColor: SplashView.paper),
+    darkTheme: ThemeData(brightness: Brightness.dark, scaffoldBackgroundColor: SplashView.night),
+    themeMode: widget.splashTheme,
+    home: home,
+  );
 }
