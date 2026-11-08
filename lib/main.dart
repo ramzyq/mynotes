@@ -66,12 +66,23 @@ class _BootstrapAppState extends ConsumerState<BootstrapApp> {
       child = _plainApp(const ValueKey('splash'), SplashView(onFinished: () => setState(() => _splashDone = true)));
     }
     // Above any MediaQuery, so ask the platform about reduce motion directly.
-    final reduceMotion = WidgetsBinding.instance.platformDispatcher.accessibilityFeatures.disableAnimations;
-    return AnimatedSwitcher(
-      duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 450),
-      switchInCurve: NotelyMotion.enter,
-      switchOutCurve: NotelyMotion.exit,
-      child: child,
+    final dispatcher = WidgetsBinding.instance.platformDispatcher;
+    final reduceMotion = dispatcher.accessibilityFeatures.disableAnimations;
+    final dark = switch (widget.splashTheme) {
+      ThemeMode.light => false,
+      ThemeMode.dark => true,
+      ThemeMode.system => dispatcher.platformBrightness == Brightness.dark,
+    };
+    // Paper behind the cross-fade: mid-fade both screens are partly
+    // transparent, and the bare window underneath would flash black.
+    return ColoredBox(
+      color: dark ? SplashView.night : SplashView.paper,
+      child: AnimatedSwitcher(
+        duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 450),
+        switchInCurve: NotelyMotion.enter,
+        switchOutCurve: NotelyMotion.exit,
+        child: child,
+      ),
     );
   }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mynotes/core/bootstrap/bootstrap_controller.dart';
@@ -40,4 +41,19 @@ void main() {
     expect(find.text('Try again'), findsOneWidget);
     expect(attempts, 2);
   });
+
+  // Mid cross-fade both screens are partly transparent; without a backdrop
+  // the bare window shows through and flashes black.
+  for (final (mode, colour) in [(ThemeMode.light, SplashView.paper), (ThemeMode.dark, SplashView.night)]) {
+    testWidgets('the splash-to-app fade sits on ${mode.name} paper, not the bare window', (tester) async {
+      final controller = BootstrapController(initialize: () => Completer<void>().future);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [bootstrapControllerProvider.overrideWith((ref) => controller)],
+        child: BootstrapApp(splashTheme: mode),
+      ));
+      final backdrop = find.ancestor(of: find.byType(AnimatedSwitcher).first, matching: find.byType(ColoredBox));
+      expect(backdrop, findsWidgets);
+      expect(tester.widget<ColoredBox>(backdrop.first).color, colour);
+    });
+  }
 }
