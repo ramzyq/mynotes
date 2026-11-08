@@ -354,6 +354,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(e.message),
+      persist: false,
       action: e.needsSettings
           ? SnackBarAction(label: 'Settings', onPressed: () => openAppSettings())
           : null,
@@ -662,6 +663,8 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
       Navigator.of(context).pop(true);
       messenger.showSnackBar(SnackBar(
         content: const Text('Moved to trash'),
+        // A button would otherwise keep it up until tapped (Flutter's default).
+        persist: false,
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () => service.restoreFromTrash(uid: uid, notes: [note]).catchError(AppErrorHandler().handle),
@@ -752,6 +755,7 @@ class _NoteEditorViewState extends ConsumerState<NoteEditorView>
     if (!allowed && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: const Text('Notifications are off for Notely, so this reminder will not alert you.'),
+        persist: false,
         action: SnackBarAction(label: 'Settings', onPressed: () => openAppSettings()),
       ));
     }

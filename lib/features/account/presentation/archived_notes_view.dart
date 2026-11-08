@@ -90,6 +90,8 @@ class ArchivedNotesView extends ConsumerWidget {
                           messenger.showSnackBar(
                             SnackBar(
                               content: const Text('Moved to trash'),
+                              // Otherwise the Undo button keeps it up until tapped.
+                              persist: false,
                               action: SnackBarAction(
                                 label: 'Undo',
                                 onPressed: () => service().restoreFromTrash(uid: uid, notes: [note]),

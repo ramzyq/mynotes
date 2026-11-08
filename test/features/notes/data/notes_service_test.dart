@@ -107,6 +107,20 @@ void main() {
     expect((await _notes(db).doc(forever.id).get()).exists, isTrue);
   });
 
+  test('moving a note to the trash shows up in the list (no stale cached copy)', () async {
+    final (service, _) = await _service();
+    final note = await service.createNote(uid: uid, title: 'bin me', content: 'x', colorIndex: 0);
+    // Decrypted and cached first, as the open notes list does.
+    expect((await service.watchNotes(uid).first).single.isTrashed, isFalse);
+
+    await service.moveToTrash(uid: uid, notes: [note]);
+    expect((await service.watchNotes(uid).first).single.isTrashed, isTrue,
+        reason: 'only deletedAt changed; the cache must not hide it');
+
+    await service.restoreFromTrash(uid: uid, notes: [note]);
+    expect((await service.watchNotes(uid).first).single.isTrashed, isFalse);
+  });
+
   test('watchNotes hides notes past their self-destruct time', () async {
     final (service, db) = await _service();
     final note = await service.createNote(uid: uid, title: 'a', content: 'x', colorIndex: 0);

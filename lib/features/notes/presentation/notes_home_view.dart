@@ -283,6 +283,8 @@ class _NotesHomeViewState extends ConsumerState<NotesHomeView> {
       await service.moveToTrash(uid: uid, notes: notes);
       messenger.showSnackBar(SnackBar(
         content: Text('Moved ${notes.length} ${notes.length == 1 ? 'note' : 'notes'} to trash'),
+        // A button would otherwise keep it up until tapped (Flutter's default).
+        persist: false,
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () => service.restoreFromTrash(uid: uid, notes: notes).catchError(AppErrorHandler().handle),
