@@ -114,7 +114,7 @@ void main() {
     await tester.pump();
 
     expect(_createCount(service), 1);
-    expect(find.text('Saved'), findsOneWidget);
+    expect(find.text('Saved · encrypted'), findsOneWidget);
 
     await tester.enterText(_bodyField(), 'eggs, milk');
     await tester.pump(const Duration(seconds: 2));
