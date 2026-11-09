@@ -33,10 +33,16 @@ class CryptoService {
   }) {
     return Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
       secretKey: SecretKey(secret),
-      nonce: salt,
+      // No salt means a hash-length string of zeros (RFC 5869, 2.2). HMAC
+      // zero-pads its key, so this gives exactly the same keys as an empty
+      // salt, but Android's native HMAC refuses an empty key ("Empty key"),
+      // which broke password sign-in and sign-up there.
+      nonce: salt.isEmpty ? _zeroSalt : salt,
       info: utf8.encode(info),
     );
   }
+
+  static final List<int> _zeroSalt = List<int>.filled(32, 0, growable: false);
 
   /// Generate a random salt for PBKDF2.
   List<int> generateSalt() => randomBytes(_saltLength);
