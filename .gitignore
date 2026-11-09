@@ -64,3 +64,6 @@ replay_pid*
 *.g.dart
 /android/.kotlin/
 /.firebase/
+
+# Brainstorming mockups (local only)
+.superpowers/

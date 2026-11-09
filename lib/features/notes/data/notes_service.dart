@@ -176,27 +176,12 @@ class NotesService {
 
   // ================================================================== reading
 
-  String _fingerprint(Map<String, dynamic> data) => [
-        data[NoteFields.encryptionVersion],
-        data[NoteFields.keyGen],
-        data[NoteFields.encryptedTitle],
-        data[NoteFields.encryptedContent],
-        data[NoteFields.encryptedMeta],
-        data[NoteFields.wrappedKey]?.toString(),
-        data[NoteFields.pinWrappedKey],
-        data[NoteFields.updatedAt]?.toString(),
-        data[NoteFields.isPinned],
-        data[NoteFields.isArchived],
-        data[NoteFields.isLocked],
-        data[NoteFields.colorIndex],
-        data[NoteFields.selfDestructAt]?.toString(),
-        data[NoteFields.selfDestructOnRead],
-        data[NoteFields.isStudyMaterial],
-        data[NoteFields.studyDueAt]?.toString(),
-        data[NoteFields.collaborators]?.toString(),
-        data[NoteFields.encryptedKeys]?.toString(),
-        data[NoteFields.keyHistory]?.toString(),
-      ].join('|');
+  /// Everything stored for the note, so any change, even to a field kept
+  /// outside the encrypted body (trash, reminders, study progress), gives a
+  /// fresh decrypt instead of a stale cached copy. Keys sorted: map order
+  /// isn't guaranteed between snapshots.
+  String _fingerprint(Map<String, dynamic> data) =>
+      (data.keys.toList()..sort()).map((key) => '$key=${data[key]}').join('|');
 
   /// Decrypt with a per-document cache so unchanged notes are not
   /// re-decrypted on every snapshot.

@@ -3,13 +3,16 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mynotes/core/encryption/password_secrets.dart';
+import 'package:mynotes/core/error/error_handler.dart';
+import 'package:mynotes/core/haptics/notely_haptics.dart';
+import 'package:mynotes/features/auth/presentation/desk/auth_desk.dart';
+import 'package:mynotes/features/auth/presentation/desk/logo_moment.dart';
 import 'package:mynotes/features/auth/presentation/forgot_password_view.dart';
 import 'package:mynotes/core/encryption/providers/encryption_providers.dart';
 import 'package:mynotes/core/theme/widgets/notely_buttons.dart';
 import 'package:mynotes/features/auth/presentation/register_view.dart';
 import 'package:mynotes/core/auth/services/auth_exceptions.dart' show AppleSignInCancelledException, GenericAuthException, UserAlreadyExistsAuthException, UserNotFoundAuthException, WrongPasswordAuthException, TooManyRequestsAuthException, GoogleSignInCancelledException;
 import 'package:mynotes/core/theme/notely_tokens.dart';
-import 'package:mynotes/core/theme/widgets/notely_wordmark.dart';
 import 'package:mynotes/features/auth/providers/auth_providers.dart';
 import 'package:sign_in_button/sign_in_button.dart';
 
@@ -25,21 +28,64 @@ class LoginView extends ConsumerStatefulWidget {
 class _LoginViewState extends ConsumerState<LoginView> {
   late final TextEditingController _email;
   late final TextEditingController _password;
+  final _emailFocus = FocusNode();
+  final _passwordFocus = FocusNode();
+  final _cardKey = GlobalKey();
+  final _shaker = GlobalKey<CardShakerState>();
   bool _isLoading = false;
+
+  /// Shown under the password, for a sign-in the account didn't accept.
+  String? _problem;
 
   @override
   void initState() {
     _email = TextEditingController();
     _password = TextEditingController();
+    _emailFocus.addListener(_focusChanged);
+    _passwordFocus.addListener(_focusChanged);
     super.initState();
   }
 
   @override
   void dispose() {
+    _emailFocus.removeListener(_focusChanged);
+    _passwordFocus.removeListener(_focusChanged);
     _email.dispose();
     _password.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
+
+  void _focusChanged() {
+    if (!mounted) return;
+    if (_emailFocus.hasFocus || _passwordFocus.hasFocus) NotelyHaptics.select();
+    setState(() {});
+  }
+
+  /// Held while signing in: the fields are disabled then, which drops their
+  /// focus, and the notes shouldn't turn back over mid-request.
+  DeskPose? _heldPose;
+
+  /// The notes lean in for the email and turn over for the password.
+  DeskPose get _pose =>
+      _heldPose ??
+      (_passwordFocus.hasFocus
+          ? DeskPose.faceDown
+          : _emailFocus.hasFocus
+              ? DeskPose.lean
+              : DeskPose.drift);
+
+  /// Starts a sign-in request: holds the scene as it is.
+  void _startLoading() => setState(() {
+        _heldPose = _pose;
+        _isLoading = true;
+      });
+
+  void _stopLoading() => setState(() {
+        _heldPose = null;
+        _isLoading = false;
+      });
 
   bool _isValidEmail(String email) {
     return RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email);
@@ -48,12 +94,20 @@ class _LoginViewState extends ConsumerState<LoginView> {
   /// iOS only: Firebase's Apple provider is set up for the native iOS flow.
   static bool get _offerApple => defaultTargetPlatform == TargetPlatform.iOS;
 
+  /// Signed in: the notes become the logo over whatever the app shows next.
+  void _celebrate(OverlayState overlay, {required bool faceDown, required Rect? card}) {
+    showLogoMoment(overlay, faceDown: faceDown, card: card);
+  }
+
   Future<void> _handleAppleSignIn() async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _isLoading = true);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final card = globalRectOf(_cardKey);
+    _startLoading();
     try {
       await ref.read(authServiceProvider).signInWithApple();
       // AuthenticationWrapper takes it from here.
+      _celebrate(overlay, faceDown: false, card: card);
     } on AppleSignInCancelledException {
       // Cancelled: nothing to say.
     } on UserAlreadyExistsAuthException {
@@ -65,17 +119,20 @@ class _LoginViewState extends ConsumerState<LoginView> {
       if (!mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text('Apple sign-in failed. Please try again.')));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) _stopLoading();
     }
   }
 
   Future<void> _handleGoogleSignIn() async {
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _isLoading = true);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final card = globalRectOf(_cardKey);
+    _startLoading();
 
     try {
       await ref.read(authServiceProvider).signInWithGoogle();
       // Success - AuthenticationWrapper will handle navigation
+      _celebrate(overlay, faceDown: false, card: card);
     } on GoogleSignInCancelledException {
       // User cancelled the sign-in flow, nothing to show
     } on GenericAuthException {
@@ -89,9 +146,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
         const SnackBar(content: Text('An error occurred. Please try again.')),
       );
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) _stopLoading();
     }
   }
 
@@ -108,10 +163,19 @@ class _LoginViewState extends ConsumerState<LoginView> {
     );
   }
 
+  /// The account turned the sign-in down: say so on the card and shake it.
+  void _refuse(String message) {
+    if (!mounted) return;
+    setState(() => _problem = message);
+    NotelyHaptics.error();
+    _shaker.currentState?.shake();
+  }
+
   Future<void> _handleLogin() async {
     final email = _email.text.trim();
     final password = _password.text;
     final messenger = ScaffoldMessenger.of(context);
+    setState(() => _problem = null);
 
     if (email.isEmpty || password.isEmpty) {
       messenger.showSnackBar(
@@ -134,13 +198,25 @@ class _LoginViewState extends ConsumerState<LoginView> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final card = globalRectOf(_cardKey);
+    final faceDown = _pose == DeskPose.faceDown;
+    _startLoading();
 
     // Firebase gets only the auth secret; the backup key stays in memory
     // until the key setup gate has used it, then is cleared.
-    final secrets = await ref
-        .read(passwordSecretDeriverProvider)
-        .derive(email: email, password: password);
+    // Before the try below: a failure here must still stop the spinner.
+    final PasswordSecrets secrets;
+    try {
+      secrets = await ref.read(passwordSecretDeriverProvider).derive(email: email, password: password);
+    } catch (error, stack) {
+      AppErrorHandler().handle(error, stack);
+      if (mounted) {
+        _stopLoading();
+        messenger.showSnackBar(const SnackBar(content: Text("Couldn't prepare your sign-in on this device. Please try again.")));
+      }
+      return;
+    }
     if (!mounted) return;
     ref.read(pendingPasswordKeyProvider.notifier).state = secrets.backupKey;
     var signedIn = false;
@@ -151,16 +227,11 @@ class _LoginViewState extends ConsumerState<LoginView> {
       );
       // AuthenticationWrapper routes from here (verify email, key setup, notes).
       signedIn = true;
+      _celebrate(overlay, faceDown: faceDown, card: card);
     } on UserNotFoundAuthException {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(content: Text('No account with that email. Create one below.')),
-      );
+      _refuse('No account with that email. Create one below.');
     } on WrongPasswordAuthException {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Invalid email or password.')),
-      );
+      _refuse('Invalid email or password.');
     } on TooManyRequestsAuthException {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -173,121 +244,120 @@ class _LoginViewState extends ConsumerState<LoginView> {
       );
     } finally {
       if (!signedIn && mounted) ref.read(pendingPasswordKeyProvider.notifier).state = null;
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) _stopLoading();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final notely = NotelyTheme.of(context);
-    return Scaffold(
-      backgroundColor: notely.bg,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: AutofillGroup(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Align(alignment: Alignment.centerLeft, child: NotelyWordmark(size: 18)),
-                    const SizedBox(height: 48),
-                    const NotelyHeading(
-                      title: 'Sign in',
-                      subtitle: 'Your notes are encrypted on your device. Only you can read them.',
+    return AuthDesk(
+      pose: _pose,
+      cardKey: _cardKey,
+      shakerKey: _shaker,
+      card: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const DeskTitle('Welcome', 'back.'),
+            const DeskSubtitle('Your notes are waiting, encrypted on your device.'),
+            TextField(
+              controller: _email,
+              focusNode: _emailFocus,
+              enabled: !_isLoading,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            const SizedBox(height: 10),
+            Focus(
+              focusNode: _passwordFocus,
+              skipTraversal: true,
+              canRequestFocus: false,
+              child: NotelyPasswordField(
+                controller: _password,
+                enabled: !_isLoading,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _handleLogin(),
+              ),
+            ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              child: _problem == null
+                  ? const SizedBox(width: double.infinity)
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(_problem!, style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.danger)),
                     ),
-                    const SizedBox(height: 32),
-                    TextField(
-                      controller: _email,
-                      enabled: !_isLoading,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.email],
-                      decoration: const InputDecoration(labelText: 'Email'),
-                    ),
-                    const SizedBox(height: 12),
-                    NotelyPasswordField(
-                      controller: _password,
-                      enabled: !_isLoading,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _handleLogin(),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: _isLoading ? null : _forgotPassword,
-                        child: const Text('Forgot password?'),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    NotelyPrimaryButton(label: 'Sign in', loading: _isLoading, onPressed: _handleLogin),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        const Expanded(child: Divider()),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('or', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3)),
-                        ),
-                        const Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    // Apple first and the same size as Google, per Apple's
-                    // guidelines for apps offering several sign-in options.
-                    if (_offerApple) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: SignInButton(
-                          Theme.of(context).brightness == Brightness.dark ? Buttons.apple : Buttons.appleDark,
-                          text: 'Continue with Apple',
-                          elevation: 0,
-                          onPressed: _isLoading ? () {} : _handleAppleSignIn,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: SignInButton(
-                        Buttons.google,
-                        text: 'Continue with Google',
-                        elevation: 0,
-                        onPressed: _isLoading ? () {} : _handleGoogleSignIn,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: BorderSide(color: notely.borderStrong),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text('New to Notely?', style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text2)),
-                        TextButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (context) => const RegisterView()),
-                                  ),
-                          child: const Text('Create an account'),
-                        ),
-                      ],
-                    ),
-                  ],
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _isLoading ? null : _forgotPassword,
+                child: const Text('Forgot password?'),
+              ),
+            ),
+            NotelyPrimaryButton(label: 'Sign in', loading: _isLoading, onPressed: _handleLogin),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('or', style: TextStyle(fontFamily: 'Geist', fontSize: 13, color: notely.text3)),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // Apple first and the same size as Google, per Apple's
+            // guidelines for apps offering several sign-in options.
+            if (_offerApple) ...[
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: SignInButton(
+                  Theme.of(context).brightness == Brightness.dark ? Buttons.apple : Buttons.appleDark,
+                  text: 'Continue with Apple',
+                  elevation: 0,
+                  onPressed: _isLoading ? () {} : _handleAppleSignIn,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: SignInButton(
+                Buttons.google,
+                text: 'Continue with Google',
+                elevation: 0,
+                onPressed: _isLoading ? () {} : _handleGoogleSignIn,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: BorderSide(color: notely.borderStrong),
                 ),
               ),
             ),
-          ),
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text('New to Notely?', style: TextStyle(fontFamily: 'Geist', fontSize: 14, color: notely.text2)),
+                TextButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const RegisterView()),
+                          ),
+                  child: const Text('Create an account'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

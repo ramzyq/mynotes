@@ -130,7 +130,7 @@ void main() {
       links.add(Uri.parse(_resetLink));
       await tester.pumpAndSettle();
 
-      expect(find.text('Choose a new password'), findsOneWidget);
+      expect(find.text('A new password.'), findsOneWidget);
       expect(find.textContaining('For maya@example.com'), findsOneWidget);
       expect(find.text('Send reset link'), findsNothing, reason: 'no email step when opened from the link');
       verify(() => passwords.emailForReset(_resetLink)).called(1);
@@ -227,7 +227,7 @@ void main() {
       links.add(Uri.parse('https://ramzyqnotes.firebaseapp.com/__/auth/action?mode=resetPassword&oobCode=xyz'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Choose a new password'), findsOneWidget);
+      expect(find.text('A new password.'), findsOneWidget);
       expect(find.textContaining('For maya@example.com'), findsOneWidget);
     });
 
@@ -247,7 +247,7 @@ void main() {
       await tester.pumpAndSettle();
 
       verifyNever(() => processor.handleUri(any()));
-      expect(find.text('Choose a new password'), findsNothing);
+      expect(find.text('A new password.'), findsNothing);
     });
   });
 }
